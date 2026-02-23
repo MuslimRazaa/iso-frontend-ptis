@@ -1,0 +1,454 @@
+import React, { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import "../assets/style.css";
+import ptisLogo from "/ptisLogo.png";
+import SystemMap from "../components/SystemMap";
+import ManageUserAccess from "../components/ManageUserAccess";
+import { API_ENDPOINTS, API_BASE_URL } from "../config/api";
+
+const dashboardTiles = [
+  {
+    id: "portal",
+    title: "Portal",
+    link: "/portal",
+    description: "Centralize department shortcuts and SOPs in one place.",
+    status: "online",
+    statusLabel: "Live",
+    metric: "24 quick links curated",
+  },
+  {
+    id: "lms",
+    title: "LMS",
+    link: "/learning-management-system",
+    description: "Monitor training, compliance and renewal windows.",
+    status: "sync",
+    statusLabel: "Syncing",
+    metric: "87% trainings completed",
+  },
+  {
+    id: "cv-gen",
+    title: "CV Generator",
+    link: "",
+    description: "Generate client-ready engineer and inspector resumes.",
+    status: "online",
+    statusLabel: "Live",
+    metric: "12 CVs queued",
+  },
+  {
+    id: "iso",
+    title: "ISO Forms",
+    link: "",
+    description: "Quick access to QA/QC controlled documentation.",
+    status: "attention",
+    statusLabel: "Review",
+    metric: "3 forms awaiting sign-off",
+  },
+  {
+    id: "cv-bid",
+    title: "Bid CV Library",
+    link: "",
+    description: "Recently curated CVs for tender submissions.",
+    status: "online",
+    statusLabel: "Live",
+    metric: "6 tenders in play",
+  },
+  {
+    id: "power-bi",
+    title: "Power BI Dashboards",
+    link: "",
+    description: "Track operations KPIs and live financial snapshots.",
+    status: "sync",
+    statusLabel: "Syncing",
+    metric: "Updated 4 mins ago",
+  },
+];
+
+const defaultQuickStats = [
+  { label: "Number of Inspections", value: "26K", status: "ok" },
+  { label: "LMS Completion", value: "87%", status: "ok" },
+  { label: "Active Clients", value: "12", status: "warning" },
+];
+
+const systemNodes = [
+  { id: "portal", label: "Portal", x: 12, y: 32, tag: "Access" },
+  { id: "lms", label: "LMS", x: 37, y: 18, tag: "Training" },
+  { id: "cv-gen", label: "CV Generator", x: 64, y: 30, tag: "Delivery" },
+  { id: "iso", label: "ISO Forms", x: 54, y: 65, tag: "Compliance" },
+  { id: "cv-bid", label: "Bid CV Library", x: 28, y: 65, tag: "Bid Desk" },
+  { id: "power-bi", label: "Power BI", x: 80, y: 58, tag: "Insights" },
+];
+
+const systemConnections = [
+  { from: "portal", to: "lms", status: "stable" },
+  { from: "lms", to: "cv-gen", status: "stable" },
+  { from: "cv-gen", to: "cv-bid", status: "degraded" },
+  { from: "portal", to: "iso", status: "stable" },
+  { from: "iso", to: "power-bi", status: "stable" },
+  { from: "cv-bid", to: "power-bi", status: "stable" },
+];
+
+const renderTileIcon = (type) => {
+  switch (type) {
+    case "portal":
+      return (
+        <svg viewBox="0 0 48 48" role="img" aria-hidden="true">
+          <rect x="6" y="8" width="36" height="28" rx="6" />
+          <path d="M6 20h36" />
+          <circle cx="16" cy="14" r="2" />
+          <circle cx="22" cy="14" r="2" />
+        </svg>
+      );
+    case "lms":
+      return (
+        <svg viewBox="0 0 48 48" role="img" aria-hidden="true">
+          <path d="M8 14h32v22H8z" />
+          <path d="M8 18h32" />
+          <circle cx="18" cy="10" r="4" />
+        </svg>
+      );
+    case "cv-gen":
+      return (
+        <svg viewBox="0 0 48 48" role="img" aria-hidden="true">
+          <rect x="10" y="8" width="28" height="32" rx="4" />
+          <path d="M16 16h16M16 22h12M16 28h10" />
+          <circle cx="24" cy="34" r="2.5" />
+        </svg>
+      );
+    case "iso":
+      return (
+        <svg viewBox="0 0 48 48" role="img" aria-hidden="true">
+          <polygon points="24 6 40 18 32 42 16 42 8 18" />
+          <circle cx="24" cy="23" r="5" />
+        </svg>
+      );
+    case "cv-bid":
+      return (
+        <svg viewBox="0 0 48 48" role="img" aria-hidden="true">
+          <rect x="8" y="10" width="32" height="28" rx="6" />
+          <path d="M16 10v28M32 10v28" />
+          <circle cx="24" cy="24" r="4.5" />
+        </svg>
+      );
+    default:
+      return (
+        <svg viewBox="0 0 48 48" role="img" aria-hidden="true">
+          <rect x="8" y="12" width="32" height="24" rx="6" />
+          <path d="M8 24h32" />
+          <circle cx="24" cy="30" r="3" />
+        </svg>
+      );
+  }
+};
+
+function MainDashboard() {
+  const [showSystemMap, setShowSystemMap] = useState(false);
+  const [showUserManagement, setShowUserManagement] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [courses, setCourses] = useState([]);
+  const [quickStats, setQuickStats] = useState(defaultQuickStats);
+  const [loadingCourses, setLoadingCourses] = useState(true);
+  const [loadingStats, setLoadingStats] = useState(true);
+  const navigate = useNavigate();
+
+  // Fetch courses from API
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        setLoadingCourses(true);
+        const response = await fetch(API_ENDPOINTS.COURSES);
+        if (response.ok) {
+          const data = await response.json();
+          // Get only published courses and limit to 6 for display
+          const publishedCourses = data
+            .filter(course => course.is_published === true || course.is_published === 1)
+            .slice(0, 6);
+          setCourses(publishedCourses);
+        }
+      } catch (error) {
+        console.error('Error fetching courses:', error);
+      } finally {
+        setLoadingCourses(false);
+      }
+    };
+
+    const fetchStats = async () => {
+      try {
+        setLoadingStats(true);
+        const [coursesRes, employeesRes, standardsRes] = await Promise.all([
+          fetch(API_ENDPOINTS.COURSES),
+          fetch(API_ENDPOINTS.EMPLOYEES),
+          fetch(API_ENDPOINTS.STANDARDS)
+        ]);
+
+        const coursesData = coursesRes.ok ? await coursesRes.json() : [];
+        const employeesData = employeesRes.ok ? await employeesRes.json() : [];
+        const standardsData = standardsRes.ok ? await standardsRes.json() : [];
+
+        const publishedCourses = coursesData.filter(c => c.is_published === true || c.is_published === 1).length;
+
+        setQuickStats([
+          { label: "Active Courses", value: publishedCourses, status: "ok" },
+          { label: "Total Employees", value: employeesData.length, status: "ok" },
+          { label: "Standards", value: standardsData.length, status: "ok" },
+        ]);
+      } catch (error) {
+        console.error('Error fetching stats:', error);
+      } finally {
+        setLoadingStats(false);
+      }
+    };
+
+    fetchCourses();
+    fetchStats();
+  }, []);
+
+  const handleSystemMapToggle = () => setShowSystemMap((prev) => !prev);
+  const handleModuleClick = (moduleId) => {
+    console.log(`Launchpad selected: ${moduleId}`);
+  };
+  const toggleUserMenu = () => setShowUserMenu((prev) => !prev);
+  const handleLogout = () => {
+    setShowUserMenu(false);
+    navigate("/");
+  };
+
+  return (
+    <div className="dashboard-shell">
+      <header className="dashboard-header">
+        <div className="brand-cluster">
+          <div className="brand-logo">
+            <img src={ptisLogo} alt="PTIS" />
+          </div>
+          <div>
+            <p className="brand-label">PTIS Enterprise Hub</p>
+            <span className="brand-caption">Admin Command Surface</span>
+          </div>
+        </div>
+        <div className="header-controls">
+          <button className="ghost-btn" onClick={handleSystemMapToggle}>
+            System Map
+          </button>
+          <span className="divider-dot" />
+          <div className="user-menu-wrapper">
+            <button className="user-chip" onClick={toggleUserMenu}>
+              <span className="chip-label">Admin</span>
+              <strong>Operations</strong>
+            </button>
+            {showUserMenu && (
+              <div className="user-menu">
+                <button type="button" onClick={handleLogout}>
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <main className="dashboard-content">
+        <section className="hero-row">
+          <article className="intro-panel">
+            <p className="eyebrow">Welcome back</p>
+            <h1>Orchestrate PTIS systems from one control room.</h1>
+            <p>
+              Launch critical tools, review compliance signals, and keep
+              inspection projects aligned within seconds of logging in.
+            </p>
+            <div className="cta-row">
+              {/* <button className="primary-btn">Create Task</button>
+              <button className="ghost-btn">View Schedule</button> */}
+            </div>
+          </article>
+
+          <article className="status-panel">
+            <h2>Operational Status</h2>
+            <ul>
+              {loadingStats ? (
+                <li className="status-pill ok">
+                  <span>Loading...</span>
+                </li>
+              ) : (
+                quickStats.map((item) => (
+                  <li key={item.label} className={`status-pill ${item.status}`}>
+                    <span>{item.label}</span>
+                    <strong>{item.value}</strong>
+                  </li>
+                ))
+              )}
+            </ul>
+            <div className="status-footer">
+              <span className="pulse" />
+              Live telemetry synced 2 mins ago
+            </div>
+          </article>
+        </section>
+
+        <section>
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Launchpads</p>
+              <h2>Primary Modules</h2>
+            </div>
+            <button className="ghost-btn">Customize Grid</button>
+          </div>
+
+          <div className="module-grid">
+            {dashboardTiles.map((tile) => (
+              <button
+                type="button"
+                key={tile.id}
+                className={`module-card ${tile.status}`}
+                onClick={() => handleModuleClick(tile.id)}
+                aria-label={`Open ${tile.title} dashboard`}
+              >
+                <div className="module-top-row">
+                  <div className="module-icon">{renderTileIcon(tile.id)}</div>
+                  <span className={`module-status ${tile.status}`}>
+                    {tile.statusLabel}
+                  </span>
+                </div>
+                <div className="module-meta">
+                  <h3>{tile.title}</h3>
+                  <p>{tile.description}</p>
+                </div>
+               <div className="module-footer">
+                  <span className="module-metric">{tile.metric}</span>
+                   <Link to={tile.link} ><span className="module-link">
+                    Enter Dashboard
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M5 12h14M13 6l6 6-6 6" />
+                    </svg>
+                  </span></Link>
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* User Management Section */}
+        <section>
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Administration</p>
+              <h2>User & Access Management</h2>
+            </div>
+            <button 
+              className="ghost-btn"
+              onClick={() => setShowUserManagement(!showUserManagement)}
+            >
+              {showUserManagement ? 'Hide' : 'Show'} Management Panel
+            </button>
+          </div>
+
+          {showUserManagement && (
+            <div style={{ marginTop: '20px' }}>
+              <ManageUserAccess />
+            </div>
+          )}
+
+          {!showUserManagement && (
+            <div style={{ 
+              padding: '40px', 
+              marginTop: '20px',
+              background: 'radial-gradient(circle at 20% 20%, #2a2b36 0%, transparent 45%),    radial-gradient(circle at 80% 0%, rgba(255, 0, 0, 0.15) 0%, transparent 40%),    #0e0f14',
+              borderRadius: '16px',
+              border: '1px solid',
+              color: 'white',
+              textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>👥</div>
+              <h3 style={{ marginBottom: '8px' }}>Assign Portal Access to Users</h3>
+              <p style={{ opacity: 0.9, marginBottom: '20px' }}>
+                Manage employee permissions and control which modules they can access
+              </p>
+              <button 
+                onClick={() => setShowUserManagement(true)}
+                style={{
+                  padding: '12px 32px',
+                  background: 'white',
+                  color: '#667eea',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  fontSize: '16px'
+                }}
+              >
+                Manage User Access →
+              </button>
+            </div>
+          )}
+        </section>
+
+        {/* <section>
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Learning Management</p>
+              <h2>Featured Courses</h2>
+            </div>
+            <Link to="/learning-management-system/all-courses" className="ghost-btn">
+              View All Courses
+            </Link>
+          </div>
+
+          <div className="courses-grid">
+            {loadingCourses ? (
+              <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "2rem" }}>
+                <p>Loading courses...</p>
+              </div>
+            ) : courses.length > 0 ? (
+              courses.map((course) => (
+                <div key={course.id} className="course-card">
+                  <div className="course-thumbnail">
+                    {course.course_thumbnail ? (
+                      <img 
+                        src={`${API_BASE_URL}/${course.course_thumbnail}`} 
+                        alt={course.course_title}
+                      />
+                    ) : (
+                      <div className="thumbnail-placeholder">No Image</div>
+                    )}
+                    <span className="course-badge">{course.credit_hours} Credits</span>
+                  </div>
+                  <div className="course-content">
+                    <h3>{course.course_title}</h3>
+                    <p className="course-category">{course.course_category}</p>
+                    <p className="course-description">
+                      {course.course_description?.substring(0, 100)}...
+                    </p>
+                    <div className="course-meta">
+                      <span>{course.standard_name || 'Standard'}</span>
+                      <span>{course.duration_weeks ? `${course.duration_weeks} weeks` : 'Self-paced'}</span>
+                    </div>
+                    <Link 
+                      to={`/learning-management-system/course/${course.id}`}
+                      className="course-link"
+                    >
+                      View Course
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M5 12h14M13 6l6 6-6 6" />
+                      </svg>
+                    </Link>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "2rem" }}>
+                <p>No published courses available yet.</p>
+              </div>
+            )}
+          </div>
+        </section> */}
+      </main>
+      {showSystemMap && (
+        <SystemMap
+          modules={systemNodes}
+          connections={systemConnections}
+          onClose={handleSystemMapToggle}
+        />
+      )}
+    </div>
+  );
+}
+
+export default MainDashboard;

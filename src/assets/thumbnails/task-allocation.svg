@@ -1,0 +1,21 @@
+<svg width="200" height="140" viewBox="0 0 200 140" xmlns="http://www.w3.org/2000/svg" fill="none">
+  <defs>
+    <linearGradient id="taskGradient" x1="0" y1="0" x2="200" y2="140" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22C1C3" />
+      <stop offset="1" stop-color="#1A1D2F" />
+    </linearGradient>
+  </defs>
+  <rect width="200" height="140" rx="20" fill="url(#taskGradient)" />
+  <rect x="40" y="34" width="120" height="72" rx="16" stroke="rgba(0,0,0,0.35)" stroke-width="5" fill="rgba(0,0,0,0.1)" />
+  <line x1="70" y1="40" x2="70" y2="108" stroke="#8CFFE4" stroke-width="4" stroke-linecap="round" opacity="0.7" />
+  <line x1="106" y1="40" x2="106" y2="108" stroke="#FFD9A0" stroke-width="4" stroke-linecap="round" opacity="0.7" />
+  <line x1="142" y1="40" x2="142" y2="108" stroke="#FF8CAA" stroke-width="4" stroke-linecap="round" opacity="0.7" />
+  <circle cx="70" cy="52" r="10" fill="#8CFFE4" />
+  <circle cx="70" cy="82" r="10" fill="#00BFA6" />
+  <circle cx="106" cy="62" r="10" fill="#FFD9A0" />
+  <circle cx="106" cy="94" r="10" fill="#FFB669" />
+  <circle cx="142" cy="48" r="10" fill="#FF9CCB" />
+  <circle cx="142" cy="88" r="10" fill="#FF5E95" />
+  <circle cx="34" cy="32" r="8" fill="#8CFFE4" opacity="0.4" />
+  <circle cx="170" cy="108" r="12" fill="#FF9CCB" opacity="0.35" />
+</svg>

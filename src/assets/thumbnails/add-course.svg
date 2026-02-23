@@ -1,0 +1,19 @@
+<svg width="200" height="140" viewBox="0 0 200 140" xmlns="http://www.w3.org/2000/svg" fill="none">
+  <defs>
+    <linearGradient id="addCourseGradient" x1="0" y1="0" x2="200" y2="140" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FF7B7B" />
+      <stop offset="1" stop-color="#31162D" />
+    </linearGradient>
+    <linearGradient id="addCourseAccent" x1="40" y1="30" x2="140" y2="110" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFE29F" />
+      <stop offset="1" stop-color="#FFA99F" />
+    </linearGradient>
+  </defs>
+  <rect width="200" height="140" rx="20" fill="url(#addCourseGradient)" />
+  <rect x="45" y="32" width="110" height="76" rx="14" stroke="white" stroke-opacity="0.6" stroke-width="2" fill="none" />
+  <rect x="60" y="50" width="80" height="44" rx="10" fill="url(#addCourseAccent)" opacity="0.9" />
+  <path d="M100 60v24M112 72H88" stroke="#3F1037" stroke-width="4" stroke-linecap="round" />
+  <circle cx="52" cy="28" r="8" fill="#FFD7D7" opacity="0.4" />
+  <circle cx="168" cy="32" r="10" fill="#FFD7D7" opacity="0.25" />
+  <circle cx="34" cy="110" r="12" fill="#FFA99F" opacity="0.25" />
+</svg>
