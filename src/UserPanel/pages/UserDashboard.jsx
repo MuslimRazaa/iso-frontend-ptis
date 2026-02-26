@@ -1,328 +1,550 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { API_ENDPOINTS } from '../../config/api';
+import { Link, useNavigate } from 'react-router-dom';
+import { API_ENDPOINTS, API_BASE_URL } from '../../config/api';
 
 const UserDashboard = () => {
-    const [userPermissions, setUserPermissions] = useState({});
-    const [quickStats, setQuickStats] = useState([
-        { label: "My Courses", value: "8", status: "ok" },
-        { label: "Completion Rate", value: "62%", status: "ok" },
-        { label: "Certificates", value: "3", status: "ok" },
+    const navigate = useNavigate();
+    const [spotlightCourses, setSpotlightCourses] = useState([]);
+    const [statHighlights, setStatHighlights] = useState([
+        { label: "My Courses", value: "0", helper: "Assigned to you", tone: "accent" },
+        { label: "In Progress", value: "0", helper: "Currently learning", tone: "neutral" },
+        { label: "Completion Rate", value: "0%", helper: "Overall progress", tone: "muted" },
+        { label: "Certificates", value: "0", helper: "Earned so far", tone: "warning" },
     ]);
-    const [loadingStats, setLoadingStats] = useState(false);
-    const [courses, setCourses] = useState([]);
     const [loadingCourses, setLoadingCourses] = useState(true);
+    const [userPermissions, setUserPermissions] = useState({});
 
     const userEmail = localStorage.getItem('userEmail') || 'user@ptis.com';
     const userName = userEmail.split('@')[0].replace(/\./g, ' ').split(' ').map(word =>
         word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
     ).join(' ');
 
-
     useEffect(() => {
-        // Fetch user permissions from backend
-        fetchUserPermissions();
         fetchCourses();
+        fetchUserPermissions();
     }, []);
 
     const fetchUserPermissions = async () => {
         try {
-            const userEmail = localStorage.getItem('userEmail');
-            if (!userEmail) return;
-
-            const response = await fetch(`${API_ENDPOINTS.EMPLOYEES}/permissions/email/${userEmail}`);
-            if (response.ok) {
-                const permissions = await response.json();
-                setUserPermissions(permissions);
-                
-                // Also save to localStorage for quick access
-                localStorage.setItem('userPermissions', JSON.stringify(permissions));
-            }
-        } catch (error) {
-            console.error('Error fetching permissions:', error);
-            // Fallback to localStorage if API fails
             const permissions = JSON.parse(localStorage.getItem('userPermissions') || '{}');
             setUserPermissions(permissions);
+        } catch (error) {
+            console.error('Error fetching permissions:', error);
         }
     };
 
     const fetchCourses = async () => {
         try {
+            setLoadingCourses(true);
             const response = await fetch(API_ENDPOINTS.COURSES);
-            const data = await response.json();
-
-            // Filter published courses and limit to 3
-            const publishedCourses = data
-                .filter(c => c.is_published === true || c.is_published === 1)
-                .slice(0, 3);
-
-            setCourses(publishedCourses);
-            setLoadingCourses(false);
+            if (response.ok) {
+                const data = await response.json();
+                const publishedCourses = data
+                    .filter(course => course.is_published === true || course.is_published === 1)
+                    .slice(0, 6)
+                    .map(course => ({
+                        id: course.id,
+                        title: course.course_title,
+                        description: course.course_description || "No description available",
+                        creditHours: `${course.credit_hours || 0} hours`,
+                        progress: 0,
+                        thumbnail: course.course_thumbnail ? `${API_BASE_URL}${course.course_thumbnail}` : null,
+                    }));
+                setSpotlightCourses(publishedCourses);
+                
+                // Update stats
+                setStatHighlights([
+                    { label: "My Courses", value: publishedCourses.length.toString(), helper: "Assigned to you", tone: "accent" },
+                    { label: "In Progress", value: "0", helper: "Currently learning", tone: "neutral" },
+                    { label: "Completion Rate", value: "0%", helper: "Overall progress", tone: "muted" },
+                    { label: "Certificates", value: "3", helper: "Earned so far", tone: "warning" },
+                ]);
+            }
         } catch (error) {
             console.error('Error fetching courses:', error);
+        } finally {
             setLoadingCourses(false);
         }
     };
 
-    // Define all possible tiles
-    const allDashboardTiles = [
-        {
-            id: "my-courses",
-            title: "My Courses",
-            link: "/user/my-courses",
-            description: "Access your assigned training courses and track progress.",
-            status: "online",
-            statusLabel: "Available",
-            metric: "8 courses assigned",
-            permission: true, // Always visible
-            icon: "lms"
-        },
-        {
-            id: "certificates",
-            title: "My Certificates",
-            link: "/user/my-certificates",
-            description: "View and download your earned certificates.",
-            status: "online",
-            statusLabel: "Available",
-            metric: "3 certificates earned",
-            permission: true, // Always visible
-            icon: "certificates"
-        },
-        {
-            id: "lms-access",
-            title: "LMS Portal",
-            link: "/learning-management-system",
-            description: "Full access to Learning Management System features.",
-            status: "sync",
-            statusLabel: "Active",
-            metric: "Training module access",
-            permission: userPermissions.lms,
-            icon: "lms"
-        },
-        {
-            id: "portal-access",
-            title: "PTIS Portal",
-            link: "/portal",
-            description: "Access inspection records and client information.",
-            status: "online",
-            statusLabel: "Live",
-            metric: "View records & reports",
-            permission: userPermissions.portal,
-            icon: "portal"
-        },
-        {
-            id: "cvs-access",
-            title: "CV Generator",
-            link: "/user/cvs-access",
-            description: "Generate client-ready engineer and inspector resumes.",
-            status: "online",
-            statusLabel: "Live",
-            metric: "12 CVs queued",
-            permission: userPermissions.cvs,
-            icon: "cv"
-        },
-        {
-            id: "iso-forms",
-            title: "ISO Forms",
-            link: "/user/iso-forms",
-            description: "Quick access to QA/QC controlled documentation.",
-            status: "attention",
-            statusLabel: "Review",
-            metric: "3 forms awaiting sign-off",
-            permission: userPermissions.cvs, // Using cvs permission for ISO forms access
-            icon: "iso"
-        },
-        {
-            id: "bid-cv-library",
-            title: "Bid CV Library",
-            link: "/user/bid-cv-library",
-            description: "Recently curated CVs for tender submissions.",
-            status: "online",
-            statusLabel: "Live",
-            metric: "6 tenders in play",
-            permission: userPermissions.cvs, // Using cvs permission for bid library access
-            icon: "bid-cv"
-        },
-        {
-            id: "reports",
-            title: "Power BI Dashboards",
-            link: "/user/reports",
-            description: "Track operations KPIs and live financial snapshots.",
-            status: "sync",
-            statusLabel: "Syncing",
-            metric: "Analytics dashboard",
-            permission: userPermissions.reports,
-            icon: "power-bi"
-        }
+    const handleCardClick = (courseId) => {
+        navigate(`/user/course/${courseId}`);
+    };
+
+    const recentActivities = [
+        { title: "ISO 17020 Training", status: "Completed", date: "2 days ago" },
+        { title: "Quality Control Basics", status: "In Progress", date: "Last week" },
+        { title: "Safety Standards 2024", status: "Completed", date: "Last month" },
     ];
 
-    // Filter tiles based on permissions
-    const dashboardTiles = allDashboardTiles.filter(tile => tile.permission);
-
-    const renderTileIcon = (type) => {
-        switch (type) {
-            case "portal":
-                return (
-                    <svg viewBox="0 0 48 48" role="img" aria-hidden="true">
-                        <rect x="6" y="8" width="36" height="28" rx="6" />
-                        <path d="M6 20h36" />
-                        <circle cx="16" cy="14" r="2" />
-                        <circle cx="22" cy="14" r="2" />
-                    </svg>
-                );
-            case "lms":
-            case "certificates":
-                return (
-                    <svg viewBox="0 0 48 48" role="img" aria-hidden="true">
-                        <path d="M6 10h36v28H6z" />
-                        <path d="M14 18h20M14 24h20M14 30h12" />
-                    </svg>
-                );
-            case "cv":
-                return (
-                    <svg viewBox="0 0 48 48" role="img" aria-hidden="true">
-                        <path d="M12 6h24v36H12z" />
-                        <path d="M18 14h12M18 20h12M18 26h12M18 32h8" />
-                    </svg>
-                );
-            case "iso":
-                return (
-                    <svg viewBox="0 0 48 48" role="img" aria-hidden="true">
-                        <path d="M8 12h32v24H8z" />
-                        <path d="M14 20h20M14 26h20M14 32h12" />
-                        <circle cx="18" cy="20" r="1.5" />
-                        <circle cx="18" cy="26" r="1.5" />
-                    </svg>
-                );
-            case "bid-cv":
-                return (
-                    <svg viewBox="0 0 48 48" role="img" aria-hidden="true">
-                        <rect x="10" y="8" width="28" height="32" rx="2" />
-                        <path d="M16 14h16M16 20h16M16 26h10" />
-                        <rect x="16" y="30" width="6" height="6" rx="1" />
-                    </svg>
-                );
-            case "power-bi":
-                return (
-                    <svg viewBox="0 0 48 48" role="img" aria-hidden="true">
-                        <rect x="8" y="24" width="8" height="16" />
-                        <rect x="20" y="16" width="8" height="24" />
-                        <rect x="32" y="8" width="8" height="32" />
-                    </svg>
-                );
-            default:
-                return (
-                    <svg viewBox="0 0 48 48" role="img" aria-hidden="true">
-                        <rect x="6" y="8" width="36" height="28" rx="6" />
-                    </svg>
-                );
-        }
-    };
-
-    const handleModuleClick = (moduleId) => {
-        console.log(`Module selected: ${moduleId}`);
-    };
-
     return (
-        <div className="dashboard-shell">
-            <main className="dashboard-content">
-                <section className="hero-row">
-                    <article className="intro-panel">
-                        <p className="eyebrow">Hello {userName}</p>
-                        <h1>Welcome To PTIS Portal</h1>
-                        <p>
-                            Access your training courses, view certificates, and manage your assigned modules
-                            from a centralized dashboard.
-                        </p>
-                        <div className="cta-row">
-                            <Link to="/user/my-courses" className="primary-btn">View My Courses</Link>
-                            <Link to="/user/my-certificates" className="ghost-btn">My Certificates</Link>
-                        </div>
-                    </article>
-
-                    <article className="status-panel">
-                        <h2>My Learning Status</h2>
-                        <ul>
-                            {loadingStats ? (
-                                <li className="status-pill ok">
-                                    <span>Loading...</span>
-                                </li>
-                            ) : (
-                                quickStats.map((item) => (
-                                    <li key={item.label} className={`status-pill ${item.status}`}>
-                                        <span>{item.label}</span>
-                                        <strong>{item.value}</strong>
-                                    </li>
-                                ))
-                            )}
-                        </ul>
-                        <div className="status-footer">
-                            <span className="pulse" />
-                            Last updated 5 mins ago
-                        </div>
-                    </article>
-                </section>
-
-                <section>
-                    <div className="section-heading">
-                        <div>
-                            <p className="eyebrow">Quick Access</p>
-                            <h2>Your Available Modules</h2>
-                        </div>
-                    </div>
-
-                    {dashboardTiles.length === 0 ? (
-                        <div style={{
-                            padding: '60px 20px',
-                            textAlign: 'center',
-                            background: 'rgba(0,0,0,0.02)',
-                            borderRadius: '16px',
-                            border: '2px dashed rgba(0,0,0,0.1)'
+        <div className="lms-home" style={{ padding: 0 }}>
+            {/* Professional Hero Section with Gradient */}
+            <section className="lms-hero" style={{
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                borderRadius: '16px',
+                padding: '3rem',
+                marginBottom: '2rem',
+                boxShadow: '0 20px 60px rgba(102, 126, 234, 0.3)',
+                position: 'relative',
+                overflow: 'hidden'
+            }}>
+                <div style={{
+                    position: 'absolute',
+                    top: 0,
+                    right: 0,
+                    width: '400px',
+                    height: '400px',
+                    background: 'radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%)',
+                    borderRadius: '50%',
+                    transform: 'translate(30%, -30%)'
+                }}></div>
+                <div className="lms-hero__copy" style={{ position: 'relative', zIndex: 1 }}>
+                    <p className="eyebrow" style={{ color: 'rgba(255,255,255,0.9)', fontSize: '0.85rem', fontWeight: '600', letterSpacing: '1px', textTransform: 'uppercase' }}>
+                        👋 Welcome back, {userName}
+                    </p>
+                    <h1 style={{ color: '#fff', fontSize: '2.5rem', fontWeight: '700', margin: '1rem 0', lineHeight: '1.2' }}>
+                        Continue your learning journey and achieve excellence
+                    </h1>
+                    <p style={{ color: 'rgba(255,255,255,0.95)', fontSize: '1.05rem', maxWidth: '600px', lineHeight: '1.6' }}>
+                        Access your assigned training courses, track your progress, and earn certificates 
+                        to advance your career. Stay ahead with continuous learning and skill development.
+                    </p>
+                    <div className="hero-actions" style={{ marginTop: '2rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                        <Link to="/user/my-courses" style={{
+                            textDecoration: 'none',
+                            background: '#fff',
+                            color: '#667eea',
+                            padding: '0.875rem 2rem',
+                            borderRadius: '10px',
+                            fontWeight: '600',
+                            fontSize: '0.95rem',
+                            boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
+                            transition: 'all 0.3s ease',
+                            display: 'inline-block'
+                        }} onMouseEnter={(e) => {
+                            e.target.style.transform = 'translateY(-2px)';
+                            e.target.style.boxShadow = '0 6px 20px rgba(0,0,0,0.25)';
+                        }} onMouseLeave={(e) => {
+                            e.target.style.transform = 'translateY(0)';
+                            e.target.style.boxShadow = '0 4px 15px rgba(0,0,0,0.2)';
                         }}>
-                            <div style={{ fontSize: '64px', marginBottom: '20px', opacity: 0.5 }}>🔒</div>
-                            <h3 style={{ marginBottom: '12px', color: '#666' }}>No Modules Assigned</h3>
-                            <p style={{ color: '#999', fontSize: '15px' }}>
-                                Please contact your administrator to request access to modules.
+                            📚 My Courses
+                        </Link>
+                        <Link to="/user/my-certificates" style={{
+                            textDecoration: 'none',
+                            background: 'rgba(255,255,255,0.2)',
+                            color: '#fff',
+                            padding: '0.875rem 2rem',
+                            borderRadius: '10px',
+                            fontWeight: '600',
+                            fontSize: '0.95rem',
+                            backdropFilter: 'blur(10px)',
+                            border: '1px solid rgba(255,255,255,0.3)',
+                            transition: 'all 0.3s ease',
+                            display: 'inline-block'
+                        }} onMouseEnter={(e) => {
+                            e.target.style.background = 'rgba(255,255,255,0.3)';
+                        }} onMouseLeave={(e) => {
+                            e.target.style.background = 'rgba(255,255,255,0.2)';
+                        }}>
+                            🏆 View Certificates
+                        </Link>
+                    </div>
+                </div>
+            </section>
+
+            {/* Professional Stats Grid */}
+            <section className="lms-stat-grid" style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', 
+                gap: '1.5rem', 
+                marginBottom: '2.5rem' 
+            }}>
+                {statHighlights.map((stat, index) => {
+                    const colors = [
+                        { bg: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', icon: '📚' },
+                        { bg: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', icon: '⏳' },
+                        { bg: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', icon: '📊' },
+                        { bg: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', icon: '🏆' }
+                    ];
+                    return (
+                        <article key={stat.label} style={{
+                            background: '#fff',
+                            borderRadius: '16px',
+                            padding: '1.75rem',
+                            boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+                            border: '1px solid rgba(0,0,0,0.06)',
+                            transition: 'all 0.3s ease',
+                            cursor: 'pointer',
+                            position: 'relative',
+                            overflow: 'hidden'
+                        }} onMouseEnter={(e) => {
+                            e.currentTarget.style.transform = 'translateY(-5px)';
+                            e.currentTarget.style.boxShadow = '0 12px 35px rgba(0,0,0,0.12)';
+                        }} onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.08)';
+                        }}>
+                            <div style={{
+                                position: 'absolute',
+                                top: '-20px',
+                                right: '-20px',
+                                width: '100px',
+                                height: '100px',
+                                background: colors[index].bg,
+                                borderRadius: '50%',
+                                opacity: 0.1
+                            }}></div>
+                            <div style={{ position: 'relative', zIndex: 1 }}>
+                                <div style={{
+                                    fontSize: '2rem',
+                                    marginBottom: '0.75rem'
+                                }}>{colors[index].icon}</div>
+                                <p style={{ 
+                                    fontSize: '0.85rem', 
+                                    color: '#6c757d', 
+                                    fontWeight: '600', 
+                                    textTransform: 'uppercase', 
+                                    letterSpacing: '0.5px',
+                                    marginBottom: '0.5rem'
+                                }}>{stat.label}</p>
+                                <h3 style={{ 
+                                    fontSize: '2.25rem', 
+                                    fontWeight: '700', 
+                                    color: '#2c3e50',
+                                    margin: '0.5rem 0'
+                                }}>{stat.value}</h3>
+                                <span style={{ 
+                                    fontSize: '0.875rem', 
+                                    color: '#95a5a6',
+                                    fontWeight: '500'
+                                }}>{stat.helper}</span>
+                            </div>
+                        </article>
+                    );
+                })}
+            </section>
+
+            {/* Professional Panels */}
+            <section className="lms-panel-grid" style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', 
+                gap: '2rem', 
+                marginBottom: '2.5rem' 
+            }}>
+                <article style={{
+                    background: '#fff',
+                    borderRadius: '16px',
+                    padding: '2rem',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+                    border: '1px solid rgba(0,0,0,0.06)'
+                }}>
+                    <header style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div>
+                            <p className="eyebrow" style={{ color: '#667eea', fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.5rem' }}>
+                                Recent Activity
                             </p>
+                            <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#2c3e50', margin: 0 }}>
+                                Your Learning Progress
+                            </h2>
                         </div>
-                    ) : (
-                        <div className="module-grid">
-                            {dashboardTiles.map((tile) => (
-                                <button
-                                    type="button"
-                                    key={tile.id}
-                                    className={`module-card ${tile.status}`}
-                                    onClick={() => handleModuleClick(tile.id)}
-                                    aria-label={`Open ${tile.title} dashboard`}
-                                >
-                                    <div className="module-top-row">
-                                        <div className="module-icon">{renderTileIcon(tile.icon)}</div>
-                                        <span className={`module-status ${tile.status}`}>
-                                            {tile.statusLabel}
+                        <Link to="/user/my-courses" style={{
+                            textDecoration: 'none',
+                            color: '#667eea',
+                            fontSize: '0.875rem',
+                            fontWeight: '600',
+                            transition: 'all 0.3s ease'
+                        }}>View All →</Link>
+                    </header>
+                    <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                        {recentActivities.map((activity, idx) => (
+                            <li key={activity.title} style={{
+                                padding: '1rem 0',
+                                borderBottom: idx < recentActivities.length - 1 ? '1px solid #f0f0f0' : 'none'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+                                    <div style={{ flex: 1 }}>
+                                        <strong style={{ color: '#2c3e50', fontSize: '0.95rem', fontWeight: '600' }}>
+                                            {activity.title}
+                                        </strong>
+                                        <div style={{ marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                            <span style={{
+                                                fontSize: '0.75rem',
+                                                padding: '0.25rem 0.75rem',
+                                                borderRadius: '12px',
+                                                background: activity.status === 'Completed' ? '#d4edda' : '#fff3cd',
+                                                color: activity.status === 'Completed' ? '#155724' : '#856404',
+                                                fontWeight: '600'
+                                            }}>{activity.status}</span>
+                                            <em style={{ fontSize: '0.8rem', color: '#95a5a6', fontStyle: 'normal' }}>
+                                                {activity.date}
+                                            </em>
+                                        </div>
+                                    </div>
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
+                </article>
+
+                <article style={{
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    borderRadius: '16px',
+                    padding: '2rem',
+                    boxShadow: '0 10px 40px rgba(102, 126, 234, 0.3)',
+                    color: '#fff'
+                }}>
+                    <header style={{ marginBottom: '1.5rem' }}>
+                        <div>
+                            <p className="eyebrow" style={{ color: 'rgba(255,255,255,0.9)', fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.5rem' }}>
+                                Quick Actions
+                            </p>
+                            <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#fff', margin: 0 }}>
+                                Tasks & Tests
+                            </h2>
+                        </div>
+                    </header>
+                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: '0.75rem' }}>
+                        {[
+                            { to: '/user/my-courses', icon: '📚', title: 'My Courses', desc: 'Access your learning materials' },
+                            { to: '/user/testing', icon: '✍️', title: 'Testing', desc: 'Take assessments and quizzes' },
+                            { to: '/user/task-allocations', icon: '✅', title: 'Task Allocations', desc: 'View and complete tasks' },
+                            { to: '/user/my-certificates', icon: '🏆', title: 'Certificates', desc: 'Download your achievements' }
+                        ].map(item => (
+                            <li key={item.to}>
+                                <Link to={item.to} style={{
+                                    textDecoration: 'none',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '1rem',
+                                    padding: '1rem',
+                                    borderRadius: '12px',
+                                    background: 'rgba(255,255,255,0.15)',
+                                    backdropFilter: 'blur(10px)',
+                                    border: '1px solid rgba(255,255,255,0.2)',
+                                    color: '#fff',
+                                    transition: 'all 0.3s ease'
+                                }} onMouseEnter={(e) => {
+                                    e.currentTarget.style.background = 'rgba(255,255,255,0.25)';
+                                    e.currentTarget.style.transform = 'translateX(5px)';
+                                }} onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = 'rgba(255,255,255,0.15)';
+                                    e.currentTarget.style.transform = 'translateX(0)';
+                                }}>
+                                    <span style={{ fontSize: '1.5rem' }}>{item.icon}</span>
+                                    <div>
+                                        <strong style={{ display: 'block', fontSize: '0.95rem', fontWeight: '600' }}>
+                                            {item.title}
+                                        </strong>
+                                        <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.85)' }}>
+                                            {item.desc}
                                         </span>
                                     </div>
-                                    <div className="module-meta">
-                                        <h3>{tile.title}</h3>
-                                        <p>{tile.description}</p>
-                                    </div>
-                                    <div className="module-footer">
-                                        <span className="module-metric">{tile.metric}</span>
-                                        <Link to={tile.link}>
-                                            <span className="module-link">
-                                                Open Module
-                                                <svg viewBox="0 0 24 24" aria-hidden="true">
-                                                    <path d="M5 12h14M13 6l6 6-6 6" />
-                                                </svg>
-                                            </span>
-                                        </Link>
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </section>
+                                </Link>
+                            </li>
+                        ))}
+                    </ul>
+                </article>
+            </section>
 
-            </main>
+            {/* Professional Course Spotlight */}
+            <section className="lms-spotlight">
+                <header style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                    <div>
+                        <p className="eyebrow" style={{ color: '#667eea', fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.5rem' }}>
+                            Available Courses
+                        </p>
+                        <h2 style={{ fontSize: '2rem', fontWeight: '700', color: '#2c3e50', margin: 0 }}>
+                            Start Learning Today
+                        </h2>
+                    </div>
+                    <Link to="/user/my-courses" style={{
+                        textDecoration: 'none',
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        color: '#fff',
+                        padding: '0.75rem 1.5rem',
+                        borderRadius: '10px',
+                        fontWeight: '600',
+                        fontSize: '0.9rem',
+                        boxShadow: '0 4px 15px rgba(102, 126, 234, 0.3)',
+                        transition: 'all 0.3s ease'
+                    }} onMouseEnter={(e) => {
+                        e.target.style.transform = 'translateY(-2px)';
+                        e.target.style.boxShadow = '0 6px 20px rgba(102, 126, 234, 0.4)';
+                    }} onMouseLeave={(e) => {
+                        e.target.style.transform = 'translateY(0)';
+                        e.target.style.boxShadow = '0 4px 15px rgba(102, 126, 234, 0.3)';
+                    }}>
+                        Browse All →
+                    </Link>
+                </header>
+
+                {loadingCourses ? (
+                    <div style={{ textAlign: 'center', padding: '4rem', background: '#f8f9fa', borderRadius: '16px' }}>
+                        <div style={{ 
+                            display: 'inline-block', 
+                            width: '40px', 
+                            height: '40px', 
+                            border: '4px solid #f3f3f3', 
+                            borderTop: '4px solid #667eea', 
+                            borderRadius: '50%',
+                            animation: 'spin 1s linear infinite'
+                        }}></div>
+                        <p style={{ marginTop: '1rem', color: '#6c757d' }}>Loading courses...</p>
+                    </div>
+                ) : spotlightCourses.length === 0 ? (
+                    <div style={{ 
+                        textAlign: 'center', 
+                        padding: '4rem', 
+                        background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)', 
+                        borderRadius: '16px',
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.08)'
+                    }}>
+                        <p style={{ fontSize: '4rem', marginBottom: '1rem' }}>📚</p>
+                        <h3 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#2c3e50', marginBottom: '0.5rem' }}>
+                            No Courses Available
+                        </h3>
+                        <p style={{ color: '#6c757d', fontSize: '1rem' }}>
+                            New courses will appear here when assigned to you
+                        </p>
+                    </div>
+                ) : (
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+                        gap: '2rem'
+                    }}>
+                        {spotlightCourses.map((course) => (
+                            <article 
+                                key={course.id} 
+                                style={{
+                                    background: '#fff',
+                                    borderRadius: '16px',
+                                    overflow: 'hidden',
+                                    boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+                                    border: '1px solid rgba(0,0,0,0.06)',
+                                    transition: 'all 0.3s ease',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    flexDirection: 'column'
+                                }} 
+                                onClick={() => handleCardClick(course.id)}
+                                onMouseEnter={(e) => {
+                                    e.currentTarget.style.transform = 'translateY(-8px)';
+                                    e.currentTarget.style.boxShadow = '0 12px 40px rgba(0,0,0,0.15)';
+                                }} 
+                                onMouseLeave={(e) => {
+                                    e.currentTarget.style.transform = 'translateY(0)';
+                                    e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.08)';
+                                }}
+                            >
+                                <div style={{ 
+                                    width: '100%', 
+                                    height: '200px', 
+                                    overflow: 'hidden',
+                                    position: 'relative'
+                                }}>
+                                    {course.thumbnail ? (
+                                        <>
+                                            <img 
+                                                src={course.thumbnail} 
+                                                alt={course.title}
+                                                style={{
+                                                    width: '100%',
+                                                    height: '100%',
+                                                    objectFit: 'cover',
+                                                    transition: 'transform 0.3s ease'
+                                                }}
+                                                onMouseEnter={(e) => {
+                                                    e.target.style.transform = 'scale(1.05)';
+                                                }}
+                                                onMouseLeave={(e) => {
+                                                    e.target.style.transform = 'scale(1)';
+                                                }}
+                                            />
+                                            <div style={{
+                                                position: 'absolute',
+                                                top: '12px',
+                                                right: '12px',
+                                                background: 'rgba(0,0,0,0.7)',
+                                                backdropFilter: 'blur(10px)',
+                                                color: '#fff',
+                                                padding: '0.4rem 0.8rem',
+                                                borderRadius: '8px',
+                                                fontSize: '0.75rem',
+                                                fontWeight: '600'
+                                            }}>
+                                                {course.creditHours}
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div style={{ 
+                                            width: '100%', 
+                                            height: '100%', 
+                                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '4rem'
+                                        }}>
+                                            📚
+                                        </div>
+                                    )}
+                                </div>
+                                <div style={{ padding: '1.5rem', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                    <h3 style={{ 
+                                        fontSize: '1.1rem', 
+                                        fontWeight: '700', 
+                                        color: '#2c3e50', 
+                                        marginBottom: '0.75rem',
+                                        lineHeight: '1.4'
+                                    }}>
+                                        {course.title}
+                                    </h3>
+                                    <p style={{ 
+                                        fontSize: '0.9rem', 
+                                        color: '#6c757d', 
+                                        lineHeight: '1.6',
+                                        marginBottom: '1.5rem',
+                                        flex: 1
+                                    }}>
+                                        {course.description.length > 100 
+                                            ? `${course.description.substring(0, 100)}...` 
+                                            : course.description
+                                        }
+                                    </p>
+                                    <div style={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        paddingTop: '1rem',
+                                        borderTop: '1px solid #f0f0f0'
+                                    }}>
+                                        <span style={{ fontSize: '0.85rem', color: '#95a5a6', fontWeight: '600' }}>
+                                            Start Course
+                                        </span>
+                                        <div style={{
+                                            width: '40px',
+                                            height: '40px',
+                                            borderRadius: '50%',
+                                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            color: '#fff',
+                                            fontSize: '1.2rem',
+                                            transition: 'all 0.3s ease'
+                                        }}>
+                                            →
+                                        </div>
+                                    </div>
+                                </div>
+                            </article>
+                        ))}
+                    </div>
+                )}
+            </section>
         </div>
     );
 };
