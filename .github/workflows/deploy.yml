@@ -6,7 +6,7 @@ on:
       - main
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
 
     steps:
@@ -24,11 +24,10 @@ jobs:
       - name: Build React App
         run: npm run build
 
-      - name: Deploy to cPanel via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: ./dist/
-          server-dir: /domains/iso.ptis.co/public_html/
+      - name: Commit dist folder
+        run: |
+          git config --global user.email "zamirkha@gmail.com"
+          git config --global user.name "MuslimRazaa"
+          git add dist/ -f
+          git commit -m "Auto build dist" || echo "Nothing to commit"
+          git push origin main
