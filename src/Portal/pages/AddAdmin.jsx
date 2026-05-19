@@ -135,7 +135,7 @@ function AddAdmin() {
             <option value="full">Full Access - All Modules</option>
             <option value="lms">LMS Only</option>
             <option value="portal">Portal Only</option>
-            <option value="cv-gen">CV Generator Only</option>
+            <option value="cv-gen">Job Log Description Only</option>
             <option value="iso">ISO Forms Only</option>
             <option value="custom">Custom Access</option>
           </select>

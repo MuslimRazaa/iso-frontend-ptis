@@ -5,16 +5,11 @@ import UserSidebar from './User-header-sidebar/UserSidebar';
 
 const UserPanel = () => {
   return (
-    <div className="lms-container" style={{ display: 'flex', minHeight: '100vh' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: '#0e0f14' }}>
       <UserSidebar />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <UserHeader />
-        <div style={{ 
-          flex: 1, 
-          overflow: 'auto', 
-          padding: '2rem',
-          background: '#f8f9fa'
-        }}>
+        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0 }}>
           <Outlet />
         </div>
       </div>

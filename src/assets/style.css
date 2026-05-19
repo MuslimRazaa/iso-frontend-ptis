@@ -730,6 +730,13 @@ body {
   box-shadow: 0 16px 36px rgba(215, 38, 61, 0.25);
 }
 
+.primary-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
 .status-panel h2 {
   margin-bottom: 18px;
 }
@@ -1735,15 +1742,8 @@ body {
 
 .spotlight-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 20px;
-}
-
-/* Ensure minimum 4 cards per row on large screens */
-@media (min-width: 1400px) {
-  .spotlight-cards {
-    grid-template-columns: repeat(4, 1fr);
-  }
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 18px;
 }
 
 .spotlight-card {
@@ -2166,6 +2166,13 @@ body {
 .action-btn:hover {
   transform: translateY(-1px);
   box-shadow: 0 6px 16px rgba(15, 23, 42, 0.1);
+}
+
+.action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .action-btn.edit {
@@ -4461,8 +4468,42 @@ body {
   padding: 0;
   width: 100%;
   max-width: 100%;
+  min-width: 0;
   overflow-x: hidden;
   overflow-y: visible;
+}
+
+.job-log-page {
+  overflow-x: hidden;
+  min-width: 0;
+}
+
+.job-log-page .all-records-header,
+.job-log-page .all-records-filters {
+  overflow-x: hidden;
+}
+
+.job-log-table-shell {
+  margin: 16px 32px 32px;
+  background: #ffffff;
+  border: 1px solid #e0e0e6;
+  border-radius: 20px;
+  overflow: hidden;
+  max-width: calc(100% - 64px);
+  min-width: 0;
+}
+
+.job-log-table-shell .all-records-table-container {
+  padding: 24px;
+  background: transparent;
+  max-width: 100%;
+}
+
+.job-log-table-shell .all-records-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  overscroll-behavior-x: contain;
 }
 
 .all-records-header {
@@ -4507,7 +4548,7 @@ body {
 
 .all-records-search {
   flex: 1;
-  min-width: 300px;
+  min-width: 220px;
   padding: 12px 16px;
   border: 1px solid #e0e0e6;
   border-radius: 16px;
@@ -4535,10 +4576,21 @@ body {
   transition: all 0.2s ease;
 }
 
+.all-records-filter-btn {
+  padding: 12px 16px;
+  border-radius: 16px;
+  font-size: 14px;
+  min-width: 180px;
+}
+
 .all-records-filter-select:focus {
   outline: none;
   border-color: #d7263d;
   box-shadow: 0 0 0 3px rgba(215, 38, 61, 0.1);
+}
+
+.all-records-filter-select.select-open {
+  border-radius: 16px 16px 0 0;
 }
 
 .all-records-table-container {
@@ -4547,6 +4599,19 @@ body {
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
+}
+
+.job-log-table-shell {
+  margin: 16px 32px 32px;
+  background: #ffffff;
+  border: 1px solid #e0e0e6;
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+.job-log-table-shell .all-records-table-container {
+  padding: 24px;
+  background: transparent;
 }
 
 .all-records-table-scroll {
@@ -4723,6 +4788,59 @@ body {
   border-top: 1px solid #e0e0e6;
 }
 
+.all-records-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 24px 24px;
+  background: #ffffff;
+  border-top: 1px solid #e0e0e6;
+  flex-wrap: wrap;
+}
+
+.job-log-table-shell .all-records-pagination {
+  padding: 16px 24px 24px;
+}
+
+.all-records-pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: #8c8c94;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.all-records-pagination-limit {
+  color: #595966;
+  font-weight: 600;
+}
+
+.all-records-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.all-records-pagination-page {
+  font-size: 13px;
+  color: #595966;
+  font-weight: 600;
+}
+
+.pagination-btn {
+  padding: 8px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+}
+
+.pagination-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Responsive Design */
 @media screen and (max-width: 1024px) {
   .all-records-header {
@@ -4765,7 +4883,8 @@ body {
   }
   
   .all-records-search,
-  .all-records-filter-select {
+  .all-records-filter-select,
+  .all-records-filter-btn {
     width: 100%;
     min-width: 100%;
   }
@@ -5164,224 +5283,4 @@ ul.submenu li {
   border: none;
   padding: 5px 10px;
   cursor: pointer;
-}
-
-/* ===================================
-   Professional User Panel Animations
-   =================================== */
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.8;
-    transform: scale(1.1);
-  }
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes slideInLeft {
-  from {
-    opacity: 0;
-    transform: translateX(-30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes shimmer {
-  0% {
-    background-position: -1000px 0;
-  }
-  100% {
-    background-position: 1000px 0;
-  }
-}
-
-/* ===================================
-   Professional Card Styles
-   =================================== */
-
-.professional-card {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  animation: fadeIn 0.6s ease-out;
-}
-
-.professional-card:hover {
-  transform: translateY(-8px) scale(1.02);
-  box-shadow: 0 15px 50px rgba(0,0,0,0.15) !important;
-}
-
-/* ===================================
-   Gradient Text Effects
-   =================================== */
-
-.gradient-text {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* ===================================
-   Professional Buttons
-   =================================== */
-
-.btn-professional {
-  position: relative;
-  overflow: hidden;
-  transition: all 0.3s ease;
-}
-
-.btn-professional::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
-  border-radius: 50%;
-  background: rgba(255,255,255,0.3);
-  transform: translate(-50%, -50%);
-  transition: width 0.6s, height 0.6s;
-}
-
-.btn-professional:hover::before {
-  width: 300px;
-  height: 300px;
-}
-
-/* ===================================
-   Loading States
-   =================================== */
-
-.skeleton-loader {
-  background: linear-gradient(
-    90deg,
-    #f0f0f0 25%,
-    #e0e0e0 50%,
-    #f0f0f0 75%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 2s infinite;
-  border-radius: 8px;
-}
-
-/* ===================================
-   Smooth Scrolling
-   =================================== */
-
-html {
-  scroll-behavior: smooth;
-}
-
-/* ===================================
-   Professional Badge Pulse
-   =================================== */
-
-.badge-pulse {
-  animation: pulse 2s infinite;
-}
-
-/* ===================================
-   Card Hover Effects - Enhanced
-   =================================== */
-
-.spotlight-card,
-.professional-course-card {
-  position: relative;
-  overflow: hidden;
-}
-
-.spotlight-card::after,
-.professional-course-card::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255,255,255,0.1),
-    transparent
-  );
-  transition: left 0.5s;
-}
-
-.spotlight-card:hover::after,
-.professional-course-card:hover::after {
-  left: 100%;
-}
-
-/* ===================================
-   Responsive Design Enhancements
-   =================================== */
-
-@media (max-width: 768px) {
-  .lms-hero {
-    padding: 2rem 1.5rem !important;
-  }
-  
-  .lms-hero h1 {
-    font-size: 1.75rem !important;
-  }
-  
-  .lms-stat-grid {
-    grid-template-columns: 1fr !important;
-  }
-  
-  .lms-panel-grid {
-    grid-template-columns: 1fr !important;
-  }
-}
-
-/* ===================================
-   Glass Morphism Effects
-   =================================== */
-
-.glass-card {
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-}
-
-/* ===================================
-   Professional Shadows
-   =================================== */
-
-.shadow-soft {
-  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-}
-
-.shadow-medium {
-  box-shadow: 0 6px 25px rgba(0,0,0,0.12);
-}
-
-.shadow-hard {
-  box-shadow: 0 10px 40px rgba(0,0,0,0.18);
-}
-
-/* ===================================
-   Smooth Transitions
-   =================================== */
-
-* {
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }

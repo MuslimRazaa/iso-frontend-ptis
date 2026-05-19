@@ -214,7 +214,7 @@ const ManageUserAccess = () => {
                   <div className="permission-info">
                     <div className="permission-icon cvs">📄</div>
                     <div>
-                      <strong>CV Generator & Library</strong>
+                      <strong>Job Log Description & Library</strong>
                       <p>Access to generate and manage CVs for bids and clients</p>
                     </div>
                   </div>

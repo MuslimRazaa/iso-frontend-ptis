@@ -5,7 +5,7 @@ import VideoLoader from './components/VideoLoader'
 import './assets/style.css'
 
 // ============================================
-// ADMIN MODULES IMPORTS
+// ADMIN` MODULES IMPORTS
 // ============================================
 import MainDashboard from './dashboards/MainDashboard'
 
@@ -39,9 +39,8 @@ import UserPanel from './UserPanel/UserPanel'
 import UserDashboard from './UserPanel/pages/UserDashboard'
 import MyCourses from './UserPanel/pages/MyCourses'
 import UserCertificates from './UserPanel/pages/UserCertificates'
-import CourseDetailUser from './UserPanel/pages/CourseDetailUser'
-import Testing from './UserPanel/pages/Testing'
-import TaskAllocations from './UserPanel/pages/TaskAllocations'
+import JobLogDescription from './UserPanel/pages/JobLogDescription'
+import AllLmsCourses from './UserPanel/pages/AllLmsCourses'
 
 function App() {
   const [showLoader, setShowLoader] = useState(true)
@@ -112,10 +111,10 @@ function App() {
               <Route index element={<Navigate to="/user/dashboard" replace />} />
               <Route path="dashboard" element={<UserDashboard />} />
               <Route path="my-courses" element={<MyCourses />} />
+              <Route path="all-courses" element={<AllLmsCourses />} />
               <Route path="my-certificates" element={<UserCertificates />} />
-              <Route path="course/:courseId" element={<CourseDetailUser />} />
-              <Route path="testing" element={<Testing />} />
-              <Route path="task-allocations" element={<TaskAllocations />} />
+              <Route path="course/:courseId" element={<CourseDetail />} />
+              <Route path="cvs-access" element={<JobLogDescription />} />
               
               {/* User access to LMS (if permission granted) */}
               <Route path="lms-access" element={<div style={{padding: '40px', textAlign: 'center'}}>

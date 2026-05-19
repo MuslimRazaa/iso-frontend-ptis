@@ -9,7 +9,7 @@ const statHighlights = [
 
 const systemModules = [
   { name: "LMS", status: "Active", users: 142, lastSync: "2 mins ago", color: "ok" },
-  { name: "CV Generator", status: "Active", users: 45, lastSync: "5 mins ago", color: "ok" },
+  { name: "Job Log Description", status: "Active", users: 45, lastSync: "5 mins ago", color: "ok" },
   { name: "ISO Forms", status: "Review", users: 28, lastSync: "1 hour ago", color: "warning" },
   { name: "Bid CV Library", status: "Active", users: 18, lastSync: "10 mins ago", color: "ok" },
   { name: "Power BI", status: "Syncing", users: 67, lastSync: "Just now", color: "neutral" },

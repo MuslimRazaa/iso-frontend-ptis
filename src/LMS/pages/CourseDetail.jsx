@@ -1,49 +1,106 @@
-import React, { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api'
 import PdfViewer from '../../components/PdfViewer'
 
 function CourseDetail() {
   const { courseId } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
+  const isUserMode = location.pathname.startsWith('/user/')
+
   const [activeTab, setActiveTab] = useState('overview')
   const [selectedVideo, setSelectedVideo] = useState(0)
   const [course, setCourse] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [pptUrl, setPptUrl] = useState(null);
-  const [showModal, setShowModal] = useState(false);
+  const [pptUrl, setPptUrl] = useState(null)
+  const [showModal, setShowModal] = useState(false)
+  const [showStartModal, setShowStartModal] = useState(false)
+  const [progressData, setProgressData] = useState(null) // from API
+  const [taskInfo, setTaskInfo] = useState(null)
 
-  
+  const userEmail = localStorage.getItem('userEmail') || ''
+  const userFullName = localStorage.getItem('userFullName') || ''
+
+  // Time tracking refs
+  const videoSessionStartRef = useRef(null)
+  const videoAccumulatedRef = useRef(0)  // seconds accumulated this session
+  const pptOpenTimeRef = useRef(null)
+  const autoSaveTimerRef = useRef(null)
+
+  // ─── API: Load progress ───────────────────────────────────────────────────
+  const loadProgressFromAPI = useCallback(async () => {
+    if (!userEmail || !courseId) return null
+    try {
+      const res = await fetch(`${API_ENDPOINTS.COURSE_PROGRESS}/${encodeURIComponent(userEmail)}/${courseId}`)
+      if (res.ok) {
+        const json = await res.json()
+        const data = json.data
+        videoAccumulatedRef.current = data.video_watch_time || 0
+        setProgressData(data)
+        return data
+      }
+    } catch {
+      // Offline fallback
+    }
+    return null
+  }, [userEmail, courseId])
+
+  // ─── API: Save progress ───────────────────────────────────────────────────
+  const saveProgressToAPI = useCallback(async (videoSecs, pptSecs) => {
+    if (!userEmail || !courseId) return
+    const total = videoSecs + pptSecs
+    const creditSecs = (course?.creditHours || 1) * 3600
+    const pct = Math.min(100, Math.floor((total / creditSecs) * 100))
+
+    try {
+      const res = await fetch(API_ENDPOINTS.COURSE_PROGRESS, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_email: userEmail,
+          course_id: parseInt(courseId),
+          video_watch_time: Math.floor(videoSecs),
+          ppt_view_time: Math.floor(pptSecs),
+          total_time_spent: Math.floor(total),
+          progress_percentage: pct,
+        }),
+      })
+      if (res.ok) {
+        const json = await res.json()
+        setProgressData((prev) => ({
+          ...prev,
+          video_watch_time: Math.floor(videoSecs),
+          ppt_view_time: Math.floor(pptSecs),
+          total_time_spent: Math.floor(total),
+          progress_percentage: pct,
+        }))
+      }
+    } catch {
+      // Network issue — progress lost this session but UI still updates
+    }
+  }, [userEmail, courseId, course])
+
+  // ─── Fetch course ─────────────────────────────────────────────────────────
   useEffect(() => {
     const fetchCourseDetail = async () => {
       try {
         setLoading(true)
         const response = await fetch(`${API_ENDPOINTS.COURSES}/${courseId}`)
-
-        if (!response.ok) {
-          throw new Error('Course not found')
-        }
-
+        if (!response.ok) throw new Error('Course not found')
         const data = await response.json()
 
-        // Parse videos if they're stored as JSON string
         let videos = []
         if (data.course_videos) {
           try {
             videos = typeof data.course_videos === 'string'
               ? JSON.parse(data.course_videos)
               : data.course_videos
-          } catch (e) {
-            console.error('Error parsing videos:', e)
-          }
+          } catch (e) { console.error('Error parsing videos:', e) }
         }
 
-
-
-
-        // Transform the API response to match component structure
-        const transformedCourse = {
+        setCourse({
           id: data.id,
           title: data.course_title,
           description: data.course_description || 'No description available',
@@ -53,7 +110,6 @@ function CourseDetail() {
           level: 'Intermediate',
           creditHours: data.credit_hours || 0,
           duration: data.duration_weeks ? `${data.duration_weeks} weeks` : 'Self-paced',
-          enrolled: 0,
           rating: 4.5,
           totalRatings: 0,
           prerequisites: data.prerequisites || 'None',
@@ -64,64 +120,254 @@ function CourseDetail() {
             'Earn course completion certificate',
           ],
           syllabus: [],
-          videos: videos,
+          videos,
           pdf_path: data.pdf_path || null,
-          resources: data.primary_ppt ? [
-            {
-              name: 'Course Presentation',
-              size: 'PPT',
-              url: `${API_BASE_URL}${data.primary_ppt}`
-            }
-          ] : [],
+          resources: data.primary_ppt
+            ? [{ name: 'Course Presentation', size: 'PPT', url: `${API_BASE_URL}${data.primary_ppt}` }]
+            : [],
           standard_name: data.standard_name,
           is_published: data.is_published,
-        }
-
-        setCourse(transformedCourse)
+        })
       } catch (err) {
-        console.error('Error fetching course:', err)
         setError(err.message)
       } finally {
         setLoading(false)
       }
     }
 
-    if (courseId) {
-      fetchCourseDetail()
-    }
+    if (courseId) fetchCourseDetail()
   }, [courseId])
 
+  // ─── User mode: check task allocation & start status ─────────────────────
+  useEffect(() => {
+    if (!isUserMode || !course) return
+
+    const checkAccess = async () => {
+      try {
+        // Check task allocation for this user + course
+        const tasksRes = await fetch(API_ENDPOINTS.TASK_ALLOCATIONS)
+        const allTasks = await tasksRes.json()
+        const myTask = allTasks.find(
+          (t) =>
+            t.employee_name?.toLowerCase().trim() === userFullName.toLowerCase().trim() &&
+            t.course_title?.toLowerCase() === course.title?.toLowerCase()
+        )
+
+        if (!myTask) {
+          navigate('/user/all-courses', { replace: true })
+          return
+        }
+        setTaskInfo(myTask)
+
+        // Load progress from backend
+        const existing = await loadProgressFromAPI()
+        if (!existing) {
+          setShowStartModal(true)
+        }
+      } catch (err) {
+        console.error('Access check failed:', err)
+      }
+    }
+
+    checkAccess()
+  }, [isUserMode, course, userFullName, navigate, loadProgressFromAPI])
+
+  // ─── Auto-save every 15s when user is in course ──────────────────────────
+  useEffect(() => {
+    if (!isUserMode) return
+
+    autoSaveTimerRef.current = setInterval(() => {
+      if (videoSessionStartRef.current) {
+        const liveElapsed = (Date.now() - videoSessionStartRef.current) / 1000
+        const totalVideo = videoAccumulatedRef.current + liveElapsed
+        const pptSecs = progressData?.ppt_view_time || 0
+        saveProgressToAPI(totalVideo, pptSecs)
+      }
+    }, 15000)
+
+    return () => {
+      clearInterval(autoSaveTimerRef.current)
+      // Final save on unmount
+      if (videoSessionStartRef.current) {
+        const elapsed = (Date.now() - videoSessionStartRef.current) / 1000
+        videoAccumulatedRef.current += elapsed
+        videoSessionStartRef.current = null
+      }
+      const pptSecs = progressData?.ppt_view_time || 0
+      if (videoAccumulatedRef.current > 0) {
+        saveProgressToAPI(videoAccumulatedRef.current, pptSecs)
+      }
+    }
+  }, [isUserMode, saveProgressToAPI, progressData])
+
+  // When video changes, end current session
+  useEffect(() => {
+    if (videoSessionStartRef.current) {
+      const elapsed = (Date.now() - videoSessionStartRef.current) / 1000
+      videoAccumulatedRef.current += elapsed
+      videoSessionStartRef.current = null
+    }
+  }, [selectedVideo])
+
+  // ─── Video event handlers ─────────────────────────────────────────────────
+  const handleVideoPlay = () => {
+    if (!isUserMode) return
+    videoSessionStartRef.current = Date.now()
+  }
+
+  const handleVideoPause = () => {
+    if (!isUserMode || !videoSessionStartRef.current) return
+    const elapsed = (Date.now() - videoSessionStartRef.current) / 1000
+    videoAccumulatedRef.current += elapsed
+    videoSessionStartRef.current = null
+    const pptSecs = progressData?.ppt_view_time || 0
+    saveProgressToAPI(videoAccumulatedRef.current, pptSecs)
+  }
+
+  // ─── PPT handlers ─────────────────────────────────────────────────────────
+  const handlePPTOpen = (url) => {
+    if (isUserMode) pptOpenTimeRef.current = Date.now()
+    setPptUrl(url)
+    setShowModal(true)
+  }
+
+  const handlePPTClose = () => {
+    if (isUserMode && pptOpenTimeRef.current) {
+      const elapsed = (Date.now() - pptOpenTimeRef.current) / 1000
+      const currentPpt = (progressData?.ppt_view_time || 0) + elapsed
+      const videoSecs = videoAccumulatedRef.current
+      saveProgressToAPI(videoSecs, currentPpt)
+      pptOpenTimeRef.current = null
+    }
+    setShowModal(false)
+  }
+
+  // ─── Start Course ─────────────────────────────────────────────────────────
+  const handleStartCourse = async () => {
+    try {
+      const res = await fetch(API_ENDPOINTS.COURSE_PROGRESS, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_email: userEmail,
+          course_id: parseInt(courseId),
+          action: 'enroll',
+        }),
+      })
+      const json = await res.json()
+      if (json.success !== false) {
+        setProgressData({
+          video_watch_time: 0,
+          ppt_view_time: 0,
+          total_time_spent: 0,
+          progress_percentage: 0,
+        })
+      }
+    } catch {
+      // Proceed anyway
+      setProgressData({ video_watch_time: 0, ppt_view_time: 0, total_time_spent: 0, progress_percentage: 0 })
+    }
+    setShowStartModal(false)
+  }
+
+  const formatTime = (seconds) => {
+    if (!seconds || seconds <= 0) return '0m'
+    const h = Math.floor(seconds / 3600)
+    const m = Math.floor((seconds % 3600) / 60)
+    const s = Math.floor(seconds % 60)
+    if (h > 0) return `${h}h ${m}m`
+    if (m > 0) return `${m}m ${s}s`
+    return `${s}s`
+  }
+
+  // ─── Render ───────────────────────────────────────────────────────────────
   if (loading) {
-    return (
-      <div className="course-detail-error">
-        <h2>Loading course...</h2>
-      </div>
-    )
+    return <div className="course-detail-error"><h2>Loading course...</h2></div>
   }
 
   if (error || !course) {
     return (
       <div className="course-detail-error">
         <h2>Course not found</h2>
-        <button className="primary-btn" onClick={() => navigate('/learning-management-system')}>
-          Back to Home
+        <button
+          className="primary-btn"
+          onClick={() => navigate(isUserMode ? '/user/my-courses' : '/learning-management-system')}
+        >
+          Go Back
         </button>
       </div>
     )
   }
 
+  const currentVideoPath = course.videos[selectedVideo]?.url || course.videos[selectedVideo]
+  const currentVideoUrl = currentVideoPath
+    ? currentVideoPath.startsWith('http') ? currentVideoPath : `${API_BASE_URL}${currentVideoPath}`
+    : null
+  const isExternalVideo =
+    currentVideoPath &&
+    (currentVideoPath.includes('youtube.com') || currentVideoPath.includes('youtu.be') || currentVideoPath.includes('vimeo.com'))
 
+  const progressPct = progressData?.progress_percentage || 0
+  const videoSecs = progressData?.video_watch_time || 0
+  const pptSecs = progressData?.ppt_view_time || 0
 
-  const handlePPTviewer = (url) => {
-    console.log('Opening PPT viewer for:', url);
-
-    setPptUrl(url);
-    setShowModal(true);
-  };
   return (
     <div className="course-detail-page">
+
+      {/* ── Start Course Modal (user only) ── */}
+      {showStartModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '480px' }}>
+            <div className="modal-header">
+              <h2>Start This Course?</h2>
+            </div>
+            <div style={{ padding: '24px' }}>
+              <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                <div style={{ fontSize: '56px', marginBottom: '16px' }}>🎓</div>
+                <h3 style={{ marginBottom: '10px' }}>{course.title}</h3>
+                <p style={{ color: '#888', fontSize: '14px', lineHeight: '1.6' }}>
+                  Once you start, your progress will be tracked — video watch time and study
+                  material time will be recorded and visible to your administrator.
+                </p>
+              </div>
+              <div
+                style={{
+                  background: 'rgba(255,255,255,0.05)',
+                  borderRadius: '10px',
+                  padding: '16px',
+                  marginBottom: '24px',
+                  display: 'flex',
+                  gap: '32px',
+                  justifyContent: 'center',
+                }}
+              >
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '20px', fontWeight: '700' }}>{course.creditHours}h</div>
+                  <div style={{ fontSize: '12px', color: '#888' }}>Credit Hours</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '20px', fontWeight: '700' }}>
+                    {taskInfo?.deadline ? new Date(taskInfo.deadline).toLocaleDateString() : 'N/A'}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#888' }}>Deadline</div>
+                </div>
+              </div>
+              <div className="modal-actions">
+                <button className="ghost-btn" onClick={() => navigate('/user/my-courses')}>
+                  Go Back
+                </button>
+                <button className="primary-btn" onClick={handleStartCourse}>
+                  Start Learning →
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Header ── */}
       <div className="course-detail-header">
-        <button className="back-btn" onClick={() => navigate(-1)}>
+        <button className="back-btn" onClick={() => navigate(isUserMode ? '/user/my-courses' : -1)}>
           ← Back
         </button>
         <div className="course-header-content">
@@ -134,100 +380,80 @@ function CourseDetail() {
           <div className="course-stats">
             <div className="stat-item">
               <span className="stat-icon">👨‍🏫</span>
-              <div>
-                <strong>{course.instructor}</strong>
-                <span>Instructor</span>
-              </div>
+              <div><strong>{course.instructor}</strong><span>Instructor</span></div>
             </div>
             <div className="stat-item">
               <span className="stat-icon">⭐</span>
-              <div>
-                <strong>{course.rating}</strong>
-                <span>({course.totalRatings} ratings)</span>
-              </div>
-            </div>
-            <div className="stat-item">
-              <span className="stat-icon">👥</span>
-              <div>
-                <strong>{course.enrolled}</strong>
-                <span>Enrolled</span>
-              </div>
+              <div><strong>{course.rating}</strong><span>Rating</span></div>
             </div>
             <div className="stat-item">
               <span className="stat-icon">📚</span>
-              <div>
-                <strong>{course.creditHours}h</strong>
-                <span>Credit Hours</span>
-              </div>
+              <div><strong>{course.creditHours}h</strong><span>Credit Hours</span></div>
             </div>
             <div className="stat-item">
               <span className="stat-icon">📅</span>
-              <div>
-                <strong>{course.duration}</strong>
-                <span>Duration</span>
-              </div>
+              <div><strong>{course.duration}</strong><span>Duration</span></div>
             </div>
+            {isUserMode && progressData && (
+              <div className="stat-item">
+                <span className="stat-icon">⏱️</span>
+                <div><strong>{progressPct}%</strong><span>Your Progress</span></div>
+              </div>
+            )}
           </div>
-          <div className="course-actions">
-            <button className="primary-btn large" onClick={() => navigate('/learning-management-system/task-allocation')}>
-              Assign to Employees
-            </button>
-            <button className="ghost-btn large" onClick={() => navigate('/learning-management-system/all-courses')}>
-              View All Courses
-            </button>
-          </div>
+          {!isUserMode && (
+            <div className="course-actions">
+              <button className="primary-btn large" onClick={() => navigate('/learning-management-system/task-allocation')}>
+                Assign to Employees
+              </button>
+              <button className="ghost-btn large" onClick={() => navigate('/learning-management-system/all-courses')}>
+                View All Courses
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
+      {/* ── Body ── */}
       <div className="course-detail-body">
         <div className="course-main-content">
+
+          {/* Video Player */}
           <div className="video-player-section">
             {course.videos && course.videos.length > 0 ? (
               <>
                 <div className="video-container">
-                  {(() => {
-                    const videoPath = course.videos[selectedVideo]?.url || course.videos[selectedVideo];
-                    const videoUrl = videoPath.startsWith('http') ? videoPath : `${API_BASE_URL}${videoPath}`;
-
-                    // Check if it's a YouTube/external video or local file
-                    const isExternalVideo = videoPath.includes('youtube.com') ||
-                      videoPath.includes('youtu.be') ||
-                      videoPath.includes('vimeo.com');
-
-                    if (isExternalVideo) {
-                      return (
-                        <iframe
-                          src={videoUrl}
-                          title={course.videos[selectedVideo]?.title || `Video ${selectedVideo + 1}`}
-                          frameBorder="0"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                        />
-                      );
-                    } else {
-                      return (
-                        <video
-                          key={videoUrl}
-                          controls
-                          controlsList="nodownload"
-                          className="course-video-player"
-                        >
-                          <source src={videoUrl} type="video/mp4" />
-                          <source src={videoUrl} type="video/webm" />
-                          <source src={videoUrl} type="video/ogg" />
-                          Your browser does not support the video tag.
-                        </video>
-                      );
-                    }
-                  })()}
+                  {isExternalVideo ? (
+                    <iframe
+                      src={currentVideoUrl}
+                      title={course.videos[selectedVideo]?.title || `Video ${selectedVideo + 1}`}
+                      frameBorder="0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  ) : (
+                    <video
+                      key={currentVideoUrl}
+                      controls
+                      controlsList="nodownload"
+                      className="course-video-player"
+                      onPlay={handleVideoPlay}
+                      onPause={handleVideoPause}
+                      onEnded={handleVideoPause}
+                    >
+                      <source src={currentVideoUrl} type="video/mp4" />
+                      <source src={currentVideoUrl} type="video/webm" />
+                      Your browser does not support the video tag.
+                    </video>
+                  )}
                 </div>
+
                 <div className="video-playlist">
                   <h3>Course Videos ({course.videos.length})</h3>
                   <ul>
                     {course.videos.map((video, index) => {
-                      const videoPath = video?.url || video;
-                      const isExternal = videoPath.includes('youtube') || videoPath.includes('vimeo');
-
+                      const vPath = video?.url || video
+                      const isExt = vPath.includes('youtube') || vPath.includes('vimeo')
                       return (
                         <li
                           key={index}
@@ -238,12 +464,12 @@ function CourseDetail() {
                           <div className="video-info">
                             <strong>
                               {video?.title || `Video ${index + 1}`}
-                              {isExternal && <span style={{ marginLeft: '8px', fontSize: '0.85em' }}>🔗</span>}
+                              {isExt && <span style={{ marginLeft: '8px', fontSize: '0.85em' }}>🔗</span>}
                             </strong>
                             <span>{video?.duration || 'Video'}</span>
                           </div>
                         </li>
-                      );
+                      )
                     })}
                   </ul>
                 </div>
@@ -256,26 +482,14 @@ function CourseDetail() {
             )}
           </div>
 
+          {/* Tabs */}
           <div className="course-tabs">
             <div className="tab-headers">
-              <button
-                className={activeTab === 'overview' ? 'active' : ''}
-                onClick={() => setActiveTab('overview')}
-              >
-                Overview
-              </button>
-              <button
-                className={activeTab === 'syllabus' ? 'active' : ''}
-                onClick={() => setActiveTab('syllabus')}
-              >
-                Syllabus
-              </button>
-              <button
-                className={activeTab === 'resources' ? 'active' : ''}
-                onClick={() => setActiveTab('resources')}
-              >
-                Resources
-              </button>
+              {['overview', 'syllabus', 'resources'].map((tab) => (
+                <button key={tab} className={activeTab === tab ? 'active' : ''} onClick={() => setActiveTab(tab)}>
+                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                </button>
+              ))}
             </div>
 
             <div className="tab-content">
@@ -284,24 +498,13 @@ function CourseDetail() {
                   <section>
                     <h3>What You'll Learn</h3>
                     <ul className="outcomes-list">
-                      {course.learningOutcomes.map((outcome, index) => (
-                        <li key={index}>
-                          <span className="check-icon">✓</span>
-                          {outcome}
-                        </li>
+                      {course.learningOutcomes.map((outcome, i) => (
+                        <li key={i}><span className="check-icon">✓</span>{outcome}</li>
                       ))}
                     </ul>
                   </section>
-
-                  <section>
-                    <h3>Prerequisites</h3>
-                    <p className="prerequisites-text">{course.prerequisites}</p>
-                  </section>
-
-                  <section>
-                    <h3>Course Description</h3>
-                    <p>{course.description}</p>
-                  </section>
+                  <section><h3>Prerequisites</h3><p className="prerequisites-text">{course.prerequisites}</p></section>
+                  <section><h3>Course Description</h3><p>{course.description}</p></section>
                 </div>
               )}
 
@@ -310,22 +513,18 @@ function CourseDetail() {
                   <h3>Course Curriculum</h3>
                   {course.syllabus && course.syllabus.length > 0 ? (
                     <div className="syllabus-list">
-                      {course.syllabus.map((item, index) => (
-                        <div className="syllabus-item" key={index}>
+                      {course.syllabus.map((item, i) => (
+                        <div className="syllabus-item" key={i}>
                           <div className="syllabus-header">
                             <span className="week-badge">Week {item.week}</span>
                             <h4>{item.title}</h4>
                           </div>
-                          <ul className="topics-list">
-                            {item.topics.map((topic, i) => (
-                              <li key={i}>{topic}</li>
-                            ))}
-                          </ul>
+                          <ul className="topics-list">{item.topics.map((t, j) => <li key={j}>{t}</li>)}</ul>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div style={{ padding: '2rem', textAlign: 'center', color: 'rgba(255, 255, 255, 0.6)' }}>
+                    <div style={{ padding: '2rem', textAlign: 'center', color: 'rgba(255,255,255,0.6)' }}>
                       <p>Course curriculum will be available soon.</p>
                     </div>
                   )}
@@ -337,90 +536,47 @@ function CourseDetail() {
                   {course.pdf_path ? (
                     <>
                       <PdfViewer pdfUrl={course.pdf_path} />
-                      <div style={{ marginTop: '20px', padding: '20px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
-                        <h3 style={{ marginBottom: '15px' }}>Additional Resources</h3>
-                        {course.resources && course.resources.length > 0 ? (
+                      {course.resources && course.resources.length > 0 && (
+                        <div style={{ marginTop: '20px', padding: '20px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
+                          <h3 style={{ marginBottom: '15px' }}>Additional Resources</h3>
                           <ul className="resources-list">
-                            {course.resources.map((resource, index) => (
-                              <li key={index}>
+                            {course.resources.map((r, i) => (
+                              <li key={i}>
                                 <div className="resource-info">
                                   <span className="resource-icon">📄</span>
-                                  <div>
-                                    <strong>{resource.name}</strong>
-                                    <span>{resource.size}</span>
-                                  </div>
+                                  <div><strong>{r.name}</strong><span>{r.size}</span></div>
                                 </div>
-                                {resource.url ? (
-                                  <a
-                                    className="resource-open-btn"
-                                    href={resource.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    download
-                                  >
-                                    Download
-                                  </a>
-                                ) : (
-                                  <span className="resource-open-btn disabled">No Link</span>
-                                )}
+                                {r.url ? <a className="resource-open-btn" href={r.url} target="_blank" rel="noopener noreferrer" download>Download</a>
+                                  : <span className="resource-open-btn disabled">No Link</span>}
                               </li>
                             ))}
                           </ul>
-                        ) : (
-                          <p style={{ color: 'rgba(255, 255, 255, 0.6)' }}>No additional resources available.</p>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </>
                   ) : (
                     <>
                       <h3>Downloadable Resources</h3>
                       {course.resources && course.resources.length > 0 ? (
                         <ul className="resources-list">
-                          {course.resources.map((resource, index) => (
-                            <li key={index}>
+                          {course.resources.map((r, i) => (
+                            <li key={i}>
                               <div className="resource-info">
                                 <span className="resource-icon">📄</span>
-                                <div>
-                                  <strong>{resource.name}</strong>
-                                  <span>{resource.size}</span>
-                                </div>
+                                <div><strong>{r.name}</strong><span>{r.size}</span></div>
                               </div>
-                              {resource.url ? (
-                                <button
-                                  className="resource-open-btn"
-                                  onClick={() => handlePPTviewer("https://docs.google.com/presentation/d/1P3YMxfCJ_5WbOpuKgWaHwBc43AjWa9i5/edit?usp=sharing&ouid=106778398341690570644&rtpof=true&sd=true")}
-                                >
+                              {r.url ? (
+                                <button className="resource-open-btn" onClick={() =>
+                                  handlePPTOpen('https://docs.google.com/presentation/d/1P3YMxfCJ_5WbOpuKgWaHwBc43AjWa9i5/edit?usp=sharing&ouid=106778398341690570644&rtpof=true&sd=true')
+                                }>
                                   Open in Browser
                                 </button>
-                              ) : (
-                                <span className="resource-open-btn disabled">No Link</span>
-                              )}
+                              ) : <span className="resource-open-btn disabled">No Link</span>}
                             </li>
-                            // <li key={index}>
-                            //   <div className="resource-info">
-                            //     <span className="resource-icon">📄</span>
-                            //     <div>
-                            //       <strong>{resource.name}</strong>
-                            //       <span>{resource.size}</span>
-                            //     </div>
-                            //   </div>
-                            //   {resource.url ? (
-                            //     <a
-                            //       className="resource-open-btn"
-                            //       href={resource.url}
-                            //       target=""
-                            //       rel="noopener noreferrer"
-                            //     >
-                            //       Open in Browser
-                            //     </a>
-                            //   ) : (
-                            //     <span className="resource-open-btn disabled">No Link</span>
-                            //   )}
-                            // </li>
                           ))}
                         </ul>
                       ) : (
-                        <div style={{ padding: '2rem', textAlign: 'center', color: 'rgba(255, 255, 255, 0.6)' }}>
+                        <div style={{ padding: '2rem', textAlign: 'center', color: 'rgba(255,255,255,0.6)' }}>
                           <p>No downloadable resources available yet.</p>
                         </div>
                       )}
@@ -432,61 +588,73 @@ function CourseDetail() {
           </div>
         </div>
 
+        {/* ── Sidebar ── */}
         <div className="course-sidebar">
           <div className="sidebar-card">
             {course.thumbnail ? (
               <img src={course.thumbnail} alt={course.title} className="sidebar-thumbnail" />
             ) : (
-              <div className="sidebar-thumbnail" style={{ background: 'linear-gradient(135deg, rgba(255, 93, 93, 0.2), rgba(255, 93, 93, 0.05))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255, 255, 255, 0.5)', height: '200px' }}>
+              <div className="sidebar-thumbnail" style={{ background: 'linear-gradient(135deg, rgba(255,93,93,0.2), rgba(255,93,93,0.05))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.5)', height: '200px' }}>
                 No Image
               </div>
             )}
             <div className="sidebar-info">
               <h4>Course Includes:</h4>
               <ul>
-                <li>
-                  <span>🎥</span> {course.videos?.length || 0} video lectures
-                </li>
-                <li>
-                  <span>📄</span> {course.resources?.length || 0} downloadable resources
-                </li>
-                <li>
-                  <span>📱</span> Access on mobile and desktop
-                </li>
-                <li>
-                  <span>🎓</span> Certificate of completion
-                </li>
-                <li>
-                  <span>♾️</span> Lifetime access
-                </li>
+                <li><span>🎥</span> {course.videos?.length || 0} video lectures</li>
+                <li><span>📄</span> {course.resources?.length || 0} downloadable resources</li>
+                <li><span>📱</span> Access on mobile and desktop</li>
+                <li><span>🎓</span> Certificate of completion</li>
+                <li><span>♾️</span> Lifetime access</li>
               </ul>
             </div>
+
+            {/* User Progress Panel */}
+            {isUserMode && progressData && (
+              <div style={{ marginTop: '20px', padding: '16px', background: 'rgba(255,255,255,0.05)', borderRadius: '10px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                <h4 style={{ marginBottom: '14px', fontSize: '14px', color: '#ccc' }}>Your Progress</h4>
+
+                {/* Progress bar */}
+                <div style={{ marginBottom: '14px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '12px', color: '#888' }}>Completion</span>
+                    <span style={{ fontSize: '12px', fontWeight: '700' }}>{progressPct}%</span>
+                  </div>
+                  <div style={{ height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${progressPct}%`, background: 'linear-gradient(90deg, #ff5d5d, #ff8c5a)', borderRadius: '3px', transition: 'width 0.5s ease' }} />
+                  </div>
+                </div>
+
+                {/* Time stats */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '12px', color: '#888' }}>🎥 Video Time</span>
+                    <span style={{ fontSize: '13px', fontWeight: '600' }}>{formatTime(videoSecs)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '12px', color: '#888' }}>📄 Study Time</span>
+                    <span style={{ fontSize: '13px', fontWeight: '600' }}>{formatTime(pptSecs)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+                    <span style={{ fontSize: '12px', color: '#aaa', fontWeight: '600' }}>Total Time</span>
+                    <span style={{ fontSize: '13px', fontWeight: '700' }}>{formatTime(videoSecs + pptSecs)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
+
+      {/* PPT Modal */}
       {showModal && (
         <div className="ppt-overlay">
           <div className="ppt-modal">
-
-            <button
-              className="close-btn"
-              onClick={() => setShowModal(false)}
-            >
-              ✕
-            </button>
-
-            {/* <iframe
-              src={`https://docs.google.com/gview?url=${encodeURIComponent(pptUrl)}&embedded=true`}
-              width="100%"
-              height="600px"
-              frameBorder="0"
-              title="PPT Viewer"
-            /> */}
-            <iframe src={pptUrl} frameborder="0" width="100%" height="500" allowfullscreen="true" mozallowfullscreen="true" webkitallowfullscreen="true"></iframe>
+            <button className="close-btn" onClick={handlePPTClose}>✕</button>
+            <iframe src={pptUrl} frameBorder="0" width="100%" height="500" allowFullScreen mozallowfullscreen="true" webkitallowfullscreen="true" />
           </div>
         </div>
       )}
-
     </div>
   )
 }

@@ -27,9 +27,9 @@ const dashboardTiles = [
   },
   {
     id: "cv-gen",
-    title: "CV Generator",
-    link: "",
-    description: "Generate client-ready engineer and inspector resumes.",
+    title: "Job Log Description",
+    link: "/user/cvs-access",
+    description: "Track inspection activities and field job entries.",
     status: "online",
     statusLabel: "Live",
     metric: "12 CVs queued",
@@ -72,7 +72,7 @@ const defaultQuickStats = [
 const systemNodes = [
   { id: "portal", label: "Portal", x: 12, y: 32, tag: "Access" },
   { id: "lms", label: "LMS", x: 37, y: 18, tag: "Training" },
-  { id: "cv-gen", label: "CV Generator", x: 64, y: 30, tag: "Delivery" },
+  { id: "cv-gen", label: "Job Log Description", x: 64, y: 30, tag: "Delivery" },
   { id: "iso", label: "ISO Forms", x: 54, y: 65, tag: "Compliance" },
   { id: "cv-bid", label: "Bid CV Library", x: 28, y: 65, tag: "Bid Desk" },
   { id: "power-bi", label: "Power BI", x: 80, y: 58, tag: "Insights" },
@@ -204,6 +204,11 @@ function MainDashboard() {
 
   const handleSystemMapToggle = () => setShowSystemMap((prev) => !prev);
   const handleModuleClick = (moduleId) => {
+    const selected = dashboardTiles.find((tile) => tile.id === moduleId);
+    if (selected?.link) {
+      navigate(selected.link);
+      return;
+    }
     console.log(`Launchpad selected: ${moduleId}`);
   };
   const toggleUserMenu = () => setShowUserMenu((prev) => !prev);

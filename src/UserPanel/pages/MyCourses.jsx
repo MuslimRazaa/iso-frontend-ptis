@@ -2,11 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api';
 
+
 const MyCourses = () => {
   const [assignedCourses, setAssignedCourses] = useState([]);
   const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(true);
+  const [startModal, setStartModal] = useState({ show: false, course: null });
   const navigate = useNavigate();
+
+  const userFullName = localStorage.getItem('userFullName') || '';
+  const userEmail = localStorage.getItem('userEmail') || '';
 
   useEffect(() => {
     fetchAssignedCourses();
@@ -14,430 +19,332 @@ const MyCourses = () => {
 
   const fetchAssignedCourses = async () => {
     try {
-      setLoading(true);
-      // Fetch from backend
-      const response = await fetch(API_ENDPOINTS.COURSES);
-      const data = await response.json();
+      const [tasksRes, coursesRes, progressRes] = await Promise.all([
+        fetch(API_ENDPOINTS.TASK_ALLOCATIONS),
+        fetch(API_ENDPOINTS.COURSES),
+        fetch(`${API_ENDPOINTS.COURSE_PROGRESS}/user/${encodeURIComponent(userEmail)}`).catch(() => null),
+      ]);
 
-      // Filter published courses and transform data
-      const publishedCourses = data
-        .filter(c => c.is_published === true || c.is_published === 1)
-        .map(course => ({
-          id: course.id,
-          title: course.course_title,
-          thumbnail: course.course_thumbnail ? `${API_BASE_URL}${course.course_thumbnail}` : 'https://via.placeholder.com/300x180',
-          category: course.course_category || 'General',
-          description: course.course_description || 'No description available',
-          progress: 0, // Mock progress - in real app, fetch from user progress table
-          status: 'not-started', // Mock status
-          deadline: '2024-03-31',
-          creditHours: course.credit_hours || 0
-        }));
+      const allTasks = await tasksRes.json();
+      const allCourses = await coursesRes.json();
+      const progressList = progressRes?.ok ? (await progressRes.json()).data || [] : [];
 
-      setAssignedCourses(publishedCourses);
-      setLoading(false);
+      const myTasks = allTasks.filter(
+        (task) =>
+          task.employee_name &&
+          userFullName &&
+          task.employee_name.toLowerCase().trim() === userFullName.toLowerCase().trim()
+      );
+
+      const enriched = myTasks.map((task) => {
+        const matchedCourse = allCourses.find(
+          (c) => c.course_title?.toLowerCase() === task.course_title?.toLowerCase()
+        );
+        const courseId = matchedCourse?.id;
+        const apiProgress = progressList.find((p) => p.course_id === courseId);
+
+        return {
+          ...task,
+          courseId,
+          thumbnail: matchedCourse?.course_thumbnail
+            ? `${API_BASE_URL}/${matchedCourse.course_thumbnail}`
+            : null,
+          category: matchedCourse?.course_category || 'Training',
+          creditHours: matchedCourse?.credit_hours || task.total_hours || 0,
+          videoSeconds: apiProgress?.video_watch_time || 0,
+          pptSeconds: apiProgress?.ppt_view_time || 0,
+          isStarted: !!apiProgress,
+          localProgress: apiProgress?.progress_percentage || task.progress || 0,
+        };
+      });
+
+      setAssignedCourses(enriched);
     } catch (error) {
       console.error('Error fetching courses:', error);
+    } finally {
       setLoading(false);
     }
   };
 
-  const filteredCourses = assignedCourses.filter(course => {
+  const getStatusLabel = (course) => {
+    if (course.localProgress >= 100 || course.status === 'Completed') return 'Completed';
+    if (course.isStarted) return 'In Progress';
+    return 'Not Started';
+  };
+
+  const getStatusColor = (course) => {
+    const label = getStatusLabel(course);
+    if (label === 'Completed') return '#4caf50';
+    if (label === 'In Progress') return '#ff9800';
+    return '#9e9e9e';
+  };
+
+  const filteredCourses = assignedCourses.filter((course) => {
     if (filter === 'all') return true;
-    return course.status === filter;
+    if (filter === 'completed') return course.localProgress >= 100 || course.status === 'Completed';
+    if (filter === 'in-progress') return course.isStarted && course.localProgress < 100;
+    if (filter === 'not-started') return !course.isStarted;
+    return true;
   });
 
-  const handleCourseClick = (courseId) => {
-    navigate(`/user/course/${courseId}`);
-  };
-
-  const getStatusColor = (status) => {
-    switch(status) {
-      case 'completed': return '#4caf50';
-      case 'in-progress': return '#ff9800';
-      case 'not-started': return '#9e9e9e';
-      default: return '#9e9e9e';
+  const handleCourseClick = (course) => {
+    if (!course.courseId) {
+      alert('Course details not available. Please contact your administrator.');
+      return;
+    }
+    if (!course.isStarted) {
+      setStartModal({ show: true, course });
+    } else {
+      navigate(`/user/course/${course.courseId}`);
     }
   };
 
-  const getStatusLabel = (status) => {
-    switch(status) {
-      case 'completed': return 'Completed';
-      case 'in-progress': return 'In Progress';
-      case 'not-started': return 'Not Started';
-      default: return 'Unknown';
+  const handleStartCourse = async () => {
+    const course = startModal.course;
+    if (!course?.courseId) return;
+
+    try {
+      await fetch(API_ENDPOINTS.COURSE_PROGRESS, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_email: userEmail,
+          course_id: course.courseId,
+          action: 'enroll',
+        }),
+      });
+    } catch {
+      // Proceed even if enroll fails
     }
+
+    setStartModal({ show: false, course: null });
+    navigate(`/user/course/${course.courseId}`);
+  };
+
+  const formatTime = (seconds) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
   };
 
   if (loading) {
     return (
-      <div className="lms-home" style={{ textAlign: 'center', padding: '3rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', flexDirection: 'column', gap: '16px', color: 'rgba(255,255,255,0.5)' }}>
+        <div style={{ width: '36px', height: '36px', border: '3px solid rgba(255,93,93,0.3)', borderTopColor: '#ff5d5d', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
         <p>Loading your courses...</p>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
 
   return (
-    <div className="lms-home">
-      <section className="lms-spotlight">
-        {/* Professional Header */}
-        <header style={{ 
-          marginBottom: '2.5rem', 
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          borderRadius: '20px',
-          padding: '2.5rem',
-          color: '#fff',
-          boxShadow: '0 10px 40px rgba(102, 126, 234, 0.3)'
-        }}>
-          <p className="eyebrow" style={{ 
-            opacity: 0.9, 
-            fontSize: '0.8rem', 
-            fontWeight: '700', 
-            textTransform: 'uppercase', 
-            letterSpacing: '1.5px',
-            marginBottom: '0.75rem'
-          }}>
-            📚 My Learning
-          </p>
-          <h2 style={{ 
-            fontSize: '2.25rem', 
-            fontWeight: '800', 
-            marginBottom: '0.75rem',
-            textShadow: '0 2px 10px rgba(0,0,0,0.1)'
-          }}>
-            Assigned Courses
-          </h2>
-          <p style={{ 
-            fontSize: '1rem', 
-            opacity: 0.95,
-            maxWidth: '600px'
-          }}>
-            Track your progress, continue learning, and complete courses to earn certificates
-          </p>
-        </header>
+    <div style={{ padding: '32px', minHeight: '100%', background: '#0e0f14' }}>
 
-        {/* Professional Filter Pills */}
-        <div style={{
-          display: 'flex',
-          gap: '12px',
-          marginBottom: '2.5rem',
-          flexWrap: 'wrap',
-          background: '#fff',
-          padding: '1.5rem',
-          borderRadius: '16px',
-          boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
-          border: '1px solid rgba(0,0,0,0.05)'
-        }}>
-          {[
-            { key: 'all', label: 'All Courses', color: '#667eea', emoji: '📚' },
-            { key: 'in-progress', label: 'In Progress', color: '#ff9800', emoji: '⏳' },
-            { key: 'completed', label: 'Completed', color: '#4caf50', emoji: '✅' },
-            { key: 'not-started', label: 'Not Started', color: '#9e9e9e', emoji: '📖' }
-          ].map(btn => (
-            <button 
-              key={btn.key}
-              onClick={() => setFilter(btn.key)}
-              style={{
-                padding: '12px 24px',
-                border: 'none',
-                background: filter === btn.key 
-                  ? `linear-gradient(135deg, ${btn.color} 0%, ${btn.color}dd 100%)` 
-                  : '#f8f9fa',
-                color: filter === btn.key ? '#fff' : '#495057',
-                borderRadius: '12px',
-                cursor: 'pointer',
-                fontWeight: '600',
-                fontSize: '0.9rem',
-                transition: 'all 0.3s ease',
-                boxShadow: filter === btn.key ? `0 4px 15px ${btn.color}40` : 'none',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}
-              onMouseEnter={(e) => {
-                if (filter !== btn.key) {
-                  e.target.style.background = '#e9ecef';
-                  e.target.style.transform = 'translateY(-2px)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (filter !== btn.key) {
-                  e.target.style.background = '#f8f9fa';
-                  e.target.style.transform = 'translateY(0)';
-                }
-              }}
-            >
-              <span>{btn.emoji}</span>
-              <span>{btn.label}</span>
-              <span style={{
-                background: filter === btn.key ? 'rgba(255,255,255,0.3)' : '#dee2e6',
-                padding: '2px 8px',
-                borderRadius: '10px',
-                fontSize: '0.75rem',
-                fontWeight: '700'
-              }}>
-                {btn.key === 'all' 
-                  ? assignedCourses.length 
-                  : assignedCourses.filter(c => c.status === btn.key).length
-                }
-              </span>
-            </button>
-          ))}
+      {/* Page Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '28px' }}>
+        <div>
+          <p style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '1.5px', color: 'rgba(255,93,93,0.8)', textTransform: 'uppercase', marginBottom: '6px' }}>
+            My Training
+          </p>
+          <h1 style={{ fontSize: '26px', fontWeight: '700', color: '#fff', marginBottom: '6px' }}>My Assigned Courses</h1>
+          <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.45)' }}>Courses assigned to you — track your progress here</p>
         </div>
+        <button className="ghost-btn" onClick={() => navigate('/user/all-courses')}>
+          Browse All Courses
+        </button>
+      </div>
 
-        {/* Professional Courses Grid */}
-        {filteredCourses.length === 0 ? (
-          <div style={{
-            textAlign: 'center',
-            padding: '5rem 2rem',
-            background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
-            borderRadius: '20px',
-            border: '2px dashed rgba(0,0,0,0.1)',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.06)'
-          }}>
-            <div style={{ fontSize: '5rem', marginBottom: '1.5rem' }}>📚</div>
-            <h3 style={{ 
-              marginBottom: '0.75rem', 
-              color: '#2c3e50', 
-              fontSize: '1.75rem', 
-              fontWeight: '700' 
-            }}>No courses found</h3>
-            <p style={{ color: '#6c757d', fontSize: '1.05rem' }}>
-              Try changing the filter or wait for new course assignments
-            </p>
-          </div>
-        ) : (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-            gap: '2rem'
-          }}>
-            {filteredCourses.map((course) => (
-              <article 
-                key={course.id} 
-                onClick={() => handleCourseClick(course.id)}
+      {/* Filter Tabs */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '28px', flexWrap: 'wrap' }}>
+        {[
+          { key: 'all', label: 'All', count: assignedCourses.length },
+          { key: 'not-started', label: 'Not Started', count: assignedCourses.filter(c => !c.isStarted).length },
+          { key: 'in-progress', label: 'In Progress', count: assignedCourses.filter(c => c.isStarted && c.localProgress < 100).length },
+          { key: 'completed', label: 'Completed', count: assignedCourses.filter(c => c.localProgress >= 100 || c.status === 'Completed').length },
+        ].map(f => (
+          <button
+            key={f.key}
+            onClick={() => setFilter(f.key)}
+            style={{
+              padding: '8px 18px',
+              borderRadius: '8px',
+              border: filter === f.key ? '1px solid rgba(255,93,93,0.5)' : '1px solid rgba(255,255,255,0.08)',
+              background: filter === f.key ? 'rgba(255,93,93,0.12)' : 'rgba(255,255,255,0.03)',
+              color: filter === f.key ? '#ff5d5d' : 'rgba(255,255,255,0.45)',
+              fontSize: '13px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              transition: 'all 0.18s',
+            }}
+          >
+            {f.label} <span style={{ opacity: 0.7, marginLeft: '4px' }}>({f.count})</span>
+          </button>
+        ))}
+      </div>
+
+      {filteredCourses.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '80px 20px', background: 'rgba(255,255,255,0.02)', borderRadius: '16px', border: '2px dashed rgba(255,255,255,0.08)' }}>
+          <div style={{ fontSize: '56px', marginBottom: '20px', opacity: 0.4 }}>📚</div>
+          <h3 style={{ color: '#ccc', marginBottom: '10px' }}>{assignedCourses.length === 0 ? 'No courses assigned yet' : 'No courses in this category'}</h3>
+          <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '14px' }}>
+            {assignedCourses.length === 0 ? 'Browse available courses and request access.' : 'Try a different filter.'}
+          </p>
+          {assignedCourses.length === 0 && (
+            <button className="primary-btn" style={{ marginTop: '20px' }} onClick={() => navigate('/user/all-courses')}>
+              Browse All Courses
+            </button>
+          )}
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
+          {filteredCourses.map((course) => {
+            const statusLabel = getStatusLabel(course);
+            const statusClr = getStatusColor(course);
+            return (
+              <div
+                key={course.id}
+                onClick={() => handleCourseClick(course)}
                 style={{
-                  background: '#fff',
-                  borderRadius: '20px',
-                  overflow: 'hidden',
-                  boxShadow: '0 6px 25px rgba(0,0,0,0.08)',
-                  border: '1px solid rgba(0,0,0,0.06)',
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  background: 'linear-gradient(160deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: '16px',
+                  padding: '20px',
                   cursor: 'pointer',
+                  transition: 'all 0.22s ease',
                   display: 'flex',
                   flexDirection: 'column',
-                  position: 'relative'
+                  gap: '14px',
+                  position: 'relative',
+                  overflow: 'hidden',
                 }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-10px) scale(1.02)';
-                  e.currentTarget.style.boxShadow = '0 15px 50px rgba(0,0,0,0.15)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0) scale(1)';
-                  e.currentTarget.style.boxShadow = '0 6px 25px rgba(0,0,0,0.08)';
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 16px 40px rgba(0,0,0,0.4)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; }}
+              >
+                {/* Top row */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: 'rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', overflow: 'hidden' }}>
+                    {course.thumbnail ? <img src={course.thumbnail} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '10px' }} /> : '📚'}
+                  </div>
+                  <span style={{ fontSize: '11px', fontWeight: '700', padding: '4px 10px', borderRadius: '6px', background: `${statusClr}22`, color: statusClr, border: `1px solid ${statusClr}44` }}>
+                    {statusLabel}
+                  </span>
+                </div>
+
+                {/* Title & category */}
+                <div>
+                  <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '4px' }}>{course.category}</p>
+                  <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#fff', lineHeight: '1.3' }}>{course.course_title}</h3>
+                </div>
+
+                {/* Meta */}
+                <div style={{ display: 'flex', gap: '16px' }}>
+                  <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)' }}>📚 {course.creditHours}h</span>
+                  <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)' }}>📅 {new Date(course.deadline).toLocaleDateString()}</span>
+                </div>
+
+                {/* Time tracked */}
+                {course.isStarted && (
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <span style={{ fontSize: '11px', background: 'rgba(255,255,255,0.05)', padding: '3px 8px', borderRadius: '5px', color: 'rgba(255,255,255,0.5)' }}>🎥 {formatTime(course.videoSeconds)}</span>
+                    <span style={{ fontSize: '11px', background: 'rgba(255,255,255,0.05)', padding: '3px 8px', borderRadius: '5px', color: 'rgba(255,255,255,0.5)' }}>📄 {formatTime(course.pptSeconds)}</span>
+                  </div>
+                )}
+
+                {/* Progress bar */}
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)' }}>Progress</span>
+                    <span style={{ fontSize: '11px', fontWeight: '700', color: statusClr }}>{course.localProgress}%</span>
+                  </div>
+                  <div style={{ height: '4px', background: 'rgba(255,255,255,0.08)', borderRadius: '2px', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${course.localProgress}%`, background: `linear-gradient(90deg, ${statusClr}, ${statusClr}aa)`, borderRadius: '2px', transition: 'width 0.4s ease' }} />
+                  </div>
+                </div>
+
+                {/* Action */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '600', color: 'rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {statusLabel === 'Completed' ? 'Review Course' : course.isStarted ? 'Continue Learning' : 'Start Course'}
+                    <svg viewBox="0 0 24 24" style={{ width: '14px', height: '14px', fill: 'none', stroke: 'currentColor', strokeWidth: 2 }}><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {startModal.show && (
+        <div className="modal-overlay" onClick={() => setStartModal({ show: false, course: null })}>
+          <div
+            className="modal-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '480px' }}
+          >
+            <div className="modal-header">
+              <h2>Ready to Start?</h2>
+              <button
+                className="close-modal-btn"
+                onClick={() => setStartModal({ show: false, course: null })}
+              >
+                ✕
+              </button>
+            </div>
+            <div style={{ padding: '24px' }}>
+              <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                <div style={{ fontSize: '56px', marginBottom: '16px' }}>🎓</div>
+                <h3 style={{ marginBottom: '10px', fontSize: '18px' }}>
+                  {startModal.course?.course_title}
+                </h3>
+                <p style={{ color: '#888', fontSize: '14px', lineHeight: '1.6' }}>
+                  Once you start this course, your progress will be tracked — including video watch
+                  time and study material time. This will be visible to your administrator.
+                </p>
+              </div>
+
+              <div
+                style={{
+                  background: 'rgba(255,255,255,0.05)',
+                  borderRadius: '10px',
+                  padding: '16px',
+                  marginBottom: '24px',
+                  display: 'flex',
+                  gap: '24px',
+                  justifyContent: 'center',
                 }}
               >
-                {/* Course Thumbnail */}
-                <div style={{ 
-                  width: '100%', 
-                  height: '220px', 
-                  overflow: 'hidden',
-                  position: 'relative'
-                }}>
-                  <img 
-                    src={course.thumbnail} 
-                    alt={course.title}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                      transition: 'transform 0.5s ease'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.target.style.transform = 'scale(1.1)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.target.style.transform = 'scale(1)';
-                    }}
-                  />
-                  
-                  {/* Status Badge */}
-                  <span style={{
-                    position: 'absolute',
-                    top: '16px',
-                    right: '16px',
-                    padding: '8px 16px',
-                    borderRadius: '12px',
-                    fontSize: '0.75rem',
-                    fontWeight: '700',
-                    backgroundColor: getStatusColor(course.status),
-                    color: 'white',
-                    boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
-                    backdropFilter: 'blur(10px)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px'
-                  }}>
-                    {getStatusLabel(course.status)}
-                  </span>
-
-                  {/* Category Badge */}
-                  <span style={{
-                    position: 'absolute',
-                    bottom: '16px',
-                    left: '16px',
-                    padding: '6px 14px',
-                    borderRadius: '20px',
-                    fontSize: '0.75rem',
-                    fontWeight: '600',
-                    background: 'rgba(255,255,255,0.95)',
-                    color: '#667eea',
-                    boxShadow: '0 4px 15px rgba(0,0,0,0.15)',
-                    backdropFilter: 'blur(10px)'
-                  }}>
-                    {course.category}
-                  </span>
-                </div>
-                
-                {/* Course Body */}
-                <div style={{ padding: '1.75rem', flex: 1, display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '8px', 
-                    marginBottom: '1rem',
-                    fontSize: '0.8rem',
-                    color: '#95a5a6',
-                    fontWeight: '600'
-                  }}>
-                    <span>🕐 {course.creditHours}h</span>
-                    <span>•</span>
-                    <span>📖 12 Modules</span>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '20px', fontWeight: '700' }}>
+                    {startModal.course?.creditHours}h
                   </div>
-
-                  <h3 style={{ 
-                    fontSize: '1.25rem', 
-                    fontWeight: '700', 
-                    color: '#2c3e50', 
-                    marginBottom: '1rem',
-                    lineHeight: '1.4',
-                    minHeight: '60px'
-                  }}>
-                    {course.title}
-                  </h3>
-
-                  <p style={{ 
-                    fontSize: '0.95rem', 
-                    color: '#6c757d', 
-                    lineHeight: '1.65',
-                    marginBottom: '1.5rem',
-                    flex: 1
-                  }}>
-                    {course.description.length > 120 
-                      ? `${course.description.substring(0, 120)}...` 
-                      : course.description
-                    }
-                  </p>
-                  
-                  {/* Progress Bar */}
-                  {course.progress > 0 ? (
-                    <div style={{ marginTop: 'auto' }}>
-                      <div style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: '8px'
-                      }}>
-                        <span style={{ 
-                          fontSize: '0.8rem', 
-                          color: '#95a5a6', 
-                          fontWeight: '600',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.5px'
-                        }}>
-                          Progress
-                        </span>
-                        <span style={{ 
-                          fontSize: '0.85rem', 
-                          color: getStatusColor(course.status), 
-                          fontWeight: '700'
-                        }}>
-                          {course.progress}%
-                        </span>
-                      </div>
-                      <div style={{
-                        width: '100%',
-                        height: '8px',
-                        background: '#f0f0f0',
-                        borderRadius: '10px',
-                        overflow: 'hidden',
-                        boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)'
-                      }}>
-                        <div style={{
-                          width: `${course.progress}%`,
-                          height: '100%',
-                          background: `linear-gradient(90deg, ${getStatusColor(course.status)} 0%, ${getStatusColor(course.status)}dd 100%)`,
-                          borderRadius: '10px',
-                          transition: 'width 0.5s ease',
-                          boxShadow: `0 0 10px ${getStatusColor(course.status)}60`
-                        }} />
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{
-                      marginTop: 'auto',
-                      padding: '1rem',
-                      background: 'linear-gradient(135deg, #667eea15 0%, #764ba215 100%)',
-                      borderRadius: '12px',
-                      textAlign: 'center'
-                    }}>
-                      <span style={{
-                        fontSize: '0.85rem',
-                        color: '#667eea',
-                        fontWeight: '600'
-                      }}>
-                        🚀 Ready to start
-                      </span>
-                    </div>
-                  )}
+                  <div style={{ fontSize: '12px', color: '#888' }}>Credit Hours</div>
                 </div>
-                
-                {/* Footer Button */}
-                <div style={{
-                  padding: '1.5rem',
-                  paddingTop: '0',
-                  marginTop: 'auto'
-                }}>
-                  <button style={{
-                    width: '100%',
-                    padding: '14px',
-                    border: 'none',
-                    borderRadius: '12px',
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                    color: '#fff',
-                    fontWeight: '700',
-                    fontSize: '0.95rem',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s ease',
-                    boxShadow: '0 4px 15px rgba(102, 126, 234, 0.3)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px'
-                  }} onMouseEnter={(e) => {
-                    e.target.style.transform = 'translateY(-2px)';
-                    e.target.style.boxShadow = '0 6px 20px rgba(102, 126, 234, 0.4)';
-                  }} onMouseLeave={(e) => {
-                    e.target.style.transform = 'translateY(0)';
-                    e.target.style.boxShadow = '0 4px 15px rgba(102, 126, 234, 0.3)';
-                  }}>
-                    {course.status === 'completed' ? '🎓 Review Course' : 
-                     course.status === 'in-progress' ? '▶️ Continue Learning' : 
-                     '🚀 Start Course'}
-                  </button>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '20px', fontWeight: '700' }}>
+                    {startModal.course?.deadline
+                      ? new Date(startModal.course.deadline).toLocaleDateString()
+                      : 'N/A'}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#888' }}>Deadline</div>
                 </div>
-              </article>
-            ))}
+              </div>
+
+              <div className="modal-actions">
+                <button
+                  className="ghost-btn"
+                  onClick={() => setStartModal({ show: false, course: null })}
+                >
+                  Not Now
+                </button>
+                <button className="primary-btn" onClick={handleStartCourse}>
+                  Start Learning →
+                </button>
+              </div>
+            </div>
           </div>
-        )}
-      </section>
+        </div>
+      )}
     </div>
   );
 };
