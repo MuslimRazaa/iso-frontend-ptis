@@ -28,7 +28,7 @@ const dashboardTiles = [
   {
     id: "cv-gen",
     title: "Job Log Description",
-    link: "/user/cvs-access",
+    link: "/job-log",
     description: "Track inspection activities and field job entries.",
     status: "online",
     statusLabel: "Live",

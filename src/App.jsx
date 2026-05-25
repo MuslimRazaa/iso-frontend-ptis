@@ -5,7 +5,7 @@ import VideoLoader from './components/VideoLoader'
 import './assets/style.css'
 
 // ============================================
-// ADMIN` MODULES IMPORTS
+// ADMIN MODULES IMPORTS
 // ============================================
 import MainDashboard from './dashboards/MainDashboard'
 
@@ -32,6 +32,10 @@ import InsertRecord from './Portal/pages/InsertRecord'
 import AllRecords from './Portal/pages/AllRecords'
 import UnprocessedRecords from './Portal/pages/UnprocessedRecords'
 
+// Admin - Job Log Description (standalone module)
+import JLRLayout from './JLR/JLRLayout'
+import JLRHome from './JLR/pages/JLRHome'
+
 // ============================================
 // USER MODULES IMPORTS
 // ============================================
@@ -47,7 +51,6 @@ function App() {
   const [hasSeenLoader, setHasSeenLoader] = useState(false)
 
   useEffect(() => {
-    // Check if user has already seen the loader in this session
     const loaderSeen = sessionStorage.getItem('loaderSeen')
     if (loaderSeen === 'true') {
       setShowLoader(false)
@@ -69,79 +72,78 @@ function App() {
         <Router>
           <Routes>
             {/* ============================================ */}
-            {/* PUBLIC ROUTES */}
+            {/* PUBLIC ROUTES                               */}
             {/* ============================================ */}
             <Route path="/" element={<Login />} />
 
             {/* ============================================ */}
-            {/* ADMIN ROUTES - Full Access to All Modules */}
+            {/* ADMIN ROUTES                                */}
             {/* ============================================ */}
             <Route path="/dashboard" element={<MainDashboard />} />
-            
-            {/* Admin - Learning Management System */}
+
+            {/* Admin — Learning Management System */}
             <Route path="/learning-management-system/*" element={<LearningManagementSystem />}>
               <Route index element={<LmsHome />} />
-              <Route path="add-course" element={<AddCourse />} />
-              <Route path="all-courses" element={<AllCourses />} />
-              <Route path="task-allocation" element={<TaskAllocation />} />
-              <Route path="course-categories" element={<CourseCategories />} />
-              <Route path="add-employee" element={<AddEmployee />} />
-              <Route path="all-employees" element={<AllEmployees />} />
-              <Route path="set-standards" element={<SetStandards />} />
-              <Route path="question-bank" element={<QuestionBank defaultTab="add" />} />
+              <Route path="add-course"          element={<AddCourse />} />
+              <Route path="all-courses"         element={<AllCourses />} />
+              <Route path="task-allocation"     element={<TaskAllocation />} />
+              <Route path="course-categories"   element={<CourseCategories />} />
+              <Route path="add-employee"        element={<AddEmployee />} />
+              <Route path="all-employees"       element={<AllEmployees />} />
+              <Route path="set-standards"       element={<SetStandards />} />
+              <Route path="question-bank"       element={<QuestionBank defaultTab="add" />} />
               <Route path="question-bank/view-all" element={<QuestionBank defaultTab="view" />} />
-              <Route path="certificates" element={<Certificates />} />
-              <Route path="course/:courseId" element={<CourseDetail />} />
+              <Route path="certificates"        element={<Certificates />} />
+              <Route path="course/:courseId"    element={<CourseDetail />} />
             </Route>
 
-            {/* Admin - PTIS Portal */}
+            {/* Admin — PTIS Portal */}
             <Route path="/portal/*" element={<PtisPortal />}>
               <Route index element={<PortalDashboard />} />
-              <Route path="add-admin" element={<AddAdmin />} />
-              <Route path="add-client" element={<AddClient />} />
-              <Route path="insert-record" element={<InsertRecord />} />
-              <Route path="all-records" element={<AllRecords />} />
-              <Route path="unprocessed-records" element={<UnprocessedRecords />} />
+              <Route path="add-admin"            element={<AddAdmin />} />
+              <Route path="add-client"           element={<AddClient />} />
+              <Route path="insert-record"        element={<InsertRecord />} />
+              <Route path="all-records"          element={<AllRecords />} />
+              <Route path="unprocessed-records"  element={<UnprocessedRecords />} />
+            </Route>
+
+            {/* Admin — Job Log Description (standalone module) */}
+            <Route path="/job-log/*" element={<JLRLayout />}>
+              <Route index element={<JLRHome />} />
+              <Route path="entries" element={<JobLogDescription />} />
             </Route>
 
             {/* ============================================ */}
-            {/* USER ROUTES - Role-Based Access */}
+            {/* USER ROUTES                                 */}
             {/* ============================================ */}
             <Route path="/user/*" element={<UserPanel />}>
               <Route index element={<Navigate to="/user/dashboard" replace />} />
-              <Route path="dashboard" element={<UserDashboard />} />
-              <Route path="my-courses" element={<MyCourses />} />
-              <Route path="all-courses" element={<AllLmsCourses />} />
+              <Route path="dashboard"       element={<UserDashboard />} />
+              <Route path="my-courses"      element={<MyCourses />} />
+              <Route path="all-courses"     element={<AllLmsCourses />} />
               <Route path="my-certificates" element={<UserCertificates />} />
               <Route path="course/:courseId" element={<CourseDetail />} />
-              <Route path="cvs-access" element={<JobLogDescription />} />
-              
-              {/* User access to LMS (if permission granted) */}
-              <Route path="lms-access" element={<div style={{padding: '40px', textAlign: 'center'}}>
-                <h2> LMS Access Portal</h2>
-                <p>View courses and manage training</p>
-              </div>} />
-              
-              {/* User access to Portal (if permission granted) */}
-              <Route path="portal-access" element={<div style={{padding: '40px', textAlign: 'center'}}>
-                <h2> PTIS Portal Access</h2>
-                <p>View inspection records</p>
-              </div>} />
-              
-              {/* User Reports */}
-              <Route path="reports" element={<div style={{padding: '40px', textAlign: 'center'}}>
-                <h2>Reports</h2>
-                <p>Generate and view reports</p>
-              </div>} />
-              
-              {/* Help Center */}
-              <Route path="help" element={<div style={{padding: '40px', textAlign: 'center'}}>
-                <h2> Help Center</h2>
-                <p>Get support and documentation</p>
-              </div>} />
+              <Route path="cvs-access"      element={<JobLogDescription />} />
+
+              <Route path="lms-access" element={
+                <div style={{ padding: '40px', textAlign: 'center' }}>
+                  <h2>LMS Access Portal</h2><p>View courses and manage training</p>
+                </div>} />
+              <Route path="portal-access" element={
+                <div style={{ padding: '40px', textAlign: 'center' }}>
+                  <h2>PTIS Portal Access</h2><p>View inspection records</p>
+                </div>} />
+              <Route path="reports" element={
+                <div style={{ padding: '40px', textAlign: 'center' }}>
+                  <h2>Reports</h2><p>Generate and view reports</p>
+                </div>} />
+              <Route path="help" element={
+                <div style={{ padding: '40px', textAlign: 'center' }}>
+                  <h2>Help Center</h2><p>Get support and documentation</p>
+                </div>} />
             </Route>
 
-            {/* Redirect unknown routes to login */}
+            {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Router>

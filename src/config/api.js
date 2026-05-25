@@ -15,6 +15,7 @@ export const API_ENDPOINTS = {
   QUESTIONS: `${API_BASE_URL}/api/questions`,
   COURSE_PROGRESS: `${API_BASE_URL}/api/course-progress`,
   COURSE_REQUESTS: `${API_BASE_URL}/api/course-requests`,
+  JOB_LOG: `${API_BASE_URL}/api/job-log`,
 };
 
 export default API_BASE_URL;
