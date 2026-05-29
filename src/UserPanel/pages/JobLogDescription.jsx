@@ -77,6 +77,132 @@ const toDB = data => ({
   remark:          data.remark         || null,
 })
 
+/* ─────────────────────────────────────────────────────────────
+   Known locations (used for datalist autocomplete)
+───────────────────────────────────────────────────────────── */
+const KNOWN_LOCATIONS = [
+  "Ali North-1","Baudero-1","Bukhari North X-1","Chand South-1","Chanda-5","Gormani-1",
+  "Bukhari North-1","Hadaf X-1","Hayat-2","Hilong Yard","KDT-45","Khaddi-2","Lakhman-01",
+  "Maroja-1","Mazari-19","Mazari-19 / Hayat-2","Muban-5","Mubarak South-1","Oderolal",
+  "Ptis Lab","Ptis Office","Qadir Pur Deep X-1","Qamar X-1","Rajani-10","Rajani-12",
+  "Sachoo-01","Sachu-1","Sohrab Deep-7","South Deep-4","South Deep-7","Suhan-1","Sui 109",
+  "Sutiari Deep 4","Sutiari Deep 4-Mubarak South-1","Tando Adam","Tando Adam Yard",
+  "TRS Department","Unarpur-1","Warar-1","Chanda","Hilong-2","RAJANI-2",
+  "Sonro-17/Rajani-09/Gulsher-1","Halipota-6","Gulsher-1","Mazari Yard","Well Serve Yard",
+  "Tangri","South Bozdar","Gharo Yard","Rahim X-1","HL Yard","BELA WEST X-1","BELA WEST-1",
+  "CHANG-1","KARACHI OFFICE","Khadi-2","Mazari Deep -1","MAZARI SOUTH DEEP-1","PTIS",
+  "RAHIM-4","SUKHI SOUTH-1","ZPEC YARD","Hayat-1","Port Qasim Yard","Bin Qasim Yard",
+  "Khaur North-1","KHASKHELI YARD","Rajani Deep - 10","Zamzama N-2","Khaur X-1",
+  "Roshan-1 / Rehman-5","Rehman -5","Khaskheli","IS YARD SUKKAR","SUKKUR",
+  "KHASKHELI BASE","ZAMZAMA SUB - 02","Drillnetic Energy Yard","Naimt West","SMD-1",
+  "Guni-1","Bari-09","Naimat Yard","Muqim-1 - Naimat Basal","Muqim-1","Naimat SWD-1",
+  "Sutiari Deep-3","Rajani-9","Halipota-06","Moroja-01","MKK Tubing Yard","Sonro - 17",
+  "Ghungro East - 1","Kakhman - 1","Lafif - 17","New Makran Eng","Naimat / SWD2","Bari-11",
+  "Buzdar Deep - 9","Naimat Basal","Buzdar S - 09","BSD - 09","Saleh - 2","Chahg-1",
+  "Mubann V","Rawal - 1","Mazari -17","Ghungru Deep -1","Tando","Bari-10","Rajani-5",
+  "South Mazari Deep-1","Sonro - 15","Mazari-12","Dhabi North - 1","Saleh - 5","Rehab - 1",
+  "Miano - 24","Sonro - 18","Ramdhani - 1","Sukan - 1","Mehar - 5","CHAK 25 WELL 1",
+  "QADIRPUR - 59","Nur West - 1","MELA - 6","KHANJAR KHEL - 1","WASSAN-1","ZIN DEEP - 2",
+  "NOOR WEST - 1","NASHPA - 9","SHAWA-X1","SOORGI X-3","KUNNAR - 12","KOT SARANG YARD",
+  "RANGLI","KOT SARANG","KHADEJI YARD","PASAKI N-EAST-1","GAHRI X-2","PAND SULTANI",
+  "SINOPAK-149","SHAWA-1","GARHI X-2","SIAB - 1","MONGINO-1","WEST DEEP - 2",
+  "DHOK HUSSAIN","TOGH-1","QP Deep - 6","HUMAK YARD","CCDC YARD","TALAGANG","ADHI-31",
+  "MISIRAL X-1","ADHI-10","PINDORI-10","KHANJAR KHEEL","DHOKE SULTAN 02","PHARPUR X-1",
+  "CCDC-23","JSL Yard","Maripur Yard","Manzalai-3","Tolanj East-1 - Manzalai-3",
+  "Benari X-1","Nusrat X-1","Makori-1","Siemens Yard","Port Qasim","Siemens Facility",
+  "SUKKAR YARD","Nakurji-2 - Nusrat X-1","SPRINT YARD","I 10/3 Yard","GULARCHI",
+  "SHAH DINO","RAJPARI-1","REHMAN-5","JSL YARD","Tando M.Khan","Pirani","PAHAR PUR X-1",
+  "ADHI-32","CCDC-07","BADEELX-1","Nuricon I 10-3 Yard","I-10 YARD","CREEK WAY HOTEL",
+  "RAJHANI-11","Margand X-1","Wireline Yard KK","Bolan East-1 - Sukkur Wireline","Bari-12",
+  "Unarpur - 2","Malhan-1","MKK WEST CAMP (C.Y)","RIZQ-3","Mitha - 1","Hawksbay Yard",
+  "Sawan Pipe Yard","Miano - 28","Miano - 22","DAMACH-1","Bari-13","MULAKI-02","WFT Yard",
+  "Anton-2001","Scomi Yard","GOTKI","KDT 47","Sui-106","Schlumberger","Meher 5","Rehman-6",
+  "PASAKHI-2/ N-3","Multi Location","Hilong - 17 / Pirani","IOT Yard","Adhi # 07 Pipe Yard",
+  "AYUB X-1","Agility Yard","Gambat South","Tarnal ITS Yard","Adhi Well 9","Nooh X-1",
+  "Adhi Well 07","Kandkhot","SUI H125","D- Suktan X- 1","PPL Yard","Mari - 1","Rahib-1",
+  "SUI - 108","Jani - 1","Gulsher - 2","WDI - 3","MKK","MITHA - 2","Mari-2","Mari Rig",
+  "MPCL YARD","Mari - 119","Mari - 112","Miraj-1","ZIA Yard Karachi","K.K Yard",
+  "Dhulian Yard","Balkasar - 1","Latif - 18","Nashpa -5A","Moregend X - 1",
+  "Pasaki west Deep 2","Sanghar","YYK","Bharia","Rig-33","Gadab","D & M Yard","Zamzama-3",
+  "HL-4002","ZPEC-33","RANGUNWARI -01","ADHI-34","Rig-3","Crescent Mill","Nakurji-1",
+  "SCR-1","Joyamir-4","Rig-66","Anton-4001","N-2","Peshawar Ring Road","Hyderabad",
+  "Sprint","Sinopec -77","Thora Deep-3","Bitro-1 SLR-215","MMKS-1","Mela-7","MMKS-2",
+  "Mulaki East-1","Matli","Hilong-17/ Paniro-1","Mazari-20","Dhoke Sultan South X-1",
+  "MEC","Adhi South X-4","Qadirpur-14","Bukhari Deep-4","Sawan-4","Muzaffargarh",
+  "Hilong-16","Jhandiyal -2","Ghakkar Phatak Yard","Z S 4 , ZARGHOON","Nuricon Yard",
+  "HL-02","N-4","Rajian-11","Kathiar-1","Hilong-5","Jan-2","Sinopec-77","WALI-01",
+  "JHANG BAHATAR YARD","South Mazari Deep-2","Khandkot","Mulaki-5","Dharian-1",
+  "Karachi Yard","Jang Bahtar Yard","Balkasar Yard","Weatherford Yard","Adhi South X-3",
+  "Bari-15","Latif-23","Rehman-07","Jatoi -1","Ranjho-1","Cholistan X-1","Qadirpur-15",
+  "Tangri-04","Adhi South X-2","Pasaki-11 / N-55","I.S Enterprises Yard Tarnol","Hilal-1",
+  "Miano-25","Pasaki-10","Rahim X-2","Dhoro-1","Lucky Rod X-1","Sui Well-110","Mazari-18",
+  "Singhar-01","BOBY DEEP X-1","DEEP X-1 A","Seni Gombat-1","S.Zia Yard Islamabad",
+  "Mitto-01","Tando Muhammad Khan","Iqbal-01","Washuk-01","Togh Bala-01","Dakhni Plant",
+  "Mazari-11","Sajan-01","Zaur-03","Turk Deep North-01","QP West X-1","SUI-112",
+  "Nooriabad","Sui Gas Plant","Kashmore","Khaur Yard","Zia Yard","Sheen Dund-01",
+  "Nangpir-01","SHARF-3","MD-21","Baqqa-1","KUC-1","Qadirpur-62 OGDCL","Sial-1 OGDCL",
+  "Rig","South Mazari Deep-3","Singhar-1","Deutag Yard Burhama","Mari Deep-19",
+  "Parwaz Deep-1","Mehtab-1","SUI","Qadirpur Well","Toot Deep-1/Hilong-2","Saindad-1",
+  "Manzalai-07/KCA T-72","mehar-4","Pasakhi WIW-1","Kambir-1","UEPL","NASHPA-5",
+  "MAKORI","OGDCL N3","latif 22","Gagani South-1","T 202","North Akri -4","Rig Mari-1",
+  "MOL","Burhan yard","Joya mair-1 rig","Sui 72 PPL","baqa-3","miano-20","Pasakhi-7",
+  "Tando Alam Mari","Uch plant","Suleman-1","Qadirpur","Khanot-1","Tangri-3","Tando Alam",
+  "Hilong-9","MD-18","MPCL Daharki","Mangrio-02","Ludano deep-1","Jugan-1","Pasaki-12",
+  "Moolan-2","Sawan Gas Plant","Rig ccdc 26","togh-02","Qasar x-1","Exalo-303","Rajian",
+  "Rig CCDC-23","Mela-8 south","Khipro East X-1","Taj-01","Ranjho-2","Bijoro-3","Exalo",
+  "Ccdc32","Turk Deep North-2","Bannu- west-1","Rehman-8","Sofiya-03","Patani-1",
+  "Turk-1","IPC","Tipu-1","Nuricon energy services limited","Fazil-01","South Mazari-12",
+  "Mazari-16","Petro service","Mulaki west-1","Exalo 303","Bari 14","Buzdar South Deep 7",
+  "DGK-1","Exalo 2000","umar-4","HL-09","Saman 1","PKL South",
+  "IVCC yard Sunder industrial estate Lahore","Naimat west-7","malkani-1","Zaman 01",
+  "Bhatti north 1","RIG ZJ30","mehar-3","Mari DEEP-17","Mohar-1","Latif-10 w/o",
+  "Taj 03","Latif-10 qadanwari","Naimat west DT-01","Mari Rig-1","mulaki-6","Hl 5",
+  "Mehar-6","TAJ-4","Kunnar 10","HL-9","Exalo-305","Lakho 1","Zpec Yard","Islamabad",
+  "Tolanj west 2","ccdc adhi","Ratana-05","Tajedi-02","Miano-26","Mithrau-14","Zaur West-2",
+  "Tando Alam Oil Complex","kunnar KD-11","KCA DEUTAG","Rig Anton 2001","Sui 43",
+  "Sinopec 077","Adhi South-5","Naimat west-8","Ccdc -31","TAAJ-06","TURI-01","Nim East 01",
+  "Pasakhi 07","OGDCL N-4","Mazari-14","Kunnar oil field","Umar-5","BALKASSAR YARD",
+  "Sawan-10","uet-1","TARNOL-1","kumbh-4","South Buzdar-1","Sutiari Deep 01",
+  "SHAHPUARABAD-01","Sahib Dino","Chang - 1","Latif 21","MANZALAI-04","Hilong-21",
+  "Bhatti north-2","NMW DT-02","Jugan-2","Saddar 1","DHABI SOUTH-03","Takhat-2","UET-1",
+  "Jabery South-3","CNLC yard","KK DT2","CCDC 30","ADHI-35","Sui 115","Minwal X-1",
+  "Bobi 11","MSU beta","Khaskheli-19","KK DT-04","Mehar","Kumbh-5","POL","SLR 215",
+  "Shewa-2","UMAR - 6","Duetag Drilling","Mari","Adhi south -06","CCDC-30","UET-01",
+  "Murad x 1","Mari-105 W/O","CHANDA-07","Sakhi-08","MAKORI-5","Mohar-2","KK DT-06",
+  "Kharo-1","Takhat-3","JHANDIAL-3","JHIM EAST - X1","MAIWAND X-1","Sono-9","Taj South-1",
+  "BADIN","Adam 02","Jagir-05","SFS Yard Tando Adam","ADHI WDW-1","SANGJANI YARD","MD-20",
+  "Taj-08","RAZGIR-01","DHOK PARACHA ISLAMABAD","HALAINI-2","Ghazij - 4","Isra - 01",
+  "Sanwal khan","Halipota-7","Qabul-3HZ","Taj-Ws-01","BALOCH 2","Uch-35","Bettani",
+  "Brohi -1","MD-22","Ghazij-05","OGDCL","Mohar-3","Turk Deep North 01","Rizq-5",
+  "Dabhi South-02","TAJ-10","BROHI-1","MAHAAN-1","Spinwam - 01","Pk Battani - 2",
+  "Takhat 04","Baqar Deep 02","Unar pur - 1","Sono - 7","OCTG / Daharki Yard",
+  "Sukhi Deep-1","Sawan North Deep -1","Kandewaro-1","Tando Ala Yar","Walidad-1",
+  "Baloch -2","Ghazij - 6","Tes-1 Unerpur-1","Rafat-1","Sohnal-1","H-13/4 Islamabad",
+  "Soghari North-1","126H Well","Sabzkhani-1","Takhat-5 / TES-1","Shahu - 1",
+  "Zorkham South-5","Ghajij-7","Shawal-2","Pateji X-1","Surhadi-1","SND-1 / HILONG-21",
+  "CHAK 202-1 . Sadqabad","Takri -01","Surhadi-1 / Tes-1","Sonro-10 W/O / Anton-2001",
+  "DARS WEST-1","MAMI KHEL-1 Kohat","IWSS ISB YARD","Umar-8","Chack-02","Lodano-4",
+  "Dhok Sultan -3","Bettani Deep-1","Sabzkani-1 / Rig Hilong 9","Bhittai-6","Baragzai X-1",
+  "Ghazij - 8","Umar-04","Well Chuck 2-2","Samabhi-1","K-5","Soharb Deep-1",
+  "Anton-2001 / Dhabi-6","Chak 202-2","FAAKIR-1","Bilal X-1","DHAMACH-1","HALIPOTA-8",
+  "MAKORI DEEP-03","Water Disposal Well-5","Bolan East-2","Soho -1","Umer 9","OGDCL ZJ 30",
+  "UEPL Takri-2","RAJAHU-1","Bolan west-1","Takri-2","Tubing Yard (kk)","Ghazij CF-A1",
+  "FAAKIR-01","LAL X-1/ HL-21","Khaitian-1","Pasaki-14","Gurgalot X-1","WIW Umar-11",
+  "Toot deep-01","Jakarho North-1","Chakar-1","Qadirpur 64","Shawal-4","Barki-1","BSD-10",
+  "BITRISM EAST -1","Jhakrao N-01","Jhandial-2","Sahan-1","Makhad x-1","Exalo 305",
+  "Sonro-9 / Anton-2001","Sahan-1 / Anton-2001","Zarghun South Ghazij-1","BLT-1",
+  "OGDCL SK-750","RAJIAN -02","Dars deep 01A","Pasakhi 13 ( OGDCL )","Ghazij-11 Well",
+  "Hassu 1","Dharian-01","TIBRI-1","Pindori -9","MORO BYPASS","PALI DEEP 01",
+  "EXALO RIZQ 06 SEWAN","Mari Deep-24 Well","Kausar -1 SWD-1","Chandio-01",
+  "Well Gaha Wah-1","S.ZIA-UL-HAQ YARD","Miano TGS HZ 1","IWSS","Kunnar WIW 1 Rig N5",
+  "Speen-1 well","BSD-11","Tando Allahyar","Dars West-3","SAHITO-1","Sujawal Block",
+  "REHMAN-09","NWDT-03","pasaki-13","WIW-1 KUNNAR","THUL WEST-1 KANDANWARI","Shams-1 Well",
+  "SUMRO-1 WELL","CCDC-27","Queeta Al Noor Restaurant","Pasakhi North East-02","Lahore",
+  "Adhi/Punjab","Soho -2 well","Said Pur-01","BSD-2","well SONO-10","well chack-203-1",
+  "SONO-10","Mari-127H","Lashkani-1","Chak 63-5","Mari-128H","Khirun-1-OGDCL",
+  "TDM-OGDCL",
+].sort()
+
 const emptyEntry = {
   sNo:'', client:'', workOrder:'', inspectorName:'', inspectorTeam:'',
   reference:'', location:'', natureOfJob:'', startDate:'', endDate:'',
@@ -223,6 +349,7 @@ function JobLogDescription() {
   const [error, setError]               = useState(null)
   const [importMsg, setImportMsg]       = useState(null)
   const [saving, setSaving]             = useState(false)
+  const [csvMode, setCsvMode]           = useState('append') // 'replace' | 'append'
   const [isModalOpen, setIsModalOpen]   = useState(false)
   const [modalMode, setModalMode]       = useState('add')
   const [modalState, setModalState]     = useState(emptyEntry)
@@ -378,7 +505,7 @@ function JobLogDescription() {
     formData.append('csv', file)
     try {
       setLoading(true); setImportMsg(null); setError(null)
-      const res = await fetch(`${API_ENDPOINTS.JOB_LOG}/upload-csv`, {
+      const res = await fetch(`${API_ENDPOINTS.JOB_LOG}/upload-csv?mode=${csvMode}`, {
         method: 'POST',
         body: formData,
       })
@@ -386,7 +513,8 @@ function JobLogDescription() {
       if (!res.ok) throw new Error(json.error || `Server error ${res.status}`)
       const rows = json.data ?? []
       setEntries(Array.isArray(rows) ? rows.map(fromDB) : [])
-      setImportMsg(`✅ ${json.inserted ?? json.message} record(s) imported successfully`)
+      const modeLabel = csvMode === 'replace' ? 'replaced all data with' : 'added'
+      setImportMsg(`✅ ${modeLabel} ${json.inserted} record(s) — total: ${Array.isArray(rows) ? rows.length : '?'}`)
       setTimeout(() => setImportMsg(null), 6000)
     } catch (err) {
       setError(`CSV import failed: ${err.message}`)
@@ -484,6 +612,28 @@ function JobLogDescription() {
             style={{ display:'none' }}
             onChange={handleCsvUpload}
           />
+          {/* CSV mode toggle */}
+          <div style={{
+            display:'flex', borderRadius:12, overflow:'hidden',
+            border:'1px solid #e0e0e6', fontSize:13, fontWeight:600,
+          }}>
+            <button type="button" onClick={() => setCsvMode('append')}
+              style={{
+                padding:'9px 14px', border:'none', cursor:'pointer', transition:'all 0.2s',
+                background: csvMode === 'append' ? '#d7263d' : '#fff',
+                color:      csvMode === 'append' ? '#fff'    : '#7a7a8c',
+              }}>
+              ➕ Append
+            </button>
+            <button type="button" onClick={() => setCsvMode('replace')}
+              style={{
+                padding:'9px 14px', border:'none', cursor:'pointer', transition:'all 0.2s',
+                background: csvMode === 'replace' ? '#d7263d' : '#fff',
+                color:      csvMode === 'replace' ? '#fff'    : '#7a7a8c',
+              }}>
+              🔄 Replace
+            </button>
+          </div>
           <button
             type="button"
             className="ghost-btn"
@@ -829,8 +979,19 @@ function JobLogDescription() {
               <ModalSection icon="🗺️" title="Job Details" />
               <div className="form-row">
                 <label><span>Location *</span>
-                  <input type="text" value={modalState.location} placeholder="Islamabad Yard" required
-                    onChange={e => handleModalChange('location', e.target.value)} /></label>
+                  <input
+                    type="text"
+                    list="jlr-locations-list"
+                    value={modalState.location}
+                    placeholder="Type to search or enter new…"
+                    required
+                    autoComplete="off"
+                    onChange={e => handleModalChange('location', e.target.value)}
+                  />
+                  <datalist id="jlr-locations-list">
+                    {KNOWN_LOCATIONS.map(loc => <option key={loc} value={loc} />)}
+                  </datalist>
+                </label>
                 <label><span>Nature of Job *</span>
                   <input type="text" value={modalState.natureOfJob} placeholder="Visual / NDT …" required
                     onChange={e => handleModalChange('natureOfJob', e.target.value)} /></label>
