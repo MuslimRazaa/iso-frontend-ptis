@@ -8,7 +8,14 @@ const ManageUserAccess = () => {
     lms: false,
     portal: false,
     cvs: false,
-    reports: false
+    reports: false,
+    // JLR (Job Log) department-level access
+    jlr_operations: false,
+    jlr_qhse: false,
+    jlr_inventory: false,
+    jlr_accounts: false,
+    jlr_it: false,
+    jlr_full: false,
   });
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -37,7 +44,13 @@ const ManageUserAccess = () => {
       lms: employee.lms_access === 1,
       portal: employee.portal_access === 1,
       cvs: employee.cvs_access === 1,
-      reports: employee.reports_access === 1
+      reports: employee.reports_access === 1,
+      jlr_operations: employee.jlr_operations_access === 1,
+      jlr_qhse:       employee.jlr_qhse_access       === 1,
+      jlr_inventory:  employee.jlr_inventory_access  === 1,
+      jlr_accounts:   employee.jlr_accounts_access   === 1,
+      jlr_it:         employee.jlr_it_access         === 1,
+      jlr_full:       employee.jlr_full_access       === 1,
     });
     
     setShowModal(true);
@@ -56,7 +69,13 @@ const ManageUserAccess = () => {
           lms_access: permissions.lms,
           portal_access: permissions.portal,
           cvs_access: permissions.cvs,
-          reports_access: permissions.reports
+          reports_access: permissions.reports,
+          jlr_operations_access: permissions.jlr_operations,
+          jlr_qhse_access:       permissions.jlr_qhse,
+          jlr_inventory_access:  permissions.jlr_inventory,
+          jlr_accounts_access:   permissions.jlr_accounts,
+          jlr_it_access:         permissions.jlr_it,
+          jlr_full_access:       permissions.jlr_full,
         })
       });
       
@@ -75,10 +94,22 @@ const ManageUserAccess = () => {
   };
 
   const togglePermission = (module) => {
-    setPermissions(prev => ({
-      ...prev,
-      [module]: !prev[module]
-    }));
+    setPermissions(prev => {
+      const next = { ...prev, [module]: !prev[module] };
+      // "Full Access" master switch — turning it ON enables every JLR department
+      if (module === 'jlr_full' && next.jlr_full) {
+        next.jlr_operations = true;
+        next.jlr_qhse       = true;
+        next.jlr_inventory  = true;
+        next.jlr_accounts   = true;
+        next.jlr_it         = true;
+      }
+      // Turning OFF any individual JLR department also drops the full-access flag
+      if (module.startsWith('jlr_') && module !== 'jlr_full' && !next[module]) {
+        next.jlr_full = false;
+      }
+      return next;
+    });
   };
 
   if (loading) {
@@ -111,6 +142,15 @@ const ManageUserAccess = () => {
               if (employee.portal_access === 1) assignedModules.push('Portal');
               if (employee.cvs_access === 1) assignedModules.push('CVs');
               if (employee.reports_access === 1) assignedModules.push('Reports');
+              if (employee.jlr_full_access === 1) {
+                assignedModules.push('JLR: Full');
+              } else {
+                if (employee.jlr_operations_access === 1) assignedModules.push('JLR: Operations');
+                if (employee.jlr_qhse_access       === 1) assignedModules.push('JLR: QHSE');
+                if (employee.jlr_inventory_access  === 1) assignedModules.push('JLR: Inventory');
+                if (employee.jlr_accounts_access   === 1) assignedModules.push('JLR: Accounts');
+                if (employee.jlr_it_access         === 1) assignedModules.push('JLR: IT');
+              }
               
               return (
                 <tr key={employee.id}>
@@ -237,14 +277,75 @@ const ManageUserAccess = () => {
                     </div>
                   </div>
                   <label className="toggle-switch">
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       checked={permissions.reports}
                       onChange={() => togglePermission('reports')}
                     />
                     <span className="toggle-slider"></span>
                   </label>
                 </div>
+              </div>
+
+              {/* ── JLR Department-level access ────────────────── */}
+              <div className="permissions-section" style={{ marginTop: 28 }}>
+                <h4 style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  📋 Job Log (JLR) — Department Access
+                </h4>
+                <p style={{ fontSize: 13, color:'#666', margin:'4px 0 16px' }}>
+                  User sirf inhi department ki fields edit kar sakega. "Full Access" sab unlock kar deta hai.
+                </p>
+
+                {/* Full access master toggle */}
+                <div className="permission-item" style={{
+                  background: permissions.jlr_full ? 'rgba(215,38,61,0.06)' : 'transparent',
+                  borderRadius: 10, padding: 10,
+                }}>
+                  <div className="permission-info">
+                    <div className="permission-icon" style={{ background:'#d7263d', color:'#fff' }}>👑</div>
+                    <div>
+                      <strong>JLR Full Access</strong>
+                      <p>Admin-level — sab departments unlock kar deta hai</p>
+                    </div>
+                  </div>
+                  <label className="toggle-switch">
+                    <input type="checkbox" checked={permissions.jlr_full}
+                      onChange={() => togglePermission('jlr_full')} />
+                    <span className="toggle-slider"></span>
+                  </label>
+                </div>
+
+                {[
+                  { key:'jlr_operations', icon:'🏗️', label:'Operations',
+                    desc:'Client, work order, inspector, location, dates, vehicle, man-power, status, remark' },
+                  { key:'jlr_qhse', icon:'🛡️', label:'QHSE',
+                    desc:'TRA, Equipment Checklist, V.Log, TBT, ISO, REPT, Submission Date' },
+                  { key:'jlr_inventory', icon:'📦', label:'Inventory',
+                    desc:'Stock Requisition, GIN, Consumption, Gate Pass' },
+                  { key:'jlr_accounts', icon:'💰', label:'Accounts',
+                    desc:'Expenses, Accounts sign-off' },
+                  { key:'jlr_it', icon:'💻', label:'IT',
+                    desc:'IT department sign-off' },
+                ].map(item => (
+                  <div className="permission-item" key={item.key}>
+                    <div className="permission-info">
+                      <div className="permission-icon" style={{ background:'#f4f4f7', fontSize:18 }}>
+                        {item.icon}
+                      </div>
+                      <div>
+                        <strong>{item.label}</strong>
+                        <p>{item.desc}</p>
+                      </div>
+                    </div>
+                    <label className="toggle-switch">
+                      <input type="checkbox"
+                        checked={permissions[item.key] || permissions.jlr_full}
+                        disabled={permissions.jlr_full}
+                        onChange={() => togglePermission(item.key)} />
+                      <span className="toggle-slider"></span>
+                    </label>
+                  </div>
+                ))}
               </div>
             </div>
 

@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import { API_ENDPOINTS } from '../../config/api'
+import useLmsBase from '../useLmsBase'
 
 function AddCourse() {
   const navigate = useNavigate()
+  const lmsBase = useLmsBase()
   const [videos, setVideos] = useState([])
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState({ type: '', text: '' })
@@ -135,7 +137,7 @@ function AddCourse() {
       
       // Redirect to All Courses page after 1.5 seconds
       setTimeout(() => {
-        navigate('/learning-management-system/all-courses')
+        navigate(`${lmsBase}/all-courses`)
       }, 1500)
 
     } catch (error) {

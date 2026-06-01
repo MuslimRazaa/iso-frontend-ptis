@@ -2,12 +2,14 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api'
 import PdfViewer from '../../components/PdfViewer'
+import useLmsBase from '../useLmsBase'
 
 function CourseDetail() {
   const { courseId } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
   const isUserMode = location.pathname.startsWith('/user/')
+  const lmsBase = useLmsBase()
 
   const [activeTab, setActiveTab] = useState('overview')
   const [selectedVideo, setSelectedVideo] = useState(0)
@@ -291,7 +293,7 @@ function CourseDetail() {
         <h2>Course not found</h2>
         <button
           className="primary-btn"
-          onClick={() => navigate(isUserMode ? '/user/my-courses' : '/learning-management-system')}
+          onClick={() => navigate(lmsBase)}
         >
           Go Back
         </button>
@@ -403,10 +405,10 @@ function CourseDetail() {
           </div>
           {!isUserMode && (
             <div className="course-actions">
-              <button className="primary-btn large" onClick={() => navigate('/learning-management-system/task-allocation')}>
+              <button className="primary-btn large" onClick={() => navigate(`${lmsBase}/task-allocation`)}>
                 Assign to Employees
               </button>
-              <button className="ghost-btn large" onClick={() => navigate('/learning-management-system/all-courses')}>
+              <button className="ghost-btn large" onClick={() => navigate(`${lmsBase}/all-courses`)}>
                 View All Courses
               </button>
             </div>

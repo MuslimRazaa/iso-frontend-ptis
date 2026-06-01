@@ -4,12 +4,16 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 function LmsHeader() {
   const navigate = useNavigate();
   const location = useLocation();
-  
+
+  // Context-aware base — supports both /learning-management-system and /user/learning-management-system
+  const isUserSide = location.pathname.startsWith("/user");
+  const lmsBase    = isUserSide ? "/user/learning-management-system" : "/learning-management-system";
+
   // Check if we're on a detail/form page (not the home page)
-  const isOnDetailPage = location.pathname !== "/learning-management-system";
-  
+  const isOnDetailPage = location.pathname !== lmsBase;
+
   const goHome = () => {
-    navigate("/learning-management-system");
+    navigate(lmsBase);
   };
 
   return (
@@ -40,7 +44,7 @@ function LmsHeader() {
         <button type="button" className="btn btn-ghost">
           Weekly Report
         </button>
-        <Link to="/learning-management-system/add-course" className="btn btn-primary" style={{textDecoration:"none"}}>
+        <Link to={`${lmsBase}/add-course`} className="btn btn-primary" style={{textDecoration:"none"}}>
           Launch Program
         </Link>
       </div>

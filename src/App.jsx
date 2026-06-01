@@ -113,22 +113,43 @@ function App() {
               <Route path="entries" element={<JobLogDescription />} />
             </Route>
 
+            {/* User — Job Log Description (same standalone layout, role-based fields) */}
+            <Route path="/user/job-log/*" element={<JLRLayout />}>
+              <Route index element={<JLRHome />} />
+              <Route path="entries" element={<JobLogDescription />} />
+            </Route>
+
+            {/* User — LMS (uses the same admin layout/components for full feature parity) */}
+            <Route path="/user/learning-management-system/*" element={<LearningManagementSystem />}>
+              <Route index element={<LmsHome />} />
+              <Route path="add-course"          element={<AddCourse />} />
+              <Route path="all-courses"         element={<AllCourses />} />
+              <Route path="task-allocation"     element={<TaskAllocation />} />
+              <Route path="course-categories"   element={<CourseCategories />} />
+              <Route path="add-employee"        element={<AddEmployee />} />
+              <Route path="all-employees"       element={<AllEmployees />} />
+              <Route path="set-standards"       element={<SetStandards />} />
+              <Route path="question-bank"       element={<QuestionBank defaultTab="add" />} />
+              <Route path="question-bank/view-all" element={<QuestionBank defaultTab="view" />} />
+              <Route path="certificates"        element={<Certificates />} />
+              <Route path="course/:courseId"    element={<CourseDetail />} />
+            </Route>
+
             {/* ============================================ */}
             {/* USER ROUTES                                 */}
             {/* ============================================ */}
             <Route path="/user/*" element={<UserPanel />}>
               <Route index element={<Navigate to="/user/dashboard" replace />} />
               <Route path="dashboard"       element={<UserDashboard />} />
-              <Route path="my-courses"      element={<MyCourses />} />
-              <Route path="all-courses"     element={<AllLmsCourses />} />
-              <Route path="my-certificates" element={<UserCertificates />} />
-              <Route path="course/:courseId" element={<CourseDetail />} />
-              <Route path="cvs-access"      element={<JobLogDescription />} />
-
-              <Route path="lms-access" element={
-                <div style={{ padding: '40px', textAlign: 'center' }}>
-                  <h2>LMS Access Portal</h2><p>View courses and manage training</p>
-                </div>} />
+              {/* Old per-user pages → redirect to full LMS layout */}
+              <Route path="my-courses"      element={<Navigate to="/user/learning-management-system/all-courses" replace />} />
+              <Route path="all-courses"     element={<Navigate to="/user/learning-management-system/all-courses" replace />} />
+              <Route path="my-certificates" element={<Navigate to="/user/learning-management-system/certificates" replace />} />
+              <Route path="course/:courseId" element={<Navigate to="/user/learning-management-system" replace />} />
+              {/* Old JLR link → redirects to the standalone module */}
+              <Route path="cvs-access" element={<Navigate to="/user/job-log" replace />} />
+              {/* Old LMS-access stub → redirect to the real LMS */}
+              <Route path="lms-access" element={<Navigate to="/user/learning-management-system" replace />} />
               <Route path="portal-access" element={
                 <div style={{ padding: '40px', textAlign: 'center' }}>
                   <h2>PTIS Portal Access</h2><p>View inspection records</p>

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import ptisLogo from "/ptisLogo.png";
 
 const iconPaths = {
@@ -88,6 +88,14 @@ function LmsSidebar() {
     setOpenMenus((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  // Context-aware path prefixing: on /user/* routes, prefix every menu path with /user
+  const location = useLocation();
+  const isUserSide = location.pathname.startsWith("/user");
+  const adapt = (p) => (isUserSide && p?.startsWith("/learning-management-system")
+    ? `/user${p}`
+    : p);
+  const dashboardPath = isUserSide ? "/user/dashboard" : "/dashboard";
+
   return (
     <aside
       className={`lms-sidebar ${isExpanded ? "expanded" : "collapsed"}`}
@@ -96,7 +104,7 @@ function LmsSidebar() {
     >
       <div className="sidebar-brand">
         <div className="brand-logo" aria-hidden="true">
-         <Link to="/dashboard"><img src={ptisLogo} alt="PTIS" /></Link>
+         <Link to={dashboardPath}><img src={ptisLogo} alt="PTIS" /></Link>
         </div>
       </div>
       <nav className="sidebar-menu">
@@ -117,7 +125,7 @@ function LmsSidebar() {
                   {menu.children.map((child) => (
                     <li key={child.label}>
                       {child.path ? (
-                        <NavLink to={child.path}>{child.label}</NavLink>
+                        <NavLink to={adapt(child.path)}>{child.label}</NavLink>
                       ) : (
                         <span>{child.label}</span>
                       )}
@@ -127,7 +135,8 @@ function LmsSidebar() {
               </>
             ) : menu.path ? (
               <NavLink
-                to={menu.path}
+                to={adapt(menu.path)}
+                end={menu.id === "dashboard"}
                 className={({ isActive }) =>
                   `menu-trigger link ${isActive ? "active" : ""}`
                 }

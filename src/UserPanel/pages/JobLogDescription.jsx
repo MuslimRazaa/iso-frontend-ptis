@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { API_ENDPOINTS } from '../../config/api'
+import { API_ENDPOINTS, API_BASE_URL } from '../../config/api'
 
 /* ─────────────────────────────────────────────────────────────
    DB ↔ component field mapping helpers
@@ -40,6 +40,11 @@ const fromDB = row => ({
   submissionDate: row.submission_date ? row.submission_date.slice(0,10) : '',
   source:         row.source          || '',
   remark:         row.remark          || '',
+  // Inventory department fields
+  stockRequisition: row.stock_requisition || '',
+  goodsIssueNote:   row.goods_issue_note  || '',
+  consumption:      row.consumption       || '',
+  gatePass:         row.gate_pass         || '',
 })
 
 const toDB = data => ({
@@ -73,8 +78,12 @@ const toDB = data => ({
   accounts:        data.accounts       || null,
   it:              data.it             || null,
   submission_date: data.submissionDate || null,
-  source:          data.source         || null,
-  remark:          data.remark         || null,
+  source:            data.source           || null,
+  remark:            data.remark           || null,
+  stock_requisition: data.stockRequisition || null,
+  goods_issue_note:  data.goodsIssueNote   || null,
+  consumption:       data.consumption      || null,
+  gate_pass:         data.gatePass         || null,
 })
 
 /* ─────────────────────────────────────────────────────────────
@@ -209,7 +218,33 @@ const emptyEntry = {
   entryDate:'', vehicleUsed:'', days:'', calculatedDays:'', manPower:'',
   manHours:'', drivenKm:'', jmps:'', tra:'', equipCL:'', vLog:'', tbt:'',
   status:'', completionDate:'', rept:'', exp:'', iso:'', accounts:'', it:'',
-  submissionDate:'', source:'', remark:''
+  submissionDate:'', source:'', remark:'',
+  stockRequisition:'', goodsIssueNote:'', consumption:'', gatePass:''
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Field → JLR department mapping (used by permission system)
+───────────────────────────────────────────────────────────── */
+const FIELD_DEPT = {
+  // Operations
+  sNo:'operations', client:'operations', workOrder:'operations',
+  inspectorName:'operations', inspectorTeam:'operations', reference:'operations',
+  location:'operations', natureOfJob:'operations',
+  startDate:'operations', endDate:'operations', entryDate:'operations',
+  vehicleUsed:'operations', days:'operations', calculatedDays:'operations',
+  manPower:'operations', manHours:'operations', drivenKm:'operations',
+  jmps:'operations', status:'operations', completionDate:'operations',
+  source:'operations', remark:'operations',
+  // QHSE
+  tra:'qhse', equipCL:'qhse', vLog:'qhse', tbt:'qhse', iso:'qhse',
+  rept:'qhse', submissionDate:'qhse',
+  // Inventory
+  stockRequisition:'inventory', goodsIssueNote:'inventory',
+  consumption:'inventory', gatePass:'inventory',
+  // Accounts
+  exp:'accounts', accounts:'accounts',
+  // IT
+  it:'it',
 }
 
 const PAGE_SIZE = 100
@@ -231,6 +266,7 @@ const COL_GROUPS = [
   { label: 'Operational Metrics',  span: 5, color: '#f0fff8', textColor: '#1d814c', borderColor: '#c3ecd4' },
   { label: 'Safety Documentation', span: 5, color: '#fdf5ff', textColor: '#7c3aed', borderColor: '#ddb8f7' },
   { label: 'Status & Tracking',    span: 9, color: '#fff5f6', textColor: '#d7263d', borderColor: '#ffd1d8' },
+  { label: 'Inventory',            span: 4, color: '#fff9e6', textColor: '#a87800', borderColor: '#f4dd9d' },
   { label: 'Remark',               span: 1, color: '#f7f7f9', textColor: '#595966', borderColor: '#e0e0e6' },
   { label: 'Actions',              span: 1, color: '#f7f7f9', textColor: '#595966', borderColor: '#e0e0e6' },
 ]
@@ -298,13 +334,10 @@ function JobLogDescription() {
   */
   const isUser = location.pathname.startsWith('/user')
 
-  /* ── Theme tokens ───────────────────────────────────────────
-     light = white/red (JLR standalone + LMS)  |  dark = UserPanel
-  ──────────────────────────────────────────────────────────── */
-  const T = !isUser ? {
-    // LMS light theme
-    pageBg:        'transparent',
-    bannerBg:      'transparent',
+  /* ── Theme tokens (always white/red — admin & user side both) */
+  const T = {
+    pageBg:        '#ffffff',
+    bannerBg:      '#ffffff',
     bannerBorder:  '1px solid #e0e0e6',
     titleColor:    '#1f1f27',
     subtitleColor: '#7a7a8c',
@@ -312,7 +345,7 @@ function JobLogDescription() {
     statCardBg:    '#ffffff',
     statCardShadow:(accent) => `0 4px 18px ${accent}12`,
     statBorderFn:  (accent) => `1px solid ${accent}33`,
-    filtersBg:     'transparent',
+    filtersBg:     '#ffffff',
     filtersBorder: '1px solid #e0e0e6',
     inputBg:       '#ffffff',
     inputBorder:   '1px solid #e0e0e6',
@@ -321,26 +354,6 @@ function JobLogDescription() {
     searchIconColor: '#aaa',
     clearBtnBorder:  '1px solid #dcdce3',
     clearBtnColor:   '#2a2a32',
-  } : {
-    // UserPanel dark theme
-    pageBg:        'transparent',
-    bannerBg:      'linear-gradient(135deg, rgba(255,93,93,0.06) 0%, transparent 60%)',
-    bannerBorder:  '1px solid rgba(255,255,255,0.07)',
-    titleColor:    '#ffffff',
-    subtitleColor: 'rgba(255,255,255,0.55)',
-    eyebrowColor:  '#ff5d5d',
-    statCardBg:    'rgba(255,255,255,0.05)',
-    statCardShadow:(accent) => `0 4px 18px rgba(0,0,0,0.2)`,
-    statBorderFn:  (accent) => `1px solid rgba(255,255,255,0.1)`,
-    filtersBg:     'rgba(255,255,255,0.03)',
-    filtersBorder: '1px solid rgba(255,255,255,0.07)',
-    inputBg:       'rgba(255,255,255,0.08)',
-    inputBorder:   '1px solid rgba(255,255,255,0.15)',
-    inputColor:    '#ffffff',
-    inputPlaceholder: 'rgba(255,255,255,0.4)',
-    searchIconColor: 'rgba(255,255,255,0.4)',
-    clearBtnBorder:  '1px solid rgba(255,255,255,0.15)',
-    clearBtnColor:   'rgba(255,255,255,0.75)',
   }
 
   /* ── State ──────────────────────────────────────────────── */
@@ -350,6 +363,44 @@ function JobLogDescription() {
   const [importMsg, setImportMsg]       = useState(null)
   const [saving, setSaving]             = useState(false)
   const [csvMode, setCsvMode]           = useState('append') // 'replace' | 'append'
+  const [jlrPerms, setJlrPerms]         = useState(null)     // null = loading / unknown
+
+  /* ── Fetch current user's JLR permissions ───────────────────
+     - On admin routes (/job-log, /lms) → full access (no restrictions)
+     - On user routes (/user/*)         → load from backend by email
+  ──────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    if (!isUser) {
+      // Admin context — grant full access
+      setJlrPerms({ operations:true, qhse:true, inventory:true, accounts:true, it:true, full:true })
+      return
+    }
+    const email = localStorage.getItem('userEmail')
+    if (!email) {
+      // No login info — lock everything (read-only)
+      setJlrPerms({ operations:false, qhse:false, inventory:false, accounts:false, it:false, full:false })
+      return
+    }
+    fetch(`${API_BASE_URL}/api/employees/permissions/email/${encodeURIComponent(email)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(p => {
+        if (p?.jlr) setJlrPerms(p.jlr)
+        else setJlrPerms({ operations:false, qhse:false, inventory:false, accounts:false, it:false, full:false })
+      })
+      .catch(() => setJlrPerms({ operations:false, qhse:false, inventory:false, accounts:false, it:false, full:false }))
+  }, [isUser])
+
+  /* ── Permission checker — used by form inputs & action buttons */
+  const canEdit = (dept) => {
+    if (!jlrPerms) return false               // still loading → lock
+    if (jlrPerms.full) return true            // full access overrides
+    return !!jlrPerms[dept]
+  }
+  const canAccessAnyJlr = jlrPerms && (
+    jlrPerms.full || jlrPerms.operations || jlrPerms.qhse ||
+    jlrPerms.inventory || jlrPerms.accounts || jlrPerms.it
+  )
+  const isAdminContext = !isUser   // shorthand for "no permission restrictions apply"
   const [isModalOpen, setIsModalOpen]   = useState(false)
   const [modalMode, setModalMode]       = useState('add')
   const [modalState, setModalState]     = useState(emptyEntry)
@@ -443,7 +494,9 @@ function JobLogDescription() {
       jmps:f('jmps'), tra:f('tra'), equipCL:f('equipCL'), vLog:f('vLog'), tbt:f('tbt'),
       status:f('status'), completionDate:f('completionDate'), rept:f('rept'),
       exp:f('exp'), iso:f('iso'), accounts:f('accounts'), it:f('it'),
-      submissionDate:f('submissionDate'), source:f('source'), remark:f('remark')
+      submissionDate:f('submissionDate'), source:f('source'), remark:f('remark'),
+      stockRequisition:f('stockRequisition'), goodsIssueNote:f('goodsIssueNote'),
+      consumption:f('consumption'), gatePass:f('gatePass'),
     })
     setIsModalOpen(true)
   }
@@ -555,7 +608,7 @@ function JobLogDescription() {
     }}>
       <span style={{ fontSize:11, fontWeight:700, textTransform:'uppercase',
         letterSpacing:'0.12em', color: accent }}>{label}</span>
-      <span style={{ fontSize:28, fontWeight:800, color: !isUser ? accent : '#ffffff' }}>{value}</span>
+      <span style={{ fontSize:28, fontWeight:800, color: accent }}>{value}</span>
     </div>
   )
 
@@ -573,7 +626,9 @@ function JobLogDescription() {
   }
 
   return (
-    <div className="all-records-page job-log-page" style={{ background: T.pageBg }}>
+    <div className="all-records-page job-log-page" style={{
+      background: T.pageBg, minHeight: '100vh', color: T.titleColor
+    }}>
 
       {/* ══ BANNER ════════════════════════════════════════════ */}
       <div style={{
@@ -586,7 +641,7 @@ function JobLogDescription() {
           <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
             <span style={{
               width:4, height:22, borderRadius:4,
-              background: !isUser ? '#d7263d' : 'linear-gradient(180deg,#ff5d5d,#ff3b3b)',
+              background: '#d7263d',
               flexShrink:0
             }} />
             <span style={{
@@ -612,7 +667,8 @@ function JobLogDescription() {
             style={{ display:'none' }}
             onChange={handleCsvUpload}
           />
-          {/* CSV mode toggle */}
+          {/* CSV mode toggle — admin / full access only */}
+          {(isAdminContext || jlrPerms?.full) && (
           <div style={{
             display:'flex', borderRadius:12, overflow:'hidden',
             border:'1px solid #e0e0e6', fontSize:13, fontWeight:600,
@@ -634,6 +690,8 @@ function JobLogDescription() {
               🔄 Replace
             </button>
           </div>
+          )}
+          {(isAdminContext || jlrPerms?.full) && (
           <button
             type="button"
             className="ghost-btn"
@@ -643,7 +701,8 @@ function JobLogDescription() {
           >
             <span style={{ fontSize:16, lineHeight:1 }}>📂</span> Import CSV
           </button>
-          {entries.length > 0 && (
+          )}
+          {entries.length > 0 && (isAdminContext || jlrPerms?.full) && (
             <button
               type="button"
               onClick={handleDeleteAll}
@@ -661,10 +720,12 @@ function JobLogDescription() {
               <span style={{ fontSize:15, lineHeight:1 }}>🗑️</span> Delete All
             </button>
           )}
+          {canAccessAnyJlr && (
           <button type="button" className="primary-btn" onClick={openAddModal}
             style={{ display:'flex', alignItems:'center', gap:8 }}>
             <span style={{ fontSize:18, lineHeight:1 }}>＋</span> Add Entry
           </button>
+          )}
         </div>
       </div>
 
@@ -701,10 +762,10 @@ function JobLogDescription() {
         background: T.filtersBg,
         borderBottom: T.bannerBorder,
       }}>
-        <StatCard accent={!isUser ? '#595966' : 'rgba(255,255,255,0.7)'} label="📋 Total Jobs"     value={stats.total} />
+        <StatCard accent="#595966" label="📋 Total Jobs" value={stats.total} />
         <StatCard accent="#1d814c"  label="✓ Closed"       value={stats.closed} />
         <StatCard accent="#c87e1c"  label="◐ In Progress"  value={stats.inProgress} />
-        <StatCard accent={!isUser ? '#7a7a8c' : 'rgba(255,255,255,0.45)'} label="◌ Pending" value={stats.pending} />
+        <StatCard accent="#7a7a8c" label="◌ Pending" value={stats.pending} />
       </div>
 
       {/* ══ FILTERS ═══════════════════════════════════════════ */}
@@ -808,6 +869,10 @@ function JobLogDescription() {
                   <th>Accounts</th>
                   <th title="IT Department">I.T</th>
                   <th>Submission</th><th>Region</th>
+                  <th title="Stock Requisition">Stock Req</th>
+                  <th title="Goods Issue Note">GIN</th>
+                  <th>Consumption</th>
+                  <th title="Gate Pass">Gate Pass</th>
                   <th>Remark</th>
                   <th style={{ textAlign:'center' }}>Actions</th>
                 </tr>
@@ -815,7 +880,7 @@ function JobLogDescription() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={33} style={{ padding:'60px 32px', textAlign:'center' }}>
+                    <td colSpan={37} style={{ padding:'60px 32px', textAlign:'center' }}>
                       <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:12 }}>
                         <span style={{ fontSize:36 }}>⏳</span>
                         <span style={{ fontSize:15, fontWeight:600, color:'#7a7a8c' }}>Loading job log entries…</span>
@@ -824,7 +889,7 @@ function JobLogDescription() {
                   </tr>
                 ) : filteredEntries.length === 0 ? (
                   <tr>
-                    <td colSpan={33} style={{ padding:'60px 32px', textAlign:'center' }}>
+                    <td colSpan={37} style={{ padding:'60px 32px', textAlign:'center' }}>
                       <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:12 }}>
                         <span style={{ fontSize:44 }}>📋</span>
                         <span style={{ fontSize:16, fontWeight:700, color:'#1f1f27' }}>No job log entries found</span>
@@ -880,15 +945,25 @@ function JobLogDescription() {
                             background:'#f4f4f7', color:'#595966', fontSize:12, fontWeight:600 }}>
                             {rv(entry.source)}</span>
                         </td>
+                        <td className="all-records-cell-text" style={{ fontSize:12, color:'#a87800' }}>{rv(entry.stockRequisition)}</td>
+                        <td className="all-records-cell-text" style={{ fontSize:12, color:'#a87800' }}>{rv(entry.goodsIssueNote)}</td>
+                        <td className="all-records-cell-text" style={{ fontSize:12, color:'#a87800' }}>{rv(entry.consumption)}</td>
+                        <td className="all-records-cell-text" style={{ fontSize:12, color:'#a87800' }}>{rv(entry.gatePass)}</td>
                         <td className="all-records-cell-remarks" style={{ maxWidth:200, fontSize:13, color:'#595966' }}>
                           {rv(entry.remark)}
                         </td>
                         <td className="all-records-cell-actions" style={{ textAlign:'center' }}>
                           <div className="all-records-actions" style={{ justifyContent:'center' }}>
-                            <button type="button" className="action-btn edit small"
-                              onClick={() => openEditModal(entry)}>✏️ Edit</button>
-                            <button type="button" className="action-btn delete small"
-                              onClick={() => handleDelete(entry.id)}>🗑️ Delete</button>
+                            {canAccessAnyJlr ? (
+                              <button type="button" className="action-btn edit small"
+                                onClick={() => openEditModal(entry)}>✏️ Edit</button>
+                            ) : (
+                              <span style={{ fontSize:12, color:'#aaa' }}>View only</span>
+                            )}
+                            {(isAdminContext || jlrPerms?.full) && (
+                              <button type="button" className="action-btn delete small"
+                                onClick={() => handleDelete(entry.id)}>🗑️ Delete</button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -954,15 +1029,19 @@ function JobLogDescription() {
                     style={{ background:'#f4f4f7', color:'#aaa', cursor:'not-allowed' }} /></label>
                 <label><span>Entry Date *</span>
                   <input type="date" value={modalState.entryDate} required
+                    disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('entryDate', e.target.value)} /></label>
                 <label><span>Client *</span>
                   <input type="text" value={modalState.client} placeholder="e.g. OGDCL" required
+                    disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('client', e.target.value)} /></label>
                 <label><span>Work Order *</span>
                   <input type="text" value={modalState.workOrder} placeholder="WO-XXXX" required
+                    disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('workOrder', e.target.value)} /></label>
                 <label><span>Reference</span>
                   <input type="text" value={modalState.reference} placeholder="PTIS-REF-XXX"
+                    disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('reference', e.target.value)} /></label>
               </div>
 
@@ -970,9 +1049,11 @@ function JobLogDescription() {
               <div className="form-row">
                 <label><span>Inspector Name *</span>
                   <input type="text" value={modalState.inspectorName} placeholder="Full name" required
+                    disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('inspectorName', e.target.value)} /></label>
                 <label><span>Inspector Team</span>
                   <input type="text" value={modalState.inspectorTeam} placeholder="Name1, Name2, …"
+                    disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('inspectorTeam', e.target.value)} /></label>
               </div>
 
@@ -986,6 +1067,7 @@ function JobLogDescription() {
                     placeholder="Type to search or enter new…"
                     required
                     autoComplete="off"
+                    disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('location', e.target.value)}
                   />
                   <datalist id="jlr-locations-list">
@@ -994,15 +1076,19 @@ function JobLogDescription() {
                 </label>
                 <label><span>Nature of Job *</span>
                   <input type="text" value={modalState.natureOfJob} placeholder="Visual / NDT …" required
+                    disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('natureOfJob', e.target.value)} /></label>
                 <label><span>Job Start</span>
                   <input type="date" value={modalState.startDate}
+                    disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('startDate', e.target.value)} /></label>
                 <label><span>Job End</span>
                   <input type="date" value={modalState.endDate}
+                    disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('endDate', e.target.value)} /></label>
                 <label><span>Vehicle Plate No.</span>
                   <input type="text" value={modalState.vehicleUsed} placeholder="Hilux-12"
+                    disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('vehicleUsed', e.target.value)} /></label>
               </div>
 
@@ -1014,18 +1100,23 @@ function JobLogDescription() {
                     style={{ background:'#f4f4f7', color:'#aaa', cursor:'not-allowed' }} /></label>
                 <label><span>Calculated Days</span>
                   <input type="number" min="0" value={modalState.calculatedDays}
+                    disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('calculatedDays', e.target.value)} /></label>
                 <label><span>Man Power</span>
                   <input type="number" min="0" value={modalState.manPower} placeholder="0"
+                    disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('manPower', e.target.value)} /></label>
                 <label><span>Man Hrs</span>
                   <input type="number" min="0" value={modalState.manHours} placeholder="0"
+                    disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('manHours', e.target.value)} /></label>
                 <label><span>Driven Km</span>
                   <input type="number" min="0" value={modalState.drivenKm} placeholder="0"
+                    disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('drivenKm', e.target.value)} /></label>
                 <label><span>JMPs</span>
                   <input type="text" value={modalState.jmps} placeholder="Count / ref"
+                    disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('jmps', e.target.value)} /></label>
               </div>
 
@@ -1033,7 +1124,8 @@ function JobLogDescription() {
               <div className="form-row">
                 {[['tra','TRA'],['equipCL','Equip C/L'],['vLog','V. Log'],['tbt','TBT']].map(([f,l]) => (
                   <label key={f}><span>{l}</span>
-                    <select value={modalState[f]} onChange={e => handleModalChange(f, e.target.value)}>
+                    <select value={modalState[f]} disabled={!canEdit('qhse')}
+                      onChange={e => handleModalChange(f, e.target.value)}>
                       <option value="">— Select —</option>
                       <option value="Yes">Yes</option><option value="No">No</option>
                       <option value="Done">Done</option><option value="Completed">Completed</option>
@@ -1047,7 +1139,8 @@ function JobLogDescription() {
               <ModalSection icon="📌" title="Status & Tracking" />
               <div className="form-row">
                 <label><span>Status</span>
-                  <select value={modalState.status} onChange={e => handleModalChange('status', e.target.value)}>
+                  <select value={modalState.status} disabled={!canEdit('operations')}
+                    onChange={e => handleModalChange('status', e.target.value)}>
                     <option value="">— Select —</option>
                     <option value="In Progress">In Progress</option>
                     <option value="Closed">Closed</option>
@@ -1056,10 +1149,18 @@ function JobLogDescription() {
                   </select></label>
                 <label><span>Completion Date</span>
                   <input type="date" value={modalState.completionDate}
+                    disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('completionDate', e.target.value)} /></label>
-                {[['rept','REPT (Report)'],['exp','EXP (Expenses)'],['iso','ISO'],['accounts','Accounts'],['it','I.T']].map(([f,l]) => (
+                {[
+                  ['rept','REPT (Report)','qhse'],
+                  ['exp','EXP (Expenses)','accounts'],
+                  ['iso','ISO','qhse'],
+                  ['accounts','Accounts','accounts'],
+                  ['it','I.T','it'],
+                ].map(([f,l,dept]) => (
                   <label key={f}><span>{l}</span>
-                    <select value={modalState[f]} onChange={e => handleModalChange(f, e.target.value)}>
+                    <select value={modalState[f]} disabled={!canEdit(dept)}
+                      onChange={e => handleModalChange(f, e.target.value)}>
                       <option value="">— Select —</option>
                       <option value="Yes">Yes</option><option value="No">No</option>
                       <option value="Done">Done</option><option value="Pending">Pending</option>
@@ -1068,17 +1169,44 @@ function JobLogDescription() {
                 ))}
                 <label><span>Submission Date</span>
                   <input type="date" value={modalState.submissionDate}
+                    disabled={!canEdit('qhse')}
                     onChange={e => handleModalChange('submissionDate', e.target.value)} /></label>
                 <label><span>Region *</span>
                   <input type="text" value={modalState.source} required
                     placeholder="Islamabad / Karachi / Other"
+                    disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('source', e.target.value)} /></label>
+              </div>
+
+              <ModalSection icon="📦" title="Inventory" />
+              <div className="form-row">
+                <label><span>Stock Requisition</span>
+                  <input type="text" value={modalState.stockRequisition}
+                    placeholder="SR-XXXX or notes"
+                    disabled={!canEdit('inventory')}
+                    onChange={e => handleModalChange('stockRequisition', e.target.value)} /></label>
+                <label><span>Goods Issue Note (GIN)</span>
+                  <input type="text" value={modalState.goodsIssueNote}
+                    placeholder="GIN-XXXX"
+                    disabled={!canEdit('inventory')}
+                    onChange={e => handleModalChange('goodsIssueNote', e.target.value)} /></label>
+                <label><span>Consumption</span>
+                  <input type="text" value={modalState.consumption}
+                    placeholder="Items consumed"
+                    disabled={!canEdit('inventory')}
+                    onChange={e => handleModalChange('consumption', e.target.value)} /></label>
+                <label><span>Gate Pass</span>
+                  <input type="text" value={modalState.gatePass}
+                    placeholder="GP-XXXX"
+                    disabled={!canEdit('inventory')}
+                    onChange={e => handleModalChange('gatePass', e.target.value)} /></label>
               </div>
 
               <label>
                 <span style={{ fontSize:13, fontWeight:700, color:'#32323c' }}>💬 Remark</span>
                 <textarea rows="3" value={modalState.remark}
                   placeholder="Any notes or observations…"
+                  disabled={!canEdit('operations')}
                   onChange={e => handleModalChange('remark', e.target.value)} />
               </label>
 

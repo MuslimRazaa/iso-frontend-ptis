@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { API_ENDPOINTS, API_BASE_URL } from "../../config/api";
+import useLmsBase from "../useLmsBase";
 
 const defaultStatHighlights = [
   { label: "Active Courses", value: "18", helper: "6 expiring this month", tone: "accent" },
@@ -46,6 +47,7 @@ const quickActions = [
 
 function LmsHome() {
   const navigate = useNavigate();
+  const lmsBase = useLmsBase();
   const [spotlightCourses, setSpotlightCourses] = useState([]);
   const [statHighlights, setStatHighlights] = useState(defaultStatHighlights);
   const [loadingCourses, setLoadingCourses] = useState(true);
@@ -112,7 +114,7 @@ function LmsHome() {
   }, []);
 
   const handleCardClick = (courseId) => {
-    navigate(`/learning-management-system/course/${courseId}`);
+    navigate(`${lmsBase}/course/${courseId}`);
   };
 
   return (
@@ -126,7 +128,7 @@ function LmsHome() {
             new tracks when capacity opens and keep compliance programs ahead of audits.
           </p>
           <div className="hero-actions">
-            <Link to="/learning-management-system/add-course" className="btn btn-primary" style={{textDecoration:"none"}}>
+            <Link to={`${lmsBase}/add-course`} className="btn btn-primary" style={{textDecoration:"none"}}>
               Launch New Course
             </Link>
             <button type="button" className="btn btn-ghost">
@@ -231,7 +233,7 @@ function LmsHome() {
             <p className="eyebrow">Spotlight</p>
             <h2>Programs to amplify</h2>
           </div>
-          <Link to="/learning-management-system/all-courses">View catalog</Link>
+          <Link to={`${lmsBase}/all-courses`}>View catalog</Link>
         </header>
         <div className="spotlight-cards">
           {loadingCourses ? (

@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import ptisLogo from '/ptisLogo.png'
 
 const iconPaths = {
@@ -18,6 +18,13 @@ const SidebarIcon = ({ id }) => (
 
 function JLRSidebar() {
   const [isExpanded, setIsExpanded] = useState(false)
+  const location = useLocation()
+
+  // Detect whether this layout is mounted under /user/* (user side) or /job-log/* (admin)
+  const isUserSide      = location.pathname.startsWith('/user')
+  const homePath        = isUserSide ? '/user/job-log'         : '/job-log'
+  const entriesPath     = isUserSide ? '/user/job-log/entries' : '/job-log/entries'
+  const dashboardPath   = isUserSide ? '/user/dashboard'       : '/dashboard'
 
   return (
     <aside
@@ -28,7 +35,7 @@ function JLRSidebar() {
       {/* Brand / Logo */}
       <div className="sidebar-brand">
         <div className="brand-logo" aria-hidden="true">
-          <Link to="/dashboard">
+          <Link to={dashboardPath}>
             <img src={ptisLogo} alt="PTIS" />
           </Link>
         </div>
@@ -73,7 +80,7 @@ function JLRSidebar() {
         {/* Overview */}
         <div className="menu-group">
           <NavLink
-            to="/job-log"
+            to={homePath}
             end
             className={({ isActive }) => `menu-trigger link${isActive ? ' active' : ''}`}
           >
@@ -86,7 +93,7 @@ function JLRSidebar() {
         {/* Job Entries */}
         <div className="menu-group">
           <NavLink
-            to="/job-log/entries"
+            to={entriesPath}
             className={({ isActive }) => `menu-trigger link${isActive ? ' active' : ''}`}
           >
             <SidebarIcon id="entries" />
@@ -103,7 +110,7 @@ function JLRSidebar() {
         borderTop: '1px solid #e6e6eb',
       }}>
         <NavLink
-          to="/dashboard"
+          to={dashboardPath}
           className="menu-trigger link"
           style={{ opacity: 0.65 }}
         >

@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import { API_ENDPOINTS } from '../../config/api'
+import useLmsBase from '../useLmsBase'
 
 function AddEmployee() {
   const navigate = useNavigate()
+  const lmsBase = useLmsBase()
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState({ type: '', text: '' })
@@ -158,7 +160,7 @@ function AddEmployee() {
       
       // Redirect to All Employees page after 1.5 seconds
       setTimeout(() => {
-        navigate('/learning-management-system/all-employees')
+        navigate(`${lmsBase}/all-employees`)
       }, 1500)
 
     } catch (error) {

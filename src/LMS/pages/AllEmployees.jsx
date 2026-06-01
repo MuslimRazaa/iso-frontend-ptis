@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import axios from 'axios'
 import { API_ENDPOINTS } from '../../config/api'
+import useLmsBase from '../useLmsBase'
 
 function AllEmployees() {
+  const lmsBase = useLmsBase()
   const [employees, setEmployees] = useState([])
   const [departments, setDepartments] = useState([])
   const [locations, setLocations] = useState([])
@@ -126,7 +128,7 @@ function AllEmployees() {
           <button className="ghost-btn" onClick={fetchEmployees}>
             Refresh
           </button>
-          <Link to="/learning-management-system/add-employee" className="primary-btn">
+          <Link to={`${lmsBase}/add-employee`} className="primary-btn">
             + Add Employee
           </Link>
         </div>
