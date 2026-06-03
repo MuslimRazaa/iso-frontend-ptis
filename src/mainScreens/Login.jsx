@@ -87,7 +87,8 @@ function Login() {
             lms: false,
             portal: false,
             cvs: false,
-            reports: false
+            reports: false,
+            testing: false
           }));
         }
 

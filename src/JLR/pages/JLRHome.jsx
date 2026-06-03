@@ -1,67 +1,80 @@
-import React from 'react'
-import { Link } from 'react-router-dom'
+import React, { useEffect, useMemo, useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
+import { BsCalendar2Date, BsClipboardData, BsCheckCircle, BsHourglassSplit, BsClock } from "react-icons/bs"
+import { LuUserRoundCheck } from "react-icons/lu"
+import { IoStatsChartSharp, IoMapOutline } from "react-icons/io5"
+import { MdOutlineHealthAndSafety } from "react-icons/md"
+import { TiPinOutline } from "react-icons/ti"
+import { API_ENDPOINTS } from '../../config/api'
 
-/* ── Static overview stats (will come from API in future) ── */
-const STATS = [
-  { label: 'Total Jobs',   value: '02', icon: '📋', accent: '#2f74bf', bg: '#f0f7ff', border: '#d4e6f7' },
-  { label: 'Closed',       value: '01', icon: '✓',  accent: '#1d814c', bg: '#e8fff3', border: '#c3ecd4' },
-  { label: 'In Progress',  value: '01', icon: '◐',  accent: '#c87e1c', bg: '#fff8ef', border: '#ffe4c4' },
-  { label: 'Pending',      value: '00', icon: '◌',  accent: '#7a7a8c', bg: '#f4f4f7', border: '#dcdce3' },
+/* ── Consistent, professional palette (brand-led, no mixed colors) ── */
+const BRAND   = '#d7263d'
+const INK     = '#14141c'
+const MUTED   = '#7a7a8c'
+const SUBTLE  = '#9a9aaa'
+const BORDER  = '#ececf0'
+const TILE_BG = '#fdf2f3'   // soft brand tint used for every icon tile
+
+/* ── Stat cards (values filled dynamically from the Job Log API) ── */
+const STAT_META = [
+  { key: 'total',      label: 'Total Jobs',  Icon: BsClipboardData },
+  { key: 'closed',     label: 'Closed',      Icon: BsCheckCircle },
+  { key: 'inProgress', label: 'In Progress', Icon: BsHourglassSplit },
+  { key: 'pending',    label: 'Pending',     Icon: BsClock },
 ]
 
 /* ── Module capability cards ─────────────────────────────── */
 const FEATURES = [
-  {
-    icon: '🗓️',
-    title: 'Job Scheduling',
-    desc: 'Track start / end dates, entry dates, and submission timelines for every inspection job.',
-    accent: '#2f74bf',
-    bg: '#f0f7ff',
-    border: '#d4e6f7',
-  },
-  {
-    icon: '👷',
-    title: 'Inspector Management',
-    desc: 'Record inspector names, team compositions, and vehicle assignments per deployment.',
-    accent: '#7c3aed',
-    bg: '#fdf5ff',
-    border: '#ddb8f7',
-  },
-  {
-    icon: '📊',
-    title: 'Operational Metrics',
-    desc: 'Monitor man-power, man-hours, driven KMs, and calculated days per engagement.',
-    accent: '#1d814c',
-    bg: '#f0fff8',
-    border: '#c3ecd4',
-  },
-  {
-    icon: '🛡️',
-    title: 'Safety Documentation',
-    desc: 'Track JMPs, TRA, Equipment Checklists, Vehicle Logs, and TBT completion status.',
-    accent: '#c87e1c',
-    bg: '#fff8ef',
-    border: '#ffe4c4',
-  },
-  {
-    icon: '📌',
-    title: 'Multi-Dept Sign-off',
-    desc: 'Monitor REPT, EXP, ISO, Accounts, and I.T sign-off for end-to-end job closure.',
-    accent: '#d7263d',
-    bg: '#fff5f6',
-    border: '#ffd1d8',
-  },
-  {
-    icon: '🗺️',
-    title: 'Regional Coverage',
-    desc: 'Filter and report by region — Islamabad, Karachi, and other field office locations.',
-    accent: '#595966',
-    bg: '#f7f7f9',
-    border: '#e0e0e6',
-  },
+  { Icon: BsCalendar2Date,         title: 'Job Scheduling',      desc: 'Track start / end dates, entry dates, and submission timelines for every inspection job.' },
+  { Icon: LuUserRoundCheck,        title: 'Inspector Management', desc: 'Record inspector names, team compositions, and vehicle assignments per deployment.' },
+  { Icon: IoStatsChartSharp,       title: 'Operational Metrics',  desc: 'Monitor man-power, man-hours, driven KMs, and calculated days per engagement.' },
+  { Icon: MdOutlineHealthAndSafety,title: 'Safety Documentation', desc: 'Track JMPs, TRA, Equipment Checklists, Vehicle Logs, and TBT completion status.' },
+  { Icon: TiPinOutline,            title: 'Multi-Dept Sign-off',  desc: 'Monitor REPT, EXP, ISO, Accounts, and I.T sign-off for end-to-end job closure.' },
 ]
 
+const fmt = (n) => String(n ?? 0).padStart(2, '0')
+
 function JLRHome() {
+  const location = useLocation()
+  const isUser = location?.pathname === '/user/job-log'
+
+  // Keep every link inside the correct space so a user is never sent to admin.
+  const base = isUser ? '/user/job-log' : '/job-log'
+
+  const [entries, setEntries] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    fetch(API_ENDPOINTS.JOB_LOG)
+      .then(res => (res.ok ? res.json() : null))
+      .then(json => {
+        // API may return a bare array or { data: [...] }
+        const rows = json?.data ?? json
+        if (active) setEntries(Array.isArray(rows) ? rows : [])
+      })
+      .catch(() => { if (active) setEntries([]) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [])
+
+  // Counts derived live from the Job Log entries
+  const counts = useMemo(() => {
+    const norm = (s) => (s || '').toString().toLowerCase()
+    return {
+      total:      entries.length,
+      closed:     entries.filter(e => norm(e.status) === 'closed').length,
+      inProgress: entries.filter(e => norm(e.status) === 'in progress').length,
+      pending:    entries.filter(e => ['pending', ''].includes(norm(e.status))).length,
+    }
+  }, [entries])
+
+  const heroPills = [
+    { label: 'Total Entries', value: counts.total },
+    { label: 'Jobs Closed',   value: counts.closed },
+    { label: 'In Progress',   value: counts.inProgress },
+  ]
+
   return (
     <div style={{
       padding: 'clamp(24px, 4vw, 52px) clamp(24px, 5vw, 60px)',
@@ -72,8 +85,8 @@ function JLRHome() {
 
       {/* ══ HERO ════════════════════════════════════════════ */}
       <div style={{
-        background: 'linear-gradient(135deg, #fff5f6 0%, #ffffff 55%, #fffaf0 100%)',
-        border: '1px solid #ffe4e8',
+        background: 'linear-gradient(135deg, #fff5f6 0%, #ffffff 60%)',
+        border: `1px solid ${BORDER}`,
         borderRadius: 24,
         padding: 'clamp(28px, 4vw, 48px)',
         display: 'flex',
@@ -88,7 +101,7 @@ function JLRHome() {
         {/* Top accent bar */}
         <div style={{
           position: 'absolute', top: 0, left: 0, right: 0, height: 4,
-          background: 'linear-gradient(90deg, #d7263d 0%, #ff6b6b 60%, #ffba4c 100%)',
+          background: BRAND,
           borderRadius: '24px 24px 0 0',
         }} />
         {/* Background decoration */}
@@ -104,7 +117,7 @@ function JLRHome() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
             <span style={{
               fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.16em',
-              color: '#d7263d', padding: '3px 12px', borderRadius: 999,
+              color: BRAND, padding: '3px 12px', borderRadius: 999,
               background: 'rgba(215,38,61,0.08)', border: '1px solid rgba(215,38,61,0.18)',
             }}>
               Job Log Description
@@ -113,10 +126,10 @@ function JLRHome() {
           <h1 style={{
             margin: '0 0 14px',
             fontSize: 'clamp(26px, 3vw, 38px)',
-            fontWeight: 800, color: '#14141c', lineHeight: 1.2,
+            fontWeight: 800, color: INK, lineHeight: 1.2,
           }}>
             Inspection Activity<br />
-            <span style={{ color: '#d7263d' }}>Tracker</span>
+            <span style={{ color: BRAND }}>Tracker</span>
           </h1>
           <p style={{
             margin: '0 0 32px', fontSize: 15, color: '#595966',
@@ -127,15 +140,16 @@ function JLRHome() {
             from one unified workspace.
           </p>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <Link to="/job-log/entries" style={{ textDecoration: 'none' }}>
+            <Link to={`${base}/entries`} style={{ textDecoration: 'none' }}>
               <button className="primary-btn"
                 style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15 }}>
-                <span>📋</span> Open Job Log
+                <BsClipboardData /> Open Job Log
               </button>
             </Link>
-            <Link to="/dashboard" style={{ textDecoration: 'none' }}>
+            {/* User stays in the user space; admin goes to the admin dashboard */}
+            <Link to={isUser ? '/user/dashboard' : '/dashboard'} style={{ textDecoration: 'none' }}>
               <button className="ghost-btn" style={{ fontSize: 14 }}>
-                ← Dashboard
+                ← {isUser ? 'My Dashboard' : 'Dashboard'}
               </button>
             </Link>
           </div>
@@ -146,25 +160,23 @@ function JLRHome() {
           display: 'flex', flexDirection: 'column', gap: 10,
           flex: '0 0 auto', position: 'relative',
         }}>
-          {[
-            { label: 'Total Entries', value: '02', color: '#2f74bf', bg: '#f0f7ff' },
-            { label: 'Jobs Closed',   value: '01', color: '#1d814c', bg: '#e8fff3' },
-            { label: 'In Progress',   value: '01', color: '#c87e1c', bg: '#fff8ef' },
-          ].map(s => (
+          {heroPills.map(s => (
             <div key={s.label} style={{
               display: 'flex', alignItems: 'center', gap: 14,
               padding: '12px 20px', borderRadius: 14,
-              background: '#ffffff', border: '1px solid #ececf0',
+              background: '#ffffff', border: `1px solid ${BORDER}`,
               boxShadow: '0 2px 12px rgba(0,0,0,0.05)',
               minWidth: 200,
             }}>
               <div style={{
                 width: 10, height: 10, borderRadius: '50%',
-                background: s.color, flexShrink: 0,
-                boxShadow: `0 0 0 3px ${s.bg}`,
+                background: BRAND, flexShrink: 0,
+                boxShadow: '0 0 0 3px rgba(215,38,61,0.12)',
               }} />
-              <span style={{ fontSize: 13, color: '#595966', flex: 1 }}>{s.label}</span>
-              <span style={{ fontSize: 22, fontWeight: 800, color: s.color }}>{s.value}</span>
+              <span style={{ fontSize: 13, color: MUTED, flex: 1 }}>{s.label}</span>
+              <span style={{ fontSize: 22, fontWeight: 800, color: INK }}>
+                {loading ? '—' : fmt(s.value)}
+              </span>
             </div>
           ))}
         </div>
@@ -174,35 +186,42 @@ function JLRHome() {
       <div>
         <p style={{
           margin: '0 0 16px', fontSize: 11, fontWeight: 700,
-          textTransform: 'uppercase', letterSpacing: '0.15em', color: '#9a9aaa',
+          textTransform: 'uppercase', letterSpacing: '0.15em', color: SUBTLE,
         }}>Quick Stats</p>
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
           gap: 16,
         }}>
-          {STATS.map(s => (
-            <div key={s.label} style={{
-              background: s.bg, border: `1px solid ${s.border}`,
+          {STAT_META.map(({ key, label, Icon }) => (
+            <div key={key} style={{
+              background: '#ffffff', border: `1px solid ${BORDER}`,
               borderRadius: 18, padding: '22px 24px',
               display: 'flex', alignItems: 'center', gap: 18,
               boxShadow: '0 2px 12px rgba(0,0,0,0.04)',
               transition: 'transform 0.2s, box-shadow 0.2s',
               cursor: 'default',
             }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = `0 8px 24px rgba(0,0,0,0.09)` }}
-            onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.04)' }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.09)' }}
+              onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.04)' }}
             >
-              <span style={{ fontSize: 30 }}>{s.icon}</span>
+              <div style={{
+                width: 48, height: 48, borderRadius: 13, flexShrink: 0,
+                background: TILE_BG, color: BRAND,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 22,
+              }}>
+                <Icon />
+              </div>
               <div>
-                <div style={{ fontSize: 30, fontWeight: 800, color: s.accent, lineHeight: 1 }}>
-                  {s.value}
+                <div style={{ fontSize: 30, fontWeight: 800, color: INK, lineHeight: 1 }}>
+                  {loading ? '—' : fmt(counts[key])}
                 </div>
                 <div style={{
-                  fontSize: 11, fontWeight: 700, color: s.accent, marginTop: 5,
+                  fontSize: 11, fontWeight: 700, color: MUTED, marginTop: 5,
                   textTransform: 'uppercase', letterSpacing: '0.1em',
                 }}>
-                  {s.label}
+                  {label}
                 </div>
               </div>
             </div>
@@ -215,9 +234,9 @@ function JLRHome() {
         <div style={{ marginBottom: 20 }}>
           <p style={{
             margin: '0 0 6px', fontSize: 11, fontWeight: 700,
-            textTransform: 'uppercase', letterSpacing: '0.15em', color: '#9a9aaa',
+            textTransform: 'uppercase', letterSpacing: '0.15em', color: SUBTLE,
           }}>Module Capabilities</p>
-          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: '#14141c' }}>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: INK }}>
             What JLR Tracks
           </h2>
         </div>
@@ -226,38 +245,38 @@ function JLRHome() {
           gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))',
           gap: 16,
         }}>
-          {FEATURES.map(f => (
-            <div key={f.title} style={{
+          {FEATURES.map(({ Icon, title, desc }) => (
+            <div key={title} style={{
               background: '#ffffff',
-              border: '1px solid #ececf0',
+              border: `1px solid ${BORDER}`,
               borderRadius: 18,
               padding: '24px 26px',
               transition: 'all 0.22s ease',
               boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
               cursor: 'default',
             }}
-            onMouseEnter={e => {
-              e.currentTarget.style.borderColor = f.border
-              e.currentTarget.style.boxShadow = `0 10px 30px rgba(0,0,0,0.09)`
-              e.currentTarget.style.transform = 'translateY(-3px)'
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.borderColor = '#ececf0'
-              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'
-              e.currentTarget.style.transform = ''
-            }}
+              onMouseEnter={e => {
+                e.currentTarget.style.borderColor = 'rgba(215,38,61,0.35)'
+                e.currentTarget.style.boxShadow = '0 10px 30px rgba(0,0,0,0.09)'
+                e.currentTarget.style.transform = 'translateY(-3px)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.borderColor = BORDER
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'
+                e.currentTarget.style.transform = ''
+              }}
             >
               <div style={{
                 width: 46, height: 46, borderRadius: 13,
-                background: f.bg, border: `1px solid ${f.border}`,
+                background: TILE_BG, color: BRAND,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 22, marginBottom: 16,
-              }}>{f.icon}</div>
-              <h3 style={{ margin: '0 0 8px', fontSize: 15, fontWeight: 700, color: '#14141c' }}>
-                {f.title}
+              }}><Icon /></div>
+              <h3 style={{ margin: '0 0 8px', fontSize: 15, fontWeight: 700, color: INK }}>
+                {title}
               </h3>
-              <p style={{ margin: 0, fontSize: 13, color: '#7a7a8c', lineHeight: 1.65 }}>
-                {f.desc}
+              <p style={{ margin: 0, fontSize: 13, color: MUTED, lineHeight: 1.65 }}>
+                {desc}
               </p>
             </div>
           ))}
@@ -266,7 +285,7 @@ function JLRHome() {
 
       {/* ══ CTA STRIP ════════════════════════════════════════ */}
       <div style={{
-        background: 'linear-gradient(135deg, #d7263d 0%, #e8334a 50%, #ff5252 100%)',
+        background: BRAND,
         borderRadius: 20,
         padding: 'clamp(24px, 3vw, 36px) clamp(28px, 4vw, 48px)',
         display: 'flex',
@@ -278,25 +297,28 @@ function JLRHome() {
         position: 'relative',
         overflow: 'hidden',
       }}>
-        {/* Decoration circles */}
-        <div style={{ position:'absolute', right:-30, top:-30, width:180, height:180,
-          borderRadius:'50%', background:'rgba(255,255,255,0.07)', pointerEvents:'none' }} />
-        <div style={{ position:'absolute', right:60, bottom:-40, width:120, height:120,
-          borderRadius:'50%', background:'rgba(255,255,255,0.05)', pointerEvents:'none' }} />
+        <div style={{
+          position: 'absolute', right: -30, top: -30, width: 180, height: 180,
+          borderRadius: '50%', background: 'rgba(255,255,255,0.07)', pointerEvents: 'none'
+        }} />
+        <div style={{
+          position: 'absolute', right: 60, bottom: -40, width: 120, height: 120,
+          borderRadius: '50%', background: 'rgba(255,255,255,0.05)', pointerEvents: 'none'
+        }} />
 
         <div style={{ position: 'relative' }}>
           <h3 style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 800, color: '#fff' }}>
             Ready to log a new inspection job?
           </h3>
-          <p style={{ margin: 0, fontSize: 14, color: 'rgba(255,255,255,0.8)' }}>
+          <p style={{ margin: 0, fontSize: 14, color: 'rgba(255,255,255,0.85)' }}>
             Open the Job Log, add an entry, and track it through to full closure.
           </p>
         </div>
-        <Link to="/job-log/entries" style={{ textDecoration: 'none', position: 'relative' }}>
+        <Link to={`${base}/entries`} style={{ textDecoration: 'none', position: 'relative' }}>
           <button style={{
             padding: '13px 30px',
             background: '#ffffff',
-            color: '#d7263d',
+            color: BRAND,
             border: 'none',
             borderRadius: 999,
             fontWeight: 800,
@@ -309,16 +331,16 @@ function JLRHome() {
             whiteSpace: 'nowrap',
             boxShadow: '0 4px 20px rgba(0,0,0,0.18)',
           }}
-          onMouseEnter={e => {
-            e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)'
-            e.currentTarget.style.boxShadow = '0 10px 30px rgba(0,0,0,0.22)'
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.transform = ''
-            e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.18)'
-          }}
+            onMouseEnter={e => {
+              e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)'
+              e.currentTarget.style.boxShadow = '0 10px 30px rgba(0,0,0,0.22)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = ''
+              e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.18)'
+            }}
           >
-            📋 Open Job Log →
+            <BsClipboardData /> Open Job Log →
           </button>
         </Link>
       </div>

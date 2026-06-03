@@ -26,6 +26,15 @@ const dashboardTiles = [
     metric: "87% trainings completed",
   },
   {
+    id: "testing",
+    title: "Testing & Certification",
+    link: "/testing",
+    description: "Conduct standard-based tests and issue certificates.",
+    status: "online",
+    statusLabel: "Live",
+    metric: "Assessment portal",
+  },
+  {
     id: "cv-gen",
     title: "Job Log Description",
     link: "/job-log",

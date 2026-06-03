@@ -36,6 +36,17 @@ import UnprocessedRecords from './Portal/pages/UnprocessedRecords'
 import JLRLayout from './JLR/JLRLayout'
 import JLRHome from './JLR/pages/JLRHome'
 
+// Testing Module (standalone, integrated from ptis-lms)
+import TestingModule from './Testing/TestingModule'
+import { ThemeProvider as TestingThemeProvider } from './Testing/contexts/ThemeContext'
+
+// Wraps the testing module in its own ThemeProvider so it can mount as a route.
+const TestingModulePage = () => (
+  <TestingThemeProvider>
+    <TestingModule />
+  </TestingThemeProvider>
+)
+
 // ============================================
 // USER MODULES IMPORTS
 // ============================================
@@ -91,9 +102,7 @@ function App() {
               <Route path="add-employee"        element={<AddEmployee />} />
               <Route path="all-employees"       element={<AllEmployees />} />
               <Route path="set-standards"       element={<SetStandards />} />
-              <Route path="question-bank"       element={<QuestionBank defaultTab="add" />} />
-              <Route path="question-bank/view-all" element={<QuestionBank defaultTab="view" />} />
-              <Route path="certificates"        element={<Certificates />} />
+              {/* Question Bank & Certificates moved to the dedicated Testing module */}
               <Route path="course/:courseId"    element={<CourseDetail />} />
             </Route>
 
@@ -106,6 +115,12 @@ function App() {
               <Route path="all-records"          element={<AllRecords />} />
               <Route path="unprocessed-records"  element={<UnprocessedRecords />} />
             </Route>
+
+            {/* Admin — Testing Module (standalone, integrated from ptis-lms) */}
+            <Route path="/testing" element={<TestingModulePage />} />
+
+            {/* User — Testing Module (same module, host auth decides role) */}
+            <Route path="/user/testing" element={<TestingModulePage />} />
 
             {/* Admin — Job Log Description (standalone module) */}
             <Route path="/job-log/*" element={<JLRLayout />}>
@@ -129,9 +144,7 @@ function App() {
               <Route path="add-employee"        element={<AddEmployee />} />
               <Route path="all-employees"       element={<AllEmployees />} />
               <Route path="set-standards"       element={<SetStandards />} />
-              <Route path="question-bank"       element={<QuestionBank defaultTab="add" />} />
-              <Route path="question-bank/view-all" element={<QuestionBank defaultTab="view" />} />
-              <Route path="certificates"        element={<Certificates />} />
+              {/* Question Bank & Certificates moved to the dedicated Testing module */}
               <Route path="course/:courseId"    element={<CourseDetail />} />
             </Route>
 

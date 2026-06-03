@@ -74,10 +74,11 @@ const UserSidebar = () => {
           {navItem('/user/dashboard', 'dashboard', 'Dashboard')}
         </div>
 
-        {(permissions.lms || permissions.portal || permissions.cvs || permissions.reports) && (
+        {(permissions.lms || permissions.portal || permissions.cvs || permissions.reports || permissions.testing) && (
           <div className="user-nav-section">
             <span className="user-nav-section-title">MODULES</span>
             {permissions.lms     && navItem('/user/learning-management-system', 'courses', 'LMS')}
+            {permissions.testing && navItem('/user/testing', 'cert', 'Testing')}
             {permissions.portal  && navItem('/user/portal',  'portal', 'PTIS Portal')}
             {permissions.cvs     && navItem('/user/job-log', 'cv',     'Job Log')}
             {permissions.reports && navItem('/user/reports', 'reports','Reports')}

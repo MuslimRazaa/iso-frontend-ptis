@@ -9,6 +9,7 @@ const ManageUserAccess = () => {
     portal: false,
     cvs: false,
     reports: false,
+    testing: false,
     // JLR (Job Log) department-level access
     jlr_operations: false,
     jlr_qhse: false,
@@ -45,6 +46,7 @@ const ManageUserAccess = () => {
       portal: employee.portal_access === 1,
       cvs: employee.cvs_access === 1,
       reports: employee.reports_access === 1,
+      testing: employee.testing_access === 1,
       jlr_operations: employee.jlr_operations_access === 1,
       jlr_qhse:       employee.jlr_qhse_access       === 1,
       jlr_inventory:  employee.jlr_inventory_access  === 1,
@@ -70,6 +72,7 @@ const ManageUserAccess = () => {
           portal_access: permissions.portal,
           cvs_access: permissions.cvs,
           reports_access: permissions.reports,
+          testing_access: permissions.testing,
           jlr_operations_access: permissions.jlr_operations,
           jlr_qhse_access:       permissions.jlr_qhse,
           jlr_inventory_access:  permissions.jlr_inventory,
@@ -142,6 +145,7 @@ const ManageUserAccess = () => {
               if (employee.portal_access === 1) assignedModules.push('Portal');
               if (employee.cvs_access === 1) assignedModules.push('CVs');
               if (employee.reports_access === 1) assignedModules.push('Reports');
+              if (employee.testing_access === 1) assignedModules.push('Testing');
               if (employee.jlr_full_access === 1) {
                 assignedModules.push('JLR: Full');
               } else {
@@ -281,6 +285,24 @@ const ManageUserAccess = () => {
                       type="checkbox"
                       checked={permissions.reports}
                       onChange={() => togglePermission('reports')}
+                    />
+                    <span className="toggle-slider"></span>
+                  </label>
+                </div>
+
+                <div className="permission-item">
+                  <div className="permission-info">
+                    <div className="permission-icon" style={{ background: 'linear-gradient(135deg, #fde2e2 0%, #f8b4b4 100%)', border: '1px solid #f29a9a' }}>🧪</div>
+                    <div>
+                      <strong>Testing & Certification</strong>
+                      <p>Access to take assigned standard tests and view certificates</p>
+                    </div>
+                  </div>
+                  <label className="toggle-switch">
+                    <input
+                      type="checkbox"
+                      checked={permissions.testing}
+                      onChange={() => togglePermission('testing')}
                     />
                     <span className="toggle-slider"></span>
                   </label>

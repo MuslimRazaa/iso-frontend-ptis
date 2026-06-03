@@ -44,27 +44,7 @@ const menuConfig = [
       { label: "All Employees", path: "/learning-management-system/all-employees" },
     ],
   },
-  {
-    id: "questions",
-    label: "Question Bank",
-    children: [
-      { label: "Add Questions", path: "/learning-management-system/question-bank" },
-      { label: "View All Questions", path: "/learning-management-system/question-bank/view-all" },
-    ],
-  },
-  // {
-  //   id: "assesments",
-  //   label: "Assessments",
-  //   children: [
-  //     { label: "Add Test", path: null },
-  //     { label: "View All Tests", path: null },
-  //   ],
-  // },
-  {
-    id: "certificate",
-    label: "Certificates",
-    path: "/learning-management-system/certificates",
-  },
+  // Question Bank & Certificates moved to the dedicated Testing module.
 ];
 
 const SidebarIcon = ({ id }) => (
