@@ -1,7 +1,24 @@
 // API Configuration
-// export const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://iso-server.ptis.co';
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-// export const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://ptis-erp-backend.onrender.com';
+//
+// The base URL is resolved at runtime so the SAME build works in both places:
+//   - local development (served from localhost) -> talks to the local backend
+//   - the deployed/live site (any other host)   -> talks to the public backend
+//
+// This matters for uploaded files (PPT, video, thumbnails): on the live site the
+// URL must be PUBLIC so the browser — and external viewers like the Microsoft
+// Office Online viewer — can actually fetch them. A localhost URL is unreachable
+// from those services, which is why PPTs were downloading instead of opening.
+//
+// You can still override everything by setting VITE_API_URL at build time.
+const LOCAL_API = 'http://localhost:5000';
+const LIVE_API = 'https://iso-server.ptis.co';
+
+const isLocalHost =
+  typeof window !== 'undefined' &&
+  /^(localhost|127\.0\.0\.1|0\.0\.0\.0|::1)$/.test(window.location.hostname);
+
+export const API_BASE_URL =
+  import.meta.env.VITE_API_URL || (isLocalHost ? LOCAL_API : LIVE_API);
 
 export const API_ENDPOINTS = {
   COURSES: `${API_BASE_URL}/api/courses`,
