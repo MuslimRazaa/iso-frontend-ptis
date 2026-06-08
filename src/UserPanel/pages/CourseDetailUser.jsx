@@ -52,6 +52,60 @@ const CourseDetailUser = () => {
       .trim();
   };
 
+  // ── Content protection ────────────────────────────────────────────────
+  // Logged-in user — stamped as a watermark over video + PPT so any leaked
+  // screenshot/recording is traceable back to the person who captured it.
+  const userEmail = (typeof localStorage !== 'undefined' && localStorage.getItem('userEmail')) || 'PTIS User';
+  const watermarkText = `${userEmail} • PTIS Confidential`;
+
+  // Tiled, semi-transparent watermark (SVG) — pointer-events:none so it never
+  // blocks the viewer/video controls underneath.
+  const watermarkStyle = {
+    position: 'absolute',
+    inset: 0,
+    zIndex: 6,
+    pointerEvents: 'none',
+    backgroundRepeat: 'repeat',
+    backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(
+      `<svg xmlns='http://www.w3.org/2000/svg' width='360' height='200'>` +
+      `<text x='10' y='110' transform='rotate(-22 180 100)' ` +
+      `fill='rgba(130,130,150,0.22)' font-size='15' font-family='Arial, sans-serif'>` +
+      `${watermarkText}</text></svg>`
+    )}")`,
+  };
+
+  // Deterrents: block right-click (save image/video), Ctrl+S / Ctrl+P / Ctrl+U,
+  // Windows snip (Ctrl+Shift+S), and wipe the clipboard on PrintScreen.
+  // IMPORTANT: a browser cannot truly stop OS-level screen capture — these only
+  // raise the bar; the watermark is the real traceability safeguard.
+  useEffect(() => {
+    const blockContext = (e) => e.preventDefault();
+    const blockKeys = (e) => {
+      const k = (e.key || '').toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && ['s', 'p', 'u'].includes(k)) {
+        e.preventDefault();
+        return false;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && k === 's') {
+        e.preventDefault();
+        return false;
+      }
+    };
+    const wipeClipboardOnPrintScreen = (e) => {
+      if (e.key === 'PrintScreen') {
+        try { navigator.clipboard?.writeText('PTIS — screenshots of course material are not permitted.'); } catch (_) {}
+      }
+    };
+    document.addEventListener('contextmenu', blockContext);
+    document.addEventListener('keydown', blockKeys);
+    document.addEventListener('keyup', wipeClipboardOnPrintScreen);
+    return () => {
+      document.removeEventListener('contextmenu', blockContext);
+      document.removeEventListener('keydown', blockKeys);
+      document.removeEventListener('keyup', wipeClipboardOnPrintScreen);
+    };
+  }, []);
+
   // Check required test completion state for this course
   useEffect(() => {
     const checkTestCompletion = async () => {
@@ -1244,7 +1298,10 @@ const CourseDetailUser = () => {
                             ref={videoRef}
                             key={videoUrl}
                             controls={isEnrolled}
-                            controlsList="nodownload"
+                            controlsList="nodownload noplaybackrate noremoteplayback"
+                            disablePictureInPicture
+                            disableRemotePlayback
+                            onContextMenu={(e) => e.preventDefault()}
                             className="course-video-player"
                             onPlay={handleVideoPlay}
                             onPause={handleVideoPause}
@@ -1288,6 +1345,8 @@ const CourseDetailUser = () => {
                       );
                     }
                   })()}
+                  {/* Anti-leak watermark over the video (click-through) */}
+                  {isEnrolled && <div style={watermarkStyle} />}
                 </div>
                 <div className="video-playlist">
                   <h3>Course Videos ({course.videos.length})</h3>
@@ -1531,27 +1590,24 @@ const CourseDetailUser = () => {
 
         return (
           <div className="ppt-overlay">
-            <div className="ppt-modal" style={{ maxWidth: '95vw', width: 1100, maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}>
+            <div
+              className="ppt-modal"
+              onContextMenu={(e) => e.preventDefault()}
+              style={{ maxWidth: '95vw', width: 1100, maxHeight: '92vh', display: 'flex', flexDirection: 'column', position: 'relative' }}
+            >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 padding: '12px 20px', borderBottom: '1px solid #e8e8ee', flexShrink: 0 }}>
                 <span style={{ fontWeight: 700, color: '#1f1f27', fontSize: 15 }}>📄 Course Presentation</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <a
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ fontSize: 13, fontWeight: 600, color: '#d7263d', textDecoration: 'none' }}
-                  >
-                    ⬇ Open in new tab
-                  </a>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: '#9a9aaa' }}>🔒 View only</span>
                   <button className="close-btn" onClick={handleClosePPTModal}>✕</button>
-                </div>
+                </span>
               </div>
 
               {isPdf ? (
                 /* Browsers render PDF natively — works on local and live */
                 <iframe
-                  src={url}
+                  src={`${url}#toolbar=0&navpanes=0`}
                   frameBorder="0"
                   width="100%"
                   style={{ flex: 1, minHeight: 500, border: 'none' }}
@@ -1570,20 +1626,9 @@ const CourseDetailUser = () => {
                   </h3>
                   <p style={{ margin: 0, color: '#6b6b78', maxWidth: 460, fontSize: 14, lineHeight: 1.6 }}>
                     PPT ko inline dikhane ke liye online viewer ko ek public URL chahiye.
-                    Local/development server (localhost) us viewer se reachable nahi hota,
-                    is liye preview yahan show nahi hoga. File abhi bhi open / download kar sakte hain:
+                    Local/development server (localhost) us viewer se reachable nahi hota —
+                    live site par presentation isi modal me khulegi.
                   </p>
-                  <a
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      padding: '10px 22px', background: '#d7263d', color: '#fff',
-                      borderRadius: 8, fontWeight: 700, textDecoration: 'none', fontSize: 14
-                    }}
-                  >
-                    Open Presentation
-                  </a>
                 </div>
               ) : (
                 <iframe
@@ -1595,6 +1640,9 @@ const CourseDetailUser = () => {
                   title="PPT Viewer"
                 />
               )}
+
+              {/* Anti-leak watermark — over the whole viewer, click-through */}
+              <div style={{ ...watermarkStyle, top: 49 }} />
             </div>
           </div>
         );
