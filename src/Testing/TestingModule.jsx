@@ -27,8 +27,10 @@ import {
   Moon,
   Sun,
   Search,
-  Info
+  Info,
+  Link
 } from 'lucide-react';
+import { Links, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTheme } from './contexts/ThemeContext';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
 import StandardsAdminPage from './admin/StandardsAdminPage';
@@ -192,7 +194,8 @@ const HomePage = React.memo(({
   idInputRef,
   fillEmployeeNameFromTypedId,
   showToast,
-  hostUserMode
+  hostUserMode,
+  isStandardLocked
 }) => (
   <div className="login-backdrop">
     <div className="login-backdrop-grid"></div>
@@ -288,13 +291,27 @@ const HomePage = React.memo(({
             </div>
 
             <div className="form-group">
-              <label className="form-label">Test Standard</label>
+              <label className="form-label">
+                Test Standard
+                {isStandardLocked && (
+                  <span style={{ marginLeft: 8, fontSize: '0.78em', color: '#9ad0ff', fontWeight: 600 }}>
+                    🔒 Selected from your course
+                  </span>
+                )}
+              </label>
               <select
                 className="form-input"
                 value={selectedStandard}
                 onChange={(e) => handleStandardSelect(e.target.value)}
-                disabled={!dataLoaded}
-                style={{ backgroundColor: 'rgba(255, 255, 255, 0.08)', color: '#ffffff', border: '1px solid rgba(255, 255, 255, 0.12)' }}
+                disabled={!dataLoaded || isStandardLocked}
+                title={isStandardLocked ? 'Standard is fixed because you opened this test from a course' : undefined}
+                style={{
+                  backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                  color: '#ffffff',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  cursor: isStandardLocked ? 'not-allowed' : 'pointer',
+                  opacity: isStandardLocked ? 0.85 : 1
+                }}
               >
                 <option value="">{standards.length === 0 ? 'Loading standards...' : 'Select Standard'}</option>
                 {standards.map(std => (
@@ -442,6 +459,16 @@ const TestingModule = () => {
   // Use the host project's shared API base (points at the merged backend).
   const API_BASE_URL = useMemo(() => (HOST_API_BASE_URL || '').replace(/\/$/, ''), []);
   const { theme, isDarkMode, toggleTheme } = useTheme();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // When the user reaches the test directly from a course ("Start Test"),
+  // the course passes the standard name + from=course. In that case the
+  // standard is pre-selected and locked so the user can't switch it.
+  const lockedStandardName = searchParams.get('from') === 'course'
+    ? (searchParams.get('standard') || '').trim()
+    : '';
+  const isStandardLocked = Boolean(lockedStandardName);
 
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth : 1200
@@ -1318,6 +1345,24 @@ const TestingModule = () => {
     loadInitialData();
   }, []);
 
+  // Auto-select (and lock) the standard when the user arrived from a course.
+  // Runs once standards are loaded and a match is found by name.
+  const autoSelectedStandardRef = useRef(false);
+  useEffect(() => {
+    if (!isStandardLocked || autoSelectedStandardRef.current) return;
+    if (!dataLoaded || !standards.length) return;
+
+    const wanted = normalizeStandard(lockedStandardName);
+    const match = standards.find(
+      (s) => normalizeStandard(s.Standard_List) === wanted
+    );
+
+    if (match) {
+      autoSelectedStandardRef.current = true;
+      handleStandardSelect(match.Standard_List);
+    }
+  }, [isStandardLocked, lockedStandardName, dataLoaded, standards]);
+
   // Styles
   const commonStyles = {
     card: {
@@ -1615,25 +1660,28 @@ const TestingModule = () => {
   const ResultPage = () => {
     if (!testResult) return null;
 
+    // const resetTest = () => {
+    //   setCurrentPage('home');
+    //   setSelectedEmployee('');
+    //   setEmployeeName('');
+    //   setSelectedStandard('');
+    //   setTestInfo(null);
+    //   setQuestions([]);
+    //   setOriginalQuestions([]);
+    //   setAnswers({});
+    //   setTestResult(null);
+    //   setSkipped([]);
+    //   setIsReviewingSkipped(false);
+    //   setAttemptedCount(0);
+    //   setCurrentQuestion(0);
+    //   setSelectedAnswer(null);
+    //   setError('');
+    //   setTestStarted(false);
+    //   setTestCompleted(false);
+    //   isCompletingTestRef.current = false;
+    // };
     const resetTest = () => {
-      setCurrentPage('home');
-      setSelectedEmployee('');
-      setEmployeeName('');
-      setSelectedStandard('');
-      setTestInfo(null);
-      setQuestions([]);
-      setOriginalQuestions([]);
-      setAnswers({});
-      setTestResult(null);
-      setSkipped([]);
-      setIsReviewingSkipped(false);
-      setAttemptedCount(0);
-      setCurrentQuestion(0);
-      setSelectedAnswer(null);
-      setError('');
-      setTestStarted(false);
-      setTestCompleted(false);
-      isCompletingTestRef.current = false;
+      navigateTo('/');
     };
 
     const resultPassed = testResult.STATUS?.toUpperCase() === 'PASS';
@@ -1904,8 +1952,7 @@ const TestingModule = () => {
             </div>
 
             <div style={{ textAlign: 'center' }}>
-              <button
-                onClick={resetTest}
+             <a href="/"><button
                 className="login-btn"
                 style={{
                   width: 'auto',
@@ -1916,8 +1963,8 @@ const TestingModule = () => {
                 }}
               >
                 <Home size={22} />
-                Take Another Test
-              </button>
+                Back to Login
+              </button></a> 
             </div>
           </div>
         </div>
@@ -3384,14 +3431,15 @@ const TestingModule = () => {
           }}
           style={{
           width: isMobile ? '64px' : sidebarHovered ? '220px' : '80px',
-          backgroundColor: '#1a1a2e',
-          boxShadow: '2px 0 10px rgba(0,0,0,0.1)',
+          backgroundColor: '#ffffff',
+          boxShadow: '2px 0 16px rgba(0,0,0,0.08)',
           display: 'flex',
           flexDirection: 'column',
           position: 'fixed',
           height: '100vh',
           left: 0,
           top: 0,
+          borderRight: '1px solid #e8e8ee',
           borderTopRightRadius: isMobile ? '0' : '20px',
           borderBottomRightRadius: isMobile ? '0' : '20px',
           transition: 'width 0.5s cubic-bezier(0.22, 0.61, 0.36, 1), box-shadow 0.5s ease',
@@ -3402,7 +3450,7 @@ const TestingModule = () => {
           {/* Logo/Header */}
           <div style={{
             padding: '16px 20px',
-            borderBottom: '1px solid rgba(255,255,255,0.1)',
+            borderBottom: '1px solid #e8e8ee',
             whiteSpace: 'nowrap',
             display: 'flex',
             alignItems: 'center',
@@ -3444,8 +3492,8 @@ const TestingModule = () => {
             </div>
             <span style={{
               fontSize: '0.95rem',
-              fontWeight: 600,
-              color: '#ffffff',
+              fontWeight: 700,
+              color: '#1f1f27',
               maxWidth: showSidebarLabel ? '120px' : '0px',
               opacity: showSidebarLabel ? 1 : 0,
               transform: showSidebarLabel ? 'translateX(0)' : 'translateX(-6px)',
@@ -3470,22 +3518,21 @@ const TestingModule = () => {
                     width: '100%',
                     padding: isMobile ? '10px 14px' : '10px 20px',
                     border: 'none',
-                    backgroundColor: isActive ? 'rgba(192, 57, 43, 0.2)' : 'transparent',
-                    borderLeft: isActive ? '4px solid transparent' : '4px solid transparent',
-                    borderImage: isActive ? 'linear-gradient(180deg, #c0392b, #e74c3c) 1' : 'none',
-                    color: isActive ? '#fff' : 'rgba(255,255,255,0.7)',
+                    backgroundColor: isActive ? 'rgba(215,38,61,0.07)' : 'transparent',
+                    borderLeft: isActive ? '3px solid #d7263d' : '3px solid transparent',
+                    color: isActive ? '#d7263d' : '#595966',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'flex-start',
                     gap: showLabel ? '10px' : '0',
                     fontSize: '0.95em',
-                    fontWeight: isActive ? 'bold' : 'normal',
+                    fontWeight: isActive ? '700' : '500',
                     transition: 'all 0.2s ease',
                     whiteSpace: 'nowrap'
                   }}
                   onMouseOver={e => {
-                    if (!isActive) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)';
+                    if (!isActive) e.currentTarget.style.backgroundColor = 'rgba(215,38,61,0.04)';
                   }}
                   onMouseOut={e => {
                     if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
@@ -3517,22 +3564,18 @@ const TestingModule = () => {
           </nav>
 
           {/* Home Button — returns to the host main dashboard */}
-          <div style={{ padding: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 'auto', display: 'flex', justifyContent: showSidebarLabel ? 'flex-start' : 'center' }}>
+          <div style={{ padding: '20px', borderTop: '1px solid #e8e8ee', marginTop: 'auto', display: 'flex', justifyContent: showSidebarLabel ? 'flex-start' : 'center' }}>
             <button
-              onClick={() => {
-                window.location.href = '/dashboard';
-              }}
+              onClick={() => navigate('/dashboard')}
               onMouseEnter={(e) => {
                 e.currentTarget.style.background = '#fff';
                 e.currentTarget.style.color = '#c0392b';
                 e.currentTarget.style.border = '2px solid #c0392b';
-                e.currentTarget.querySelector('svg').style.color = '#c0392b';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.background = 'linear-gradient(120deg, #c0392b, #e74c3c)';
                 e.currentTarget.style.color = '#fff';
                 e.currentTarget.style.border = '2px solid transparent';
-                e.currentTarget.querySelector('svg').style.color = '#fff';
               }}
               style={{
                 width: !isMobile && sidebarHovered ? '100%' : '45px',
@@ -3553,7 +3596,7 @@ const TestingModule = () => {
                 transition: 'all 0.3s ease'
               }}
             >
-              <Home size={18} style={{ transition: 'color 0.3s ease' }} />
+              <Home size={18} />
               {!isMobile && sidebarHovered && 'Home'}
             </button>
           </div>
@@ -8142,6 +8185,9 @@ const TestingModule = () => {
         fillEmployeeNameFromTypedId={fillEmployeeNameFromTypedId}
         showToast={showToast}
         hostUserMode={localStorage.getItem('userType') !== 'admin' && !!localStorage.getItem('userEmail')}
+        isStandardLocked={isStandardLocked && standards.some(
+          (s) => normalizeStandard(s.Standard_List) === normalizeStandard(lockedStandardName)
+        )}
       />}
       {currentPage === 'test' && <TestPage showToast={showToast} />}
       {currentPage === 'result' && <ResultPage showToast={showToast} />}

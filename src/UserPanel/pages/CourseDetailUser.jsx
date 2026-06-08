@@ -85,6 +85,7 @@ const CourseDetailUser = () => {
           const result = resultsByStandardId[course.general_standard_id] || null;
           mappedTests.push({
             standardId: course.general_standard_id,
+            standardName: course.general_standard_name || '',
             standardType: 'general',
             label: `${course.general_standard_name || course.title} (General)`,
             result,
@@ -97,6 +98,7 @@ const CourseDetailUser = () => {
           const result = resultsByStandardId[course.specific_standard_id] || null;
           mappedTests.push({
             standardId: course.specific_standard_id,
+            standardName: course.specific_standard_name || '',
             standardType: 'specific',
             label: `${course.specific_standard_name || course.title} (Specific)`,
             result,
@@ -108,6 +110,7 @@ const CourseDetailUser = () => {
         if (!mappedTests.length && course.standard_id) {
           const baseTest = {
             standardId: course.standard_id,
+            standardName: course.standard_name || '',
             standardType: course.standard_type || 'simple',
             label: course.standard_name || `${course.title} Test`,
             result: resultsByStandardId[course.standard_id] || null,
@@ -129,6 +132,7 @@ const CourseDetailUser = () => {
               const siblingResult = resultsByStandardId[sibling.id] || null;
               mappedTests.push({
                 standardId: sibling.id,
+                standardName: sibling.standard_name || '',
                 standardType: siblingType,
                 label: `${sibling.standard_name || course.title} (${siblingType === 'general' ? 'General' : 'Specific'})`,
                 result: siblingResult,
@@ -697,7 +701,7 @@ const CourseDetailUser = () => {
     return (
       <div className="course-detail-error">
         <h2>Course not found</h2>
-        <button className="primary-btn" onClick={() => navigate('/user/my-courses')}>
+        <button className="primary-btn" onClick={() => navigate('/user/learning-management-system/my-courses')}>
           Back to My Courses
         </button>
       </div>
@@ -705,7 +709,18 @@ const CourseDetailUser = () => {
   }
 
   const pendingTests = requiredTests.filter((test) => !test.hasPassed);
-  const getTestingUrlForTest = (test) => `/user/testing?courseId=${courseId}&standardId=${test.standardId}&standardType=${test.standardType}`;
+  const getTestingUrlForTest = (test) => {
+    const params = new URLSearchParams({
+      courseId: String(courseId),
+      standardId: String(test.standardId),
+      standardType: String(test.standardType || ''),
+      // Pass the standard NAME so the testing module can auto-select + lock it.
+      standard: test.standardName || '',
+      // Marks a course-initiated test: standard is fixed, user can't change it.
+      from: 'course',
+    });
+    return `/user/testing?${params.toString()}`;
+  };
 
   return (
     <div className="course-detail-page">
@@ -948,7 +963,7 @@ const CourseDetailUser = () => {
             >
               {enrollmentLoading ? 'Starting...' : isEnrolled ? 'Course Started ✓' : 'Start Learning'}
             </button>
-            <button className="ghost-btn large" onClick={() => navigate('/user/my-courses')}>
+            <button className="ghost-btn large" onClick={() => navigate('/user/learning-management-system/my-courses')}>
               View All My Courses
             </button>
             
@@ -1503,26 +1518,87 @@ const CourseDetailUser = () => {
         </div>
       </div>
 
-      {showModal && (
-        <div className="ppt-overlay">
-          <div className="ppt-modal">
-            <button
-              className="close-btn"
-              onClick={handleClosePPTModal}
-            >
-              ✕
-            </button>
-            <iframe 
-              src={pptUrl} 
-              frameBorder="0" 
-              width="100%" 
-              height="500" 
-              allowFullScreen={true}
-              title="PPT Viewer"
-            />
+      {showModal && (() => {
+        const url = pptUrl || '';
+        const cleanUrl = url.split('?')[0];
+        const ext = cleanUrl.split('.').pop().toLowerCase();
+        const isPdf = ext === 'pdf';
+        // Online Office/Google viewers can only fetch a publicly reachable URL.
+        // localhost / LAN IPs are unreachable from those services, so previewing
+        // a PPT served from a dev/private backend will always error out.
+        const isLocalUrl = /(localhost|127\.0\.0\.1|0\.0\.0\.0|192\.168\.|10\.|::1)/i.test(url);
+        const officeSrc = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`;
+
+        return (
+          <div className="ppt-overlay">
+            <div className="ppt-modal" style={{ maxWidth: '95vw', width: 1100, maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '12px 20px', borderBottom: '1px solid #e8e8ee', flexShrink: 0 }}>
+                <span style={{ fontWeight: 700, color: '#1f1f27', fontSize: 15 }}>📄 Course Presentation</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontSize: 13, fontWeight: 600, color: '#d7263d', textDecoration: 'none' }}
+                  >
+                    ⬇ Open in new tab
+                  </a>
+                  <button className="close-btn" onClick={handleClosePPTModal}>✕</button>
+                </div>
+              </div>
+
+              {isPdf ? (
+                /* Browsers render PDF natively — works on local and live */
+                <iframe
+                  src={url}
+                  frameBorder="0"
+                  width="100%"
+                  style={{ flex: 1, minHeight: 500, border: 'none' }}
+                  title="PPT Viewer"
+                />
+              ) : isLocalUrl ? (
+                /* PPT/PPTX on a non-public server cannot be previewed inline */
+                <div style={{
+                  flex: 1, minHeight: 500, display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', justifyContent: 'center', textAlign: 'center',
+                  padding: '40px', gap: 16, background: '#faf9fb'
+                }}>
+                  <div style={{ fontSize: 46 }}>📊</div>
+                  <h3 style={{ margin: 0, color: '#1f1f27', fontSize: 18 }}>
+                    Presentation preview live server par available hai
+                  </h3>
+                  <p style={{ margin: 0, color: '#6b6b78', maxWidth: 460, fontSize: 14, lineHeight: 1.6 }}>
+                    PPT ko inline dikhane ke liye online viewer ko ek public URL chahiye.
+                    Local/development server (localhost) us viewer se reachable nahi hota,
+                    is liye preview yahan show nahi hoga. File abhi bhi open / download kar sakte hain:
+                  </p>
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      padding: '10px 22px', background: '#d7263d', color: '#fff',
+                      borderRadius: 8, fontWeight: 700, textDecoration: 'none', fontSize: 14
+                    }}
+                  >
+                    Open Presentation
+                  </a>
+                </div>
+              ) : (
+                <iframe
+                  src={officeSrc}
+                  frameBorder="0"
+                  width="100%"
+                  style={{ flex: 1, minHeight: 500, border: 'none' }}
+                  allowFullScreen={true}
+                  title="PPT Viewer"
+                />
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };

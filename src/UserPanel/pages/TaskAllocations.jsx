@@ -119,6 +119,7 @@ const TaskAllocations = () => {
           const result = taskResultMap[task.general_standard_id] || null;
           requiredTests.push({
             standardId: task.general_standard_id,
+            standardName: task.general_standard_name || '',
             standardType: 'general',
             label: `${task.general_standard_name || task.course_title} (General)`,
             hasResult: Boolean(result),
@@ -131,6 +132,7 @@ const TaskAllocations = () => {
           const result = taskResultMap[task.specific_standard_id] || null;
           requiredTests.push({
             standardId: task.specific_standard_id,
+            standardName: task.specific_standard_name || '',
             standardType: 'specific',
             label: `${task.specific_standard_name || task.course_title} (Specific)`,
             hasResult: Boolean(result),
@@ -143,6 +145,7 @@ const TaskAllocations = () => {
           const result = taskResultMap[task.standard_id] || null;
           requiredTests.push({
             standardId: task.standard_id,
+            standardName: task.standard_name || '',
             standardType: task.standard_type || 'simple',
             label: task.standard_name || `${task.course_title} Test`,
             hasResult: Boolean(result),
@@ -165,6 +168,7 @@ const TaskAllocations = () => {
               const siblingResult = taskResultMap[sibling.id] || null;
               requiredTests.push({
                 standardId: sibling.id,
+                standardName: sibling.standard_name || '',
                 standardType: siblingType,
                 label: `${sibling.standard_name || task.course_title} (${siblingType === 'general' ? 'General' : 'Specific'})`,
                 hasResult: Boolean(siblingResult),
@@ -277,19 +281,24 @@ const TaskAllocations = () => {
     navigate(getTestingUrl(task));
   };
 
-  const getTestingUrl = (task) => {
-    if (task?.nextPendingTest?.standardId) {
-      return `/user/testing?courseId=${task.courseId}&standardId=${task.nextPendingTest.standardId}&standardType=${task.nextPendingTest.standardType}`;
+  // Builds a testing URL that pre-selects + locks the standard. The standard
+  // NAME is passed (matches the testing module's Standard_List) along with
+  // from=course so the test page fixes the standard to this task's test.
+  const buildTestingUrl = (task, test) => {
+    const params = new URLSearchParams({ courseId: String(task.courseId) });
+    if (test?.standardId) {
+      params.set('standardId', String(test.standardId));
+      params.set('standardType', String(test.standardType || ''));
+      params.set('standard', test.standardName || '');
+      params.set('from', 'course');
     }
-    return `/user/testing?courseId=${task.courseId}`;
+    return `/user/testing?${params.toString()}`;
   };
 
-  const getTestingUrlForTest = (task, test) => {
-    if (test?.standardId) {
-      return `/user/testing?courseId=${task.courseId}&standardId=${test.standardId}&standardType=${test.standardType}`;
-    }
-    return getTestingUrl(task);
-  };
+  const getTestingUrl = (task) => buildTestingUrl(task, task?.nextPendingTest);
+
+  const getTestingUrlForTest = (task, test) =>
+    test?.standardId ? buildTestingUrl(task, test) : getTestingUrl(task);
 
   if (loading) {
     return (

@@ -1,10 +1,8 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
+import logoVideo from '/logoLoader.mp4'
 
 function VideoLoader({ onLoadingComplete }) {
   const [videoEnded, setVideoEnded] = useState(false)
-
-  // Video path - aap yahan apni video ka path daal dena
-  const videoPath = '/logoLoader.mp4' // Replace with your video path
 
   const handleVideoEnd = () => {
     setVideoEnded(true)
@@ -26,10 +24,10 @@ function VideoLoader({ onLoadingComplete }) {
         playsInline
         onEnded={handleVideoEnd}
       >
-        <source src={videoPath} type="video/mp4" />
+        <source src={logoVideo} type="video/mp4" />
         Your browser does not support the video tag.
       </video>
-      
+
       <button className="skip-btn" onClick={handleSkip}>
         Skip →
       </button>

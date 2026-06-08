@@ -56,6 +56,12 @@ import MyCourses from './UserPanel/pages/MyCourses'
 import UserCertificates from './UserPanel/pages/UserCertificates'
 import JobLogDescription from './UserPanel/pages/JobLogDescription'
 import AllLmsCourses from './UserPanel/pages/AllLmsCourses'
+import TaskAllocations from './UserPanel/pages/TaskAllocations'
+import CourseDetailUser from './UserPanel/pages/CourseDetailUser'
+
+// User LMS standalone layout
+import UserLmsLayout from './UserLMS/UserLmsLayout'
+import UserLmsHome from './UserLMS/UserLmsHome'
 
 function App() {
   const [showLoader, setShowLoader] = useState(true)
@@ -134,18 +140,14 @@ function App() {
               <Route path="entries" element={<JobLogDescription />} />
             </Route>
 
-            {/* User — LMS (uses the same admin layout/components for full feature parity) */}
-            <Route path="/user/learning-management-system/*" element={<LearningManagementSystem />}>
-              <Route index element={<LmsHome />} />
-              <Route path="add-course"          element={<AddCourse />} />
-              <Route path="all-courses"         element={<AllCourses />} />
-              <Route path="task-allocation"     element={<TaskAllocation />} />
-              <Route path="course-categories"   element={<CourseCategories />} />
-              <Route path="add-employee"        element={<AddEmployee />} />
-              <Route path="all-employees"       element={<AllEmployees />} />
-              <Route path="set-standards"       element={<SetStandards />} />
-              {/* Question Bank & Certificates moved to the dedicated Testing module */}
-              <Route path="course/:courseId"    element={<CourseDetail />} />
+            {/* User — LMS (user-specific layout, no admin pages) */}
+            <Route path="/user/learning-management-system/*" element={<UserLmsLayout />}>
+              <Route index                      element={<UserLmsHome />} />
+              <Route path="my-tasks"            element={<TaskAllocations />} />
+              <Route path="all-courses"         element={<AllLmsCourses />} />
+              <Route path="my-courses"          element={<MyCourses />} />
+              <Route path="certificates"        element={<UserCertificates />} />
+              <Route path="course/:courseId"    element={<CourseDetailUser />} />
             </Route>
 
             {/* ============================================ */}
@@ -154,11 +156,11 @@ function App() {
             <Route path="/user/*" element={<UserPanel />}>
               <Route index element={<Navigate to="/user/dashboard" replace />} />
               <Route path="dashboard"       element={<UserDashboard />} />
-              {/* Old per-user pages → redirect to full LMS layout */}
-              <Route path="my-courses"      element={<Navigate to="/user/learning-management-system/all-courses" replace />} />
-              <Route path="all-courses"     element={<Navigate to="/user/learning-management-system/all-courses" replace />} />
+              {/* Old short URLs → redirect to user LMS */}
+              <Route path="my-courses"      element={<Navigate to="/user/learning-management-system/my-courses"   replace />} />
+              <Route path="all-courses"     element={<Navigate to="/user/learning-management-system/all-courses"  replace />} />
               <Route path="my-certificates" element={<Navigate to="/user/learning-management-system/certificates" replace />} />
-              <Route path="course/:courseId" element={<Navigate to="/user/learning-management-system" replace />} />
+              <Route path="course/:courseId" element={<Navigate to="/user/learning-management-system/my-courses" replace />} />
               {/* Old JLR link → redirects to the standalone module */}
               <Route path="cvs-access" element={<Navigate to="/user/job-log" replace />} />
               {/* Old LMS-access stub → redirect to the real LMS */}
