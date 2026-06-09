@@ -1593,7 +1593,7 @@ const CourseDetailUser = () => {
             <div
               className="ppt-modal"
               onContextMenu={(e) => e.preventDefault()}
-              style={{ maxWidth: '95vw', width: 1100, maxHeight: '92vh', display: 'flex', flexDirection: 'column', position: 'relative' }}
+              style={{ width: '97vw', height: '96vh', maxWidth: '97vw', maxHeight: '96vh', padding: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 padding: '12px 20px', borderBottom: '1px solid #e8e8ee', flexShrink: 0 }}>

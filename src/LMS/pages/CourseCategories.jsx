@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
+import { Pencil, Trash2 } from 'lucide-react'
 import { API_ENDPOINTS } from '../../config/api'
 
 function CourseCategories() {
@@ -245,10 +246,10 @@ function CourseCategories() {
                     ) : (
                       <>
                         <button className="action-btn edit" onClick={() => startEdit(category)} title="Edit">
-                          ✎
+                          <Pencil size={16} />
                         </button>
                         <button className="action-btn delete" onClick={() => handleDelete(category.id)} title="Delete">
-                          🗑
+                          <Trash2 size={16} />
                         </button>
                       </>
                     )}

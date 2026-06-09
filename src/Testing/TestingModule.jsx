@@ -2686,8 +2686,8 @@ const TestingModule = () => {
       { id: 'practical', icon: Plus, label: 'Practical Results', color: '#1a1a2e' },
       { id: 'standards', icon: BookOpen, label: 'Standards', color: '#1a1a2e' },
       { id: 'questions', icon: FileText, label: 'Questions', color: '#1a1a2e' },
-      { id: 'certificates', icon: FileCheck, label: 'Certificates', color: '#1a1a2e' },
-      { id: 'employees', icon: Users, label: 'Employees', color: '#1a1a2e' }
+      { id: 'certificates', icon: FileCheck, label: 'Certificates', color: '#1a1a2e' }
+      // Employees management moved to the main dashboard (standalone /employees).
     ];
 
     // Certificate Management Page Component - Memoized to prevent re-renders on parent state changes
@@ -3457,8 +3457,9 @@ const TestingModule = () => {
             justifyContent: 'flex-start',
             gap: showSidebarLabel ? '10px' : '0'
           }}>
-            <div 
-              onClick={() => setAdminActiveTab('dashboard')}
+            <div
+              onClick={() => navigate('/dashboard')}
+              title="Back to Dashboard"
               style={{
                 backgroundColor: '#ffffff',
                 border: '2px solid #ffffff',
@@ -3562,44 +3563,6 @@ const TestingModule = () => {
               );
             })}
           </nav>
-
-          {/* Home Button — returns to the host main dashboard */}
-          <div style={{ padding: '20px', borderTop: '1px solid #e8e8ee', marginTop: 'auto', display: 'flex', justifyContent: showSidebarLabel ? 'flex-start' : 'center' }}>
-            <button
-              onClick={() => navigate('/dashboard')}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = '#fff';
-                e.currentTarget.style.color = '#c0392b';
-                e.currentTarget.style.border = '2px solid #c0392b';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'linear-gradient(120deg, #c0392b, #e74c3c)';
-                e.currentTarget.style.color = '#fff';
-                e.currentTarget.style.border = '2px solid transparent';
-              }}
-              style={{
-                width: !isMobile && sidebarHovered ? '100%' : '45px',
-                height: !isMobile && sidebarHovered ? 'auto' : '45px',
-                padding: !isMobile && sidebarHovered ? '12px' : '0',
-                background: 'linear-gradient(120deg, #c0392b, #e74c3c)',
-                color: '#fff',
-                border: '2px solid transparent',
-                borderRadius: !isMobile && sidebarHovered ? '28px' : '25px',
-                cursor: 'pointer',
-                fontSize: '0.95em',
-                fontWeight: 'bold',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                whiteSpace: 'nowrap',
-                transition: 'all 0.3s ease'
-              }}
-            >
-              <Home size={18} />
-              {!isMobile && sidebarHovered && 'Home'}
-            </button>
-          </div>
         </div>
 
         {/* Main Content Area */}

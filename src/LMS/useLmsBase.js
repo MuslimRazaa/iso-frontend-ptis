@@ -9,6 +9,9 @@ import { useLocation } from 'react-router-dom'
  */
 export default function useLmsBase() {
   const { pathname } = useLocation()
+  // Employee pages now also live under the standalone /employees area
+  // (moved out of the LMS module). Keep their internal links self-contained.
+  if (pathname.startsWith('/employees')) return '/employees'
   const isUserSide = pathname.startsWith('/user')
   return isUserSide ? '/user/learning-management-system' : '/learning-management-system'
 }

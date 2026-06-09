@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react'
 import axios from 'axios'
+import { Trash2 } from 'lucide-react'
 import { API_ENDPOINTS } from '../../config/api'
 
 const timeLimitPresets = [30, 45, 60, 75, 90, 120]
@@ -276,7 +277,7 @@ function SetStandards() {
                     title="Delete"
                     style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem' }}
                   >
-                    🗑
+                    <Trash2 size={16} />
                   </button>
                 </header>
                 <dl>

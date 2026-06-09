@@ -5284,3 +5284,27 @@ ul.submenu li {
   padding: 5px 10px;
   cursor: pointer;
 }
+
+/* Hide the Office Online viewer's status bar / chrome buttons.
+   NOTE: the PPT renders inside a cross-origin Microsoft iframe, so these
+   rules only take effect if the viewer is same-origin — kept here as the
+   user requested. */
+/* Spinning lucide icon (e.g. import/loading buttons) */
+@keyframes lms-spin { to { transform: rotate(360deg); } }
+.lms-spin { animation: lms-spin 1s linear infinite; }
+
+/* Inline lucide icons sitting next to text (course "includes" list, etc.) */
+.ci-ic {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-right: 6px;
+  color: #d7263d;
+}
+
+a#ChromelessStatusBar\.Options-Small14 {
+    display: none !important;
+}
+
+span.cui-img-cont-float.cui-img-14by14 {
+    display: none !important;
+}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { Video, FileText, Trash2, Inbox, Info } from 'lucide-react'
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api'
 
 function TaskAllocation() {
@@ -299,9 +300,9 @@ function TaskAllocation() {
                         <div style={{ fontSize: '13px' }}>
                           {trackedSeconds > 0 ? (
                             <>
-                              <div>🎥 {formatHours(localData?.videoSeconds || 0)}</div>
+                              <div><Video size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} /> {formatHours(localData?.videoSeconds || 0)}</div>
                               <div style={{ color: '#888', marginTop: '2px' }}>
-                                📄 {formatHours(localData?.pptSeconds || 0)}
+                                <FileText size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} /> {formatHours(localData?.pptSeconds || 0)}
                               </div>
                             </>
                           ) : (
@@ -321,7 +322,7 @@ function TaskAllocation() {
                             onClick={() => handleDelete(task.id)}
                             title="Remove"
                           >
-                            🗑
+                            <Trash2 size={16} />
                           </button>
                         </div>
                       </td>
@@ -345,7 +346,7 @@ function TaskAllocation() {
                 border: '2px dashed rgba(255,255,255,0.08)',
               }}
             >
-              <div style={{ fontSize: '48px', marginBottom: '16px' }}>📬</div>
+              <div style={{ marginBottom: '16px', color: '#9a9aaa' }}><Inbox size={48} strokeWidth={1.5} /></div>
               <h3 style={{ marginBottom: '8px', color: '#ccc' }}>No Course Requests</h3>
               <p style={{ color: '#666' }}>
                 When employees request access to courses, they will appear here.
@@ -481,7 +482,7 @@ function TaskAllocation() {
 
               <div className="info-box">
                 <p>
-                  ℹ️ The employee will be notified and the course will appear in their learning
+                  <Info size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} /> The employee will be notified and the course will appear in their learning
                   dashboard. Progress and time will be tracked automatically.
                 </p>
               </div>

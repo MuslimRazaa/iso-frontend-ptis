@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { Pencil, Trash2 } from 'lucide-react'
 import axios from 'axios'
 import { API_ENDPOINTS } from '../../config/api'
 import useLmsBase from '../useLmsBase'
@@ -190,10 +191,10 @@ function AllEmployees() {
                 <td>
                   <div className="action-buttons">
                     <button className="action-btn edit" onClick={() => openModal(emp)} title="Edit">
-                      ✎
+                      <Pencil size={16} />
                     </button>
                     <button className="action-btn delete" onClick={() => handleDelete(emp.id)} title="Remove">
-                      🗑
+                      <Trash2 size={16} />
                     </button>
                   </div>
                 </td>

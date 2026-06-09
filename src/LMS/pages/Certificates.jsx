@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { FileText } from 'lucide-react'
 
 const initialPassedTests = [
   {
@@ -307,7 +308,7 @@ function Certificates() {
               <div className="cert-upload-zone">
                 <input type="file" accept=".pdf" onChange={handleFileChange} required />
                 <div className="upload-hint">
-                  <span className="upload-icon">📄</span>
+                  <span className="upload-icon"><FileText size={28} /></span>
                   <p>{uploadForm.file ? uploadForm.file.name : 'Click to select PDF file'}</p>
                   <span className="file-size-hint">Max 10MB</span>
                 </div>

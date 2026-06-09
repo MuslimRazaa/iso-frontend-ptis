@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
+import { Pencil, Trash2 } from 'lucide-react'
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api'
 
 import dataAnalystThumb from '../../assets/thumbnails/1.jpg'
@@ -211,10 +212,10 @@ function AllCourses() {
                 <td>
                   <div className="action-buttons">
                     <button className="action-btn edit" onClick={() => startEdit(row)} title="Edit">
-                      ✎
+                      <Pencil size={16} />
                     </button>
                     <button className="action-btn delete" onClick={() => handleDelete(row.id)} title="Delete">
-                      🗑
+                      <Trash2 size={16} />
                     </button>
                   </div>
                 </td>

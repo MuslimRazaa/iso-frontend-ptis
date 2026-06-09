@@ -43,33 +43,33 @@ const dashboardTiles = [
     statusLabel: "Live",
     metric: "12 CVs queued",
   },
-  {
-    id: "iso",
-    title: "ISO Forms",
-    link: "",
-    description: "Quick access to QA/QC controlled documentation.",
-    status: "attention",
-    statusLabel: "Review",
-    metric: "3 forms awaiting sign-off",
-  },
-  {
-    id: "cv-bid",
-    title: "Bid CV Library",
-    link: "",
-    description: "Recently curated CVs for tender submissions.",
-    status: "online",
-    statusLabel: "Live",
-    metric: "6 tenders in play",
-  },
-  {
-    id: "power-bi",
-    title: "Power BI Dashboards",
-    link: "",
-    description: "Track operations KPIs and live financial snapshots.",
-    status: "sync",
-    statusLabel: "Syncing",
-    metric: "Updated 4 mins ago",
-  },
+  // {
+  //   id: "iso",
+  //   title: "ISO Forms",
+  //   link: "",
+  //   description: "Quick access to QA/QC controlled documentation.",
+  //   status: "attention",
+  //   statusLabel: "Review",
+  //   metric: "3 forms awaiting sign-off",
+  // },
+  // {
+  //   id: "cv-bid",
+  //   title: "Bid CV Library",
+  //   link: "",
+  //   description: "Recently curated CVs for tender submissions.",
+  //   status: "online",
+  //   statusLabel: "Live",
+  //   metric: "6 tenders in play",
+  // },
+  // {
+  //   id: "power-bi",
+  //   title: "Power BI Dashboards",
+  //   link: "",
+  //   description: "Track operations KPIs and live financial snapshots.",
+  //   status: "sync",
+  //   statusLabel: "Syncing",
+  //   metric: "Updated 4 mins ago",
+  // },
 ];
 
 const defaultQuickStats = [
@@ -361,35 +361,86 @@ function MainDashboard() {
           )}
 
           {!showUserManagement && (
-            <div style={{ 
-              padding: '40px', 
+            <div style={{
               marginTop: '20px',
-              background: 'radial-gradient(circle at 20% 20%, #2a2b36 0%, transparent 45%),    radial-gradient(circle at 80% 0%, rgba(255, 0, 0, 0.15) 0%, transparent 40%),    #0e0f14',
-              borderRadius: '16px',
-              border: '1px solid',
-              color: 'white',
-              textAlign: 'center'
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+              gap: '20px'
             }}>
-              <div style={{ fontSize: '48px', marginBottom: '16px' }}>👥</div>
-              <h3 style={{ marginBottom: '8px' }}>Assign Portal Access to Users</h3>
-              <p style={{ opacity: 0.9, marginBottom: '20px' }}>
-                Manage employee permissions and control which modules they can access
-              </p>
-              <button 
-                onClick={() => setShowUserManagement(true)}
-                style={{
-                  padding: '12px 32px',
-                  background: 'white',
-                  color: '#667eea',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  fontSize: '16px'
-                }}
-              >
-                Manage User Access →
-              </button>
+              {/* User Access */}
+              <div style={{
+                padding: '40px',
+                background: 'radial-gradient(circle at 20% 20%, #2a2b36 0%, transparent 45%),    radial-gradient(circle at 80% 0%, rgba(255, 0, 0, 0.15) 0%, transparent 40%),    #0e0f14',
+                borderRadius: '16px',
+                border: '1px solid',
+                color: 'white',
+                textAlign: 'center'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="3" y="11" width="18" height="11" rx="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    <circle cx="12" cy="16" r="1.5" />
+                  </svg>
+                </div>
+                <h3 style={{ marginBottom: '8px' }}>Assign Portal Access to Users</h3>
+                <p style={{ opacity: 0.9, marginBottom: '20px' }}>
+                  Manage employee permissions and control which modules they can access
+                </p>
+                <button
+                  onClick={() => setShowUserManagement(true)}
+                  style={{
+                    padding: '12px 32px',
+                    background: 'white',
+                    color: '#667eea',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    fontSize: '16px'
+                  }}
+                >
+                  Manage User Access →
+                </button>
+              </div>
+
+              {/* Employee Management (moved out of LMS) */}
+              <div style={{
+                padding: '40px',
+                background: 'radial-gradient(circle at 20% 20%, #2a2b36 0%, transparent 45%),    radial-gradient(circle at 80% 0%, rgba(0, 120, 255, 0.15) 0%, transparent 40%),    #0e0f14',
+                borderRadius: '16px',
+                border: '1px solid',
+                color: 'white',
+                textAlign: 'center'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                  </svg>
+                </div>
+                <h3 style={{ marginBottom: '8px' }}>Employee Management</h3>
+                <p style={{ opacity: 0.9, marginBottom: '20px' }}>
+                  Add, edit and view employees, departments and locations
+                </p>
+                <button
+                  onClick={() => navigate('/employees')}
+                  style={{
+                    padding: '12px 32px',
+                    background: 'white',
+                    color: '#1f6feb',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    fontSize: '16px'
+                  }}
+                >
+                  Manage Employees →
+                </button>
+              </div>
             </div>
           )}
         </section>

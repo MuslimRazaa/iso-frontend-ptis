@@ -64,30 +64,11 @@ const UserDashboard = () => {
         }
     };
 
-    // Define all possible tiles
+    // Define all possible tiles.
+    // NOTE: only real MODULES live here. Course/certificate views are part of
+    // the LMS itself (shown & handled inside the LMS), so they are NOT cards
+    // on this dashboard. Every card below is gated by an assigned permission.
     const allDashboardTiles = [
-        {
-            id: "my-courses",
-            title: "My Courses",
-            link: "/user/my-courses",
-            description: "Access your assigned training courses and track progress.",
-            status: "online",
-            statusLabel: "Available",
-            metric: "8 courses assigned",
-            permission: true, // Always visible
-            icon: "lms"
-        },
-        {
-            id: "certificates",
-            title: "My Certificates",
-            link: "/user/my-certificates",
-            description: "View and download your earned certificates.",
-            status: "online",
-            statusLabel: "Available",
-            metric: "3 certificates earned",
-            permission: true, // Always visible
-            icon: "certificates"
-        },
         {
             id: "lms-access",
             title: "LMS Portal",
@@ -231,35 +212,9 @@ const UserDashboard = () => {
                         <p className="eyebrow">Hello {userName}</p>
                         <h1>Welcome To PTIS Portal</h1>
                         <p>
-                            Access your training courses, view certificates, and manage your assigned modules
-                            from a centralized dashboard.
+                            Launch the modules assigned to you from one place. Your courses,
+                            certificates and assessments open inside their respective modules.
                         </p>
-                        <div className="cta-row">
-                            <Link to="/user/my-courses" className="primary-btn">View My Courses</Link>
-                            <Link to="/user/my-certificates" className="ghost-btn">My Certificates</Link>
-                        </div>
-                    </article>
-
-                    <article className="status-panel">
-                        <h2>My Learning Status</h2>
-                        <ul>
-                            {loadingStats ? (
-                                <li className="status-pill ok">
-                                    <span>Loading...</span>
-                                </li>
-                            ) : (
-                                quickStats.map((item) => (
-                                    <li key={item.label} className={`status-pill ${item.status}`}>
-                                        <span>{item.label}</span>
-                                        <strong>{item.value}</strong>
-                                    </li>
-                                ))
-                            )}
-                        </ul>
-                        <div className="status-footer">
-                            <span className="pulse" />
-                            Last updated 5 mins ago
-                        </div>
                     </article>
                 </section>
 

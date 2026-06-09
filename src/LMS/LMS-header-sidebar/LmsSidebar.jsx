@@ -34,16 +34,10 @@ const menuConfig = [
       { label: "All Courses", path: "/learning-management-system/all-courses" },
       { label: "Task Allocation", path: "/learning-management-system/task-allocation" },
       { label: "Course Categories", path: "/learning-management-system/course-categories" },
+      { label: "Course Tracking", path: "/learning-management-system/course-tracking" },
     ],
   },
-  {
-    id: "employee",
-    label: "Employees",
-    children: [
-      { label: "Add Employee", path: "/learning-management-system/add-employee" },
-      { label: "All Employees", path: "/learning-management-system/all-employees" },
-    ],
-  },
+  // Employees moved to the main dashboard (standalone /employees).
   // Question Bank & Certificates moved to the dedicated Testing module.
 ];
 

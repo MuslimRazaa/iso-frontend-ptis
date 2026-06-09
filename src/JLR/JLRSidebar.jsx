@@ -102,23 +102,6 @@ function JLRSidebar() {
           </NavLink>
         </div>
       </nav>
-
-      {/* Back to Dashboard at bottom */}
-      <div style={{
-        marginTop: 'auto',
-        padding: '12px 18px',
-        borderTop: '1px solid #e6e6eb',
-      }}>
-        <NavLink
-          to={dashboardPath}
-          className="menu-trigger link"
-          style={{ opacity: 0.65 }}
-        >
-          <SidebarIcon id="back" />
-          <span className="menu-label">Back to Dashboard</span>
-          <i aria-hidden="true" />
-        </NavLink>
-      </div>
     </aside>
   )
 }

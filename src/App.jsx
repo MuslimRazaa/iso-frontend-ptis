@@ -16,6 +16,7 @@ import AddCourse from './LMS/pages/AddCourse'
 import AllCourses from './LMS/pages/AllCourses'
 import TaskAllocation from './LMS/pages/TaskAllocation'
 import CourseCategories from './LMS/pages/CourseCategories'
+import CourseTracking from './LMS/pages/CourseTracking'
 import CourseDetail from './LMS/pages/CourseDetail'
 import AddEmployee from './LMS/pages/AddEmployee'
 import AllEmployees from './LMS/pages/AllEmployees'
@@ -31,6 +32,9 @@ import AddClient from './Portal/pages/AddClient'
 import InsertRecord from './Portal/pages/InsertRecord'
 import AllRecords from './Portal/pages/AllRecords'
 import UnprocessedRecords from './Portal/pages/UnprocessedRecords'
+
+// Admin - Employee Management (standalone, moved out of LMS)
+import EmployeesLayout from './Employees/EmployeesLayout'
 
 // Admin - Job Log Description (standalone module)
 import JLRLayout from './JLR/JLRLayout'
@@ -105,8 +109,8 @@ function App() {
               <Route path="all-courses"         element={<AllCourses />} />
               <Route path="task-allocation"     element={<TaskAllocation />} />
               <Route path="course-categories"   element={<CourseCategories />} />
-              <Route path="add-employee"        element={<AddEmployee />} />
-              <Route path="all-employees"       element={<AllEmployees />} />
+              <Route path="course-tracking"     element={<CourseTracking />} />
+              {/* Employee management moved out of the LMS → standalone /employees */}
               <Route path="set-standards"       element={<SetStandards />} />
               {/* Question Bank & Certificates moved to the dedicated Testing module */}
               <Route path="course/:courseId"    element={<CourseDetail />} />
@@ -121,6 +125,16 @@ function App() {
               <Route path="all-records"          element={<AllRecords />} />
               <Route path="unprocessed-records"  element={<UnprocessedRecords />} />
             </Route>
+
+            {/* Admin — Employee Management (standalone, moved out of LMS) */}
+            <Route path="/employees" element={<EmployeesLayout />}>
+              <Route index                element={<AllEmployees />} />
+              <Route path="all-employees" element={<AllEmployees />} />
+              <Route path="add-employee"  element={<AddEmployee />} />
+            </Route>
+            {/* Old LMS employee URLs → redirect to the standalone area */}
+            <Route path="/learning-management-system/all-employees" element={<Navigate to="/employees/all-employees" replace />} />
+            <Route path="/learning-management-system/add-employee"  element={<Navigate to="/employees/add-employee" replace />} />
 
             {/* Admin — Testing Module (standalone, integrated from ptis-lms) */}
             <Route path="/testing" element={<TestingModulePage />} />

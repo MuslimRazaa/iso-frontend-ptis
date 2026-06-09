@@ -3,6 +3,7 @@ import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import { API_ENDPOINTS } from '../../config/api'
 import useLmsBase from '../useLmsBase'
+import { Pencil, Trash2 } from 'lucide-react'
 
 function AddEmployee() {
   const navigate = useNavigate()
@@ -414,7 +415,7 @@ function AddEmployee() {
                             }}
                             title="Edit"
                           >
-                            ✎
+                            <Pencil size={16} />
                           </button>
                           <button
                             type="button"
@@ -422,7 +423,7 @@ function AddEmployee() {
                             onClick={() => handleDeleteDepartment(dept.id)}
                             title="Delete"
                           >
-                            🗑
+                            <Trash2 size={16} />
                           </button>
                         </div>
                       </li>
@@ -506,7 +507,7 @@ function AddEmployee() {
                             }}
                             title="Edit"
                           >
-                            ✎
+                            <Pencil size={16} />
                           </button>
                           <button
                             type="button"
@@ -514,7 +515,7 @@ function AddEmployee() {
                             onClick={() => handleDeleteLocation(loc.id)}
                             title="Delete"
                           >
-                            🗑
+                            <Trash2 size={16} />
                           </button>
                         </div>
                       </li>

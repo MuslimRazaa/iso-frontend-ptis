@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { Upload, Loader2 } from 'lucide-react'
 import { API_ENDPOINTS } from '../../config/api'
 
 function QuestionBank({ defaultTab = 'add' }) {
@@ -323,7 +324,9 @@ function QuestionBank({ defaultTab = 'add' }) {
                 <p className="panel-subtitle">Select a standard and capture MCQs with answer keys.</p>
               </div>
               <label htmlFor="excel-upload" className="primary-btn" style={{ cursor: 'pointer' }}>
-                {importing ? '⏳ Importing...' : '📥 Import Excel'}
+                {importing
+                  ? <><Loader2 size={16} className="lms-spin" style={{ verticalAlign: 'middle', marginRight: 6 }} /> Importing…</>
+                  : <><Upload size={16} style={{ verticalAlign: 'middle', marginRight: 6 }} /> Import Excel</>}
                 <input
                   id="excel-upload"
                   type="file"

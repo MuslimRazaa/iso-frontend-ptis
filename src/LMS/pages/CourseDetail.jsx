@@ -3,6 +3,10 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api'
 import PdfViewer from '../../components/PdfViewer'
 import useLmsBase from '../useLmsBase'
+import {
+  GraduationCap, UserRound, Star, BookOpen, Calendar, Clock,
+  ExternalLink, FileText, Video, Smartphone, Infinity as InfinityIcon
+} from 'lucide-react'
 
 function CourseDetail() {
   const { courseId } = useParams()
@@ -325,7 +329,7 @@ function CourseDetail() {
             </div>
             <div style={{ padding: '24px' }}>
               <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-                <div style={{ fontSize: '56px', marginBottom: '16px' }}>🎓</div>
+                <div style={{ marginBottom: '16px', color: '#d7263d' }}><GraduationCap size={56} strokeWidth={1.5} /></div>
                 <h3 style={{ marginBottom: '10px' }}>{course.title}</h3>
                 <p style={{ color: '#888', fontSize: '14px', lineHeight: '1.6' }}>
                   Once you start, your progress will be tracked — video watch time and study
@@ -381,24 +385,24 @@ function CourseDetail() {
           <p className="course-intro">{course.description}</p>
           <div className="course-stats">
             <div className="stat-item">
-              <span className="stat-icon">👨‍🏫</span>
+              <span className="stat-icon"><UserRound size={20} /></span>
               <div><strong>{course.instructor}</strong><span>Instructor</span></div>
             </div>
             <div className="stat-item">
-              <span className="stat-icon">⭐</span>
+              <span className="stat-icon"><Star size={20} /></span>
               <div><strong>{course.rating}</strong><span>Rating</span></div>
             </div>
             <div className="stat-item">
-              <span className="stat-icon">📚</span>
+              <span className="stat-icon"><BookOpen size={20} /></span>
               <div><strong>{course.creditHours}h</strong><span>Credit Hours</span></div>
             </div>
             <div className="stat-item">
-              <span className="stat-icon">📅</span>
+              <span className="stat-icon"><Calendar size={20} /></span>
               <div><strong>{course.duration}</strong><span>Duration</span></div>
             </div>
             {isUserMode && progressData && (
               <div className="stat-item">
-                <span className="stat-icon">⏱️</span>
+                <span className="stat-icon"><Clock size={20} /></span>
                 <div><strong>{progressPct}%</strong><span>Your Progress</span></div>
               </div>
             )}
@@ -466,7 +470,7 @@ function CourseDetail() {
                           <div className="video-info">
                             <strong>
                               {video?.title || `Video ${index + 1}`}
-                              {isExt && <span style={{ marginLeft: '8px', fontSize: '0.85em' }}>🔗</span>}
+                              {isExt && <span style={{ marginLeft: '8px', display: 'inline-flex', verticalAlign: 'middle' }}><ExternalLink size={13} /></span>}
                             </strong>
                             <span>{video?.duration || 'Video'}</span>
                           </div>
@@ -545,7 +549,7 @@ function CourseDetail() {
                             {course.resources.map((r, i) => (
                               <li key={i}>
                                 <div className="resource-info">
-                                  <span className="resource-icon">📄</span>
+                                  <span className="resource-icon"><FileText size={18} /></span>
                                   <div><strong>{r.name}</strong><span>{r.size}</span></div>
                                 </div>
                                 {r.url ? <a className="resource-open-btn" href={r.url} target="_blank" rel="noopener noreferrer" download>Download</a>
@@ -564,7 +568,7 @@ function CourseDetail() {
                           {course.resources.map((r, i) => (
                             <li key={i}>
                               <div className="resource-info">
-                                <span className="resource-icon">📄</span>
+                                <span className="resource-icon"><FileText size={18} /></span>
                                 <div><strong>{r.name}</strong><span>{r.size}</span></div>
                               </div>
                               {r.url ? (
@@ -603,11 +607,11 @@ function CourseDetail() {
             <div className="sidebar-info">
               <h4>Course Includes:</h4>
               <ul>
-                <li><span>🎥</span> {course.videos?.length || 0} video lectures</li>
-                <li><span>📄</span> {course.resources?.length || 0} downloadable resources</li>
-                <li><span>📱</span> Access on mobile and desktop</li>
-                <li><span>🎓</span> Certificate of completion</li>
-                <li><span>♾️</span> Lifetime access</li>
+                <li><span className="ci-ic"><Video size={16} /></span> {course.videos?.length || 0} video lectures</li>
+                <li><span className="ci-ic"><FileText size={16} /></span> {course.resources?.length || 0} downloadable resources</li>
+                <li><span className="ci-ic"><Smartphone size={16} /></span> Access on mobile and desktop</li>
+                <li><span className="ci-ic"><GraduationCap size={16} /></span> Certificate of completion</li>
+                <li><span className="ci-ic"><InfinityIcon size={16} /></span> Lifetime access</li>
               </ul>
             </div>
 
@@ -630,11 +634,11 @@ function CourseDetail() {
                 {/* Time stats */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: '12px', color: '#888' }}>🎥 Video Time</span>
+                    <span style={{ fontSize: '12px', color: '#888', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Video size={14} /> Video Time</span>
                     <span style={{ fontSize: '13px', fontWeight: '600' }}>{formatTime(videoSecs)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: '12px', color: '#888' }}>📄 Study Time</span>
+                    <span style={{ fontSize: '12px', color: '#888', display: 'inline-flex', alignItems: 'center', gap: 6 }}><FileText size={14} /> Study Time</span>
                     <span style={{ fontSize: '13px', fontWeight: '600' }}>{formatTime(pptSecs)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.07)' }}>
