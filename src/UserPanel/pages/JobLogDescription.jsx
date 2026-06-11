@@ -42,6 +42,7 @@ const fromDB = row => ({
   submissionDate: row.submission_date ? row.submission_date.slice(0, 10) : '',
   source: row.source || '',
   remark: row.remark || '',
+  remarks: row.remarks || '',
   // Inventory department fields
   stockRequisition: row.stock_requisition || '',
   goodsIssueNote: row.goods_issue_note || '',
@@ -82,6 +83,7 @@ const toDB = data => ({
   submission_date: data.submissionDate || null,
   source: data.source || null,
   remark: data.remark || null,
+  remarks: data.remarks || null,
   stock_requisition: data.stockRequisition || null,
   goods_issue_note: data.goodsIssueNote || null,
   consumption: data.consumption || null,
@@ -220,7 +222,7 @@ const emptyEntry = {
   entryDate: '', vehicleUsed: '', days: '', calculatedDays: '', manPower: '',
   manHours: '', drivenKm: '', jmps: '', tra: '', equipCL: '', vLog: '', tbt: '',
   status: '', completionDate: '', rept: '', exp: '', iso: '', accounts: '', it: '',
-  submissionDate: '', source: '', remark: '',
+  submissionDate: '', source: '', remark: '', remarks: '',
   stockRequisition: '', goodsIssueNote: '', consumption: '', gatePass: ''
 }
 
@@ -236,7 +238,7 @@ const FIELD_DEPT = {
   vehicleUsed: 'operations', days: 'operations', calculatedDays: 'operations',
   manPower: 'operations', manHours: 'operations', drivenKm: 'operations',
   jmps: 'operations', status: 'operations', completionDate: 'operations',
-  source: 'operations', remark: 'operations',
+  source: 'operations', remark: 'operations', remarks: 'operations',
   // QHSE
   tra: 'qhse', equipCL: 'qhse', vLog: 'qhse', tbt: 'qhse', iso: 'qhse',
   rept: 'qhse', submissionDate: 'qhse',
@@ -269,7 +271,7 @@ const COL_GROUPS = [
   { label: 'Safety Documentation', span: 5, color: '#fdf5ff', textColor: '#7c3aed', borderColor: '#ddb8f7' },
   { label: 'Status & Tracking', span: 9, color: '#fff5f6', textColor: '#d7263d', borderColor: '#ffd1d8' },
   { label: 'Inventory', span: 4, color: '#fff9e6', textColor: '#a87800', borderColor: '#f4dd9d' },
-  { label: 'Remark', span: 1, color: '#f7f7f9', textColor: '#595966', borderColor: '#e0e0e6' },
+  { label: 'Remarks', span: 2, color: '#f7f7f9', textColor: '#595966', borderColor: '#e0e0e6' },
   { label: 'Actions', span: 1, color: '#f7f7f9', textColor: '#595966', borderColor: '#e0e0e6' },
 ]
 
@@ -636,6 +638,9 @@ function JobLogDescription() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [sourceFilter, setSourceFilter] = useState('all')
+  const [sortBy, setSortBy] = useState('entryDesc') // entryDesc | entryAsc | sNoDesc | sNoAsc | clientAsc
+  const [dateFrom, setDateFrom] = useState('') // entry-date range filter (inclusive)
+  const [dateTo, setDateTo] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [openSelect, setOpenSelect] = useState(null)
   const selectClickIntent = useRef({ status: false, source: false })
@@ -676,16 +681,46 @@ function JobLogDescription() {
 
   const filteredEntries = useMemo(() => {
     const q = searchTerm.trim().toLowerCase()
-    return entries.filter(e => {
+    const list = entries.filter(e => {
       if (statusFilter !== 'all' && e.status !== statusFilter) return false
       if (sourceFilter !== 'all' && e.source !== sourceFilter) return false
+      // Entry-date range filter (YYYY-MM-DD string compare is correct for ISO dates)
+      if (dateFrom && (!e.entryDate || e.entryDate < dateFrom)) return false
+      if (dateTo && (!e.entryDate || e.entryDate > dateTo)) return false
       if (!q) return true
-      return [e.sNo, e.entryDate, e.client, e.workOrder, e.inspectorName, e.inspectorTeam,
-      e.reference, e.location, e.natureOfJob, e.startDate, e.endDate, e.vehicleUsed,
-      e.status, e.source, e.completionDate, e.submissionDate, e.remark]
-        .filter(Boolean).join(' ').toLowerCase().includes(q)
+      // Search across every text field in the row
+      return [
+        e.sNo, e.entryDate, e.client, e.workOrder, e.inspectorName, e.inspectorTeam,
+        e.reference, e.location, e.natureOfJob, e.startDate, e.endDate, e.vehicleUsed,
+        e.days, e.calculatedDays, e.manPower, e.manHours, e.drivenKm,
+        e.jmps, e.tra, e.equipCL, e.vLog, e.tbt, e.status, e.completionDate,
+        e.rept, e.exp, e.iso, e.accounts, e.it, e.submissionDate, e.source,
+        e.remark, e.remarks, e.stockRequisition, e.goodsIssueNote, e.consumption, e.gatePass,
+      ].filter(Boolean).join(' ').toLowerCase().includes(q)
     })
-  }, [entries, searchTerm, statusFilter, sourceFilter])
+
+    // Sorting (default: entry date newest first)
+    const byDate = (a, b) => {
+      // empty dates always sink to the bottom regardless of direction
+      if (!a && !b) return 0
+      if (!a) return 1
+      if (!b) return -1
+      return a < b ? -1 : a > b ? 1 : 0
+    }
+    const num = v => (v === '' || v == null ? NaN : Number(v))
+    const sorted = [...list]
+    sorted.sort((x, y) => {
+      switch (sortBy) {
+        case 'entryAsc':  return byDate(x.entryDate, y.entryDate)
+        case 'entryDesc': return byDate(y.entryDate, x.entryDate)
+        case 'sNoAsc':    return (num(x.sNo) || 0) - (num(y.sNo) || 0)
+        case 'sNoDesc':   return (num(y.sNo) || 0) - (num(x.sNo) || 0)
+        case 'clientAsc': return String(x.client).localeCompare(String(y.client))
+        default:          return byDate(y.entryDate, x.entryDate)
+      }
+    })
+    return sorted
+  }, [entries, searchTerm, statusFilter, sourceFilter, sortBy, dateFrom, dateTo])
 
   const totalEntries = filteredEntries.length
   const totalPages = Math.max(1, Math.ceil(totalEntries / PAGE_SIZE))
@@ -697,7 +732,7 @@ function JobLogDescription() {
   const pageStart = totalEntries === 0 ? 0 : pageStartIdx + 1
   const pageEnd = totalEntries === 0 ? 0 : pageStartIdx + paginatedEntries.length
 
-  useEffect(() => { setCurrentPage(1) }, [searchTerm, statusFilter, sourceFilter])
+  useEffect(() => { setCurrentPage(1) }, [searchTerm, statusFilter, sourceFilter, sortBy, dateFrom, dateTo])
   useEffect(() => { if (currentPage !== safePage) setCurrentPage(safePage) }, [currentPage, safePage])
 
   const handleSelectOpen = n => setOpenSelect(n)
@@ -722,7 +757,7 @@ function JobLogDescription() {
       jmps: f('jmps'), tra: f('tra'), equipCL: f('equipCL'), vLog: f('vLog'), tbt: f('tbt'),
       status: f('status'), completionDate: f('completionDate'), rept: f('rept'),
       exp: f('exp'), iso: f('iso'), accounts: f('accounts'), it: f('it'),
-      submissionDate: f('submissionDate'), source: f('source'), remark: f('remark'),
+      submissionDate: f('submissionDate'), source: f('source'), remark: f('remark'), remarks: f('remarks'),
       stockRequisition: f('stockRequisition'), goodsIssueNote: f('goodsIssueNote'),
       consumption: f('consumption'), gatePass: f('gatePass'),
     })
@@ -1014,7 +1049,7 @@ function JobLogDescription() {
           <input
             type="text"
             style={{ ...inputStyle, paddingLeft: 40, width: '100%', boxSizing: 'border-box' }}
-            placeholder="Search client, work order, inspector, reference, location…"
+            placeholder="Search any field — client, WO, inspector, location, status, remarks…"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
           />
@@ -1043,6 +1078,30 @@ function JobLogDescription() {
           <option value="all">All Regions</option>
           {sourceOptions.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
+        {/* Sort */}
+        <select
+          style={{ ...inputStyle, minWidth: 180, cursor: 'pointer' }}
+          value={sortBy}
+          onChange={e => setSortBy(e.target.value)}
+          title="Sort entries"
+        >
+          <option value="entryDesc">Entry Date — Newest first</option>
+          <option value="entryAsc">Entry Date — Oldest first</option>
+          <option value="sNoDesc">S# — High to Low</option>
+          <option value="sNoAsc">S# — Low to High</option>
+          <option value="clientAsc">Client — A to Z</option>
+        </select>
+        {/* Entry-date range */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} title="Filter by entry date">
+          <span style={{ fontSize: 12, fontWeight: 600, color: T.clearBtnColor }}>📅 From</span>
+          <input type="date" value={dateFrom} max={dateTo || undefined}
+            style={{ ...inputStyle, padding: '10px 10px', minWidth: 0, cursor: 'pointer' }}
+            onChange={e => setDateFrom(e.target.value)} />
+          <span style={{ fontSize: 12, fontWeight: 600, color: T.clearBtnColor }}>To</span>
+          <input type="date" value={dateTo} min={dateFrom || undefined}
+            style={{ ...inputStyle, padding: '10px 10px', minWidth: 0, cursor: 'pointer' }}
+            onChange={e => setDateTo(e.target.value)} />
+        </div>
         {/* Clear */}
         <button
           type="button"
@@ -1052,7 +1111,7 @@ function JobLogDescription() {
             fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap',
             transition: 'all 0.2s ease',
           }}
-          onClick={() => { setSearchTerm(''); setStatusFilter('all'); setSourceFilter('all') }}
+          onClick={() => { setSearchTerm(''); setStatusFilter('all'); setSourceFilter('all'); setDateFrom(''); setDateTo(''); setSortBy('entryDesc') }}
         >
           ✕ Clear Filters
         </button>
@@ -1106,13 +1165,14 @@ function JobLogDescription() {
                   <th>Consumption</th>
                   <th title="Gate Pass">Gate Pass</th>
                   <th>Remark</th>
+                  <th>Remarks</th>
                   <th style={{ textAlign: 'center' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={37} style={{ padding: '60px 32px', textAlign: 'center' }}>
+                    <td colSpan={38} style={{ padding: '60px 32px', textAlign: 'center' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
                         <span style={{ fontSize: 36 }}>⏳</span>
                         <span style={{ fontSize: 15, fontWeight: 600, color: '#7a7a8c' }}>Loading job log entries…</span>
@@ -1121,7 +1181,7 @@ function JobLogDescription() {
                   </tr>
                 ) : filteredEntries.length === 0 ? (
                   <tr>
-                    <td colSpan={37} style={{ padding: '60px 32px', textAlign: 'center' }}>
+                    <td colSpan={38} style={{ padding: '60px 32px', textAlign: 'center' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
                         <span style={{ fontSize: 44 }}>📋</span>
                         <span style={{ fontSize: 16, fontWeight: 700, color: '#1f1f27' }}>No job log entries found</span>
@@ -1187,6 +1247,9 @@ function JobLogDescription() {
                         <td className="all-records-cell-text" style={{ fontSize: 12, color: '#a87800' }}>{rv(entry.gatePass)}</td>
                         <td className="all-records-cell-remarks" style={{ maxWidth: 200, fontSize: 13, color: '#595966' }}>
                           {rv(entry.remark)}
+                        </td>
+                        <td className="all-records-cell-remarks" style={{ maxWidth: 200, fontSize: 13, color: '#595966' }}>
+                          {rv(entry.remarks)}
                         </td>
                         <td className="all-records-cell-actions" style={{ textAlign: 'center' }}>
                           <div className="all-records-actions" style={{ justifyContent: 'center' }}>
@@ -1387,6 +1450,13 @@ function JobLogDescription() {
                   placeholder="Any notes or observations…"
                   disabled={!canEdit('operations')}
                   onChange={e => handleModalChange('remark', e.target.value)} />
+              </label>
+
+              <label><span>Remarks</span>
+                <textarea rows="3" value={modalState.remarks}
+                  placeholder="Additional remarks…"
+                  disabled={!canEdit('operations')}
+                  onChange={e => handleModalChange('remarks', e.target.value)} />
               </label>
 
               <ModalSection Icon={MdOutlineHealthAndSafety} title="QHSE" hint="Safety & compliance" />
