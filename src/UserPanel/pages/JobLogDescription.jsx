@@ -3,6 +3,10 @@ import { useLocation } from 'react-router-dom'
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api'
 import { BsBriefcase, BsBoxSeam, BsWallet2, BsLaptop, BsClipboardData, BsPencilSquare } from 'react-icons/bs'
 import { MdOutlineHealthAndSafety } from 'react-icons/md'
+import {
+  Plus, RefreshCw, Upload, Trash2, Search, Calendar, AlertTriangle, X,
+  ClipboardList, CheckCircle2, Clock, CircleDashed, Pencil
+} from 'lucide-react'
 
 /* ─────────────────────────────────────────────────────────────
    DB ↔ component field mapping helpers
@@ -699,24 +703,26 @@ function JobLogDescription() {
       ].filter(Boolean).join(' ').toLowerCase().includes(q)
     })
 
-    // Sorting (default: entry date newest first)
-    const byDate = (a, b) => {
-      // empty dates always sink to the bottom regardless of direction
+    // Sorting (default: entry date newest first).
+    // Entry-date comparator: rows with NO entry date ALWAYS sink to the bottom,
+    // regardless of direction. `dir` orders the real dates (-1 newest first, 1 oldest first).
+    const cmpEntry = (x, y, dir) => {
+      const a = x.entryDate, b = y.entryDate
       if (!a && !b) return 0
-      if (!a) return 1
-      if (!b) return -1
-      return a < b ? -1 : a > b ? 1 : 0
+      if (!a) return 1   // x has no date → x goes last
+      if (!b) return -1  // y has no date → y goes last
+      return a < b ? -dir : a > b ? dir : 0
     }
     const num = v => (v === '' || v == null ? NaN : Number(v))
     const sorted = [...list]
     sorted.sort((x, y) => {
       switch (sortBy) {
-        case 'entryAsc':  return byDate(x.entryDate, y.entryDate)
-        case 'entryDesc': return byDate(y.entryDate, x.entryDate)
+        case 'entryAsc':  return cmpEntry(x, y, 1)
+        case 'entryDesc': return cmpEntry(x, y, -1)
         case 'sNoAsc':    return (num(x.sNo) || 0) - (num(y.sNo) || 0)
         case 'sNoDesc':   return (num(y.sNo) || 0) - (num(x.sNo) || 0)
         case 'clientAsc': return String(x.client).localeCompare(String(y.client))
-        default:          return byDate(y.entryDate, x.entryDate)
+        default:          return cmpEntry(x, y, -1)
       }
     })
     return sorted
@@ -830,7 +836,7 @@ function JobLogDescription() {
       const rows = json.data ?? []
       setEntries(Array.isArray(rows) ? rows.map(fromDB) : [])
       const modeLabel = csvMode === 'replace' ? 'replaced all data with' : 'added'
-      setImportMsg(`✅ ${modeLabel} ${json.inserted} record(s) — total: ${Array.isArray(rows) ? rows.length : '?'}`)
+      setImportMsg(`${modeLabel} ${json.inserted} record(s) — total: ${Array.isArray(rows) ? rows.length : '?'}`)
       setTimeout(() => setImportMsg(null), 6000)
     } catch (err) {
       setError(`CSV import failed: ${err.message}`)
@@ -847,7 +853,7 @@ function JobLogDescription() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || `Server error ${res.status}`)
       setEntries([])
-      setImportMsg(`🗑️ All entries deleted. You can now upload a fresh CSV.`)
+      setImportMsg(`All entries deleted. You can now upload a fresh CSV.`)
       setTimeout(() => setImportMsg(null), 8000)
     } catch (err) {
       setError(`Delete all failed: ${err.message}`)
@@ -859,7 +865,7 @@ function JobLogDescription() {
   const rv = v => v || '—'
 
   /* ── Theme-aware stat card ──────────────────────────────── */
-  const StatCard = ({ accent, label, value }) => (
+  const StatCard = ({ accent, label, value, Icon }) => (
     <div style={{
       flex: '1 1 140px',
       background: T.statCardBg,
@@ -871,8 +877,9 @@ function JobLogDescription() {
     }}>
       <span style={{
         fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
-        letterSpacing: '0.12em', color: accent
-      }}>{label}</span>
+        letterSpacing: '0.12em', color: accent,
+        display: 'inline-flex', alignItems: 'center', gap: 6
+      }}>{Icon && <Icon size={13} />}{label}</span>
       <span style={{ fontSize: 28, fontWeight: 800, color: accent }}>{value}</span>
     </div>
   )
@@ -943,16 +950,18 @@ function JobLogDescription() {
                   padding: '9px 14px', border: 'none', cursor: 'pointer', transition: 'all 0.2s',
                   background: csvMode === 'append' ? '#d7263d' : '#fff',
                   color: csvMode === 'append' ? '#fff' : '#7a7a8c',
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
                 }}>
-                ➕ Append
+                <Plus size={15} /> Append
               </button>
               <button type="button" onClick={() => setCsvMode('replace')}
                 style={{
                   padding: '9px 14px', border: 'none', cursor: 'pointer', transition: 'all 0.2s',
                   background: csvMode === 'replace' ? '#d7263d' : '#fff',
                   color: csvMode === 'replace' ? '#fff' : '#7a7a8c',
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
                 }}>
-                🔄 Replace
+                <RefreshCw size={15} /> Replace
               </button>
             </div>
           )}
@@ -964,7 +973,7 @@ function JobLogDescription() {
               disabled={loading}
               style={{ display: 'flex', alignItems: 'center', gap: 8 }}
             >
-              <span style={{ fontSize: 16, lineHeight: 1 }}>📂</span> Import CSV
+              <Upload size={16} /> Import CSV
             </button>
           )}
           {entries.length > 0 && (isAdminContext || jlrPerms?.full) && (
@@ -982,13 +991,13 @@ function JobLogDescription() {
                 transition: 'all 0.2s ease',
               }}
             >
-              <span style={{ fontSize: 15, lineHeight: 1 }}>🗑️</span> Delete All
+              <Trash2 size={15} /> Delete All
             </button>
           )}
           {canAccessAnyJlr && (
             <button type="button" className="primary-btn" onClick={openAddModal}
               style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 18, lineHeight: 1 }}>＋</span> Add Entry
+              <Plus size={17} /> Add Entry
             </button>
           )}
         </div>
@@ -1002,9 +1011,9 @@ function JobLogDescription() {
           border: '1px solid #c3ecd4', color: '#1d814c',
           fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 10,
         }}>
-          {importMsg}
+          <CheckCircle2 size={16} /> {importMsg}
           <button type="button" onClick={() => setImportMsg(null)}
-            style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#1d814c', fontSize: 16 }}>✕</button>
+            style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#1d814c', display: 'inline-flex' }}><X size={16} /></button>
         </div>
       )}
       {error && (
@@ -1014,9 +1023,9 @@ function JobLogDescription() {
           border: '1px solid #ffd1d8', color: '#d7263d',
           fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 10,
         }}>
-          ⚠️ {error}
+          <AlertTriangle size={16} /> {error}
           <button type="button" onClick={() => setError(null)}
-            style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#d7263d', fontSize: 16 }}>✕</button>
+            style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#d7263d', display: 'inline-flex' }}><X size={16} /></button>
         </div>
       )}
 
@@ -1027,10 +1036,10 @@ function JobLogDescription() {
         background: T.filtersBg,
         borderBottom: T.bannerBorder,
       }}>
-        <StatCard accent="#595966" label="📋 Total Jobs" value={stats.total} />
-        <StatCard accent="#1d814c" label="✓ Closed" value={stats.closed} />
-        <StatCard accent="#c87e1c" label="◐ In Progress" value={stats.inProgress} />
-        <StatCard accent="#7a7a8c" label="◌ Pending" value={stats.pending} />
+        <StatCard accent="#595966" Icon={ClipboardList} label="Total Jobs" value={stats.total} />
+        <StatCard accent="#1d814c" Icon={CheckCircle2} label="Closed" value={stats.closed} />
+        <StatCard accent="#c87e1c" Icon={Clock} label="In Progress" value={stats.inProgress} />
+        <StatCard accent="#7a7a8c" Icon={CircleDashed} label="Pending" value={stats.pending} />
       </div>
 
       {/* ══ FILTERS ═══════════════════════════════════════════ */}
@@ -1044,8 +1053,8 @@ function JobLogDescription() {
         <div style={{ flex: 1, minWidth: 220, position: 'relative' }}>
           <span style={{
             position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
-            fontSize: 15, color: T.searchIconColor, pointerEvents: 'none'
-          }}>🔍</span>
+            color: T.searchIconColor, pointerEvents: 'none', display: 'inline-flex'
+          }}><Search size={15} /></span>
           <input
             type="text"
             style={{ ...inputStyle, paddingLeft: 40, width: '100%', boxSizing: 'border-box' }}
@@ -1093,7 +1102,7 @@ function JobLogDescription() {
         </select>
         {/* Entry-date range */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} title="Filter by entry date">
-          <span style={{ fontSize: 12, fontWeight: 600, color: T.clearBtnColor }}>📅 From</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: T.clearBtnColor, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Calendar size={13} /> From</span>
           <input type="date" value={dateFrom} max={dateTo || undefined}
             style={{ ...inputStyle, padding: '10px 10px', minWidth: 0, cursor: 'pointer' }}
             onChange={e => setDateFrom(e.target.value)} />
@@ -1113,7 +1122,7 @@ function JobLogDescription() {
           }}
           onClick={() => { setSearchTerm(''); setStatusFilter('all'); setSourceFilter('all'); setDateFrom(''); setDateTo(''); setSortBy('entryDesc') }}
         >
-          ✕ Clear Filters
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><X size={14} /> Clear Filters</span>
         </button>
       </div>
 
@@ -1183,7 +1192,7 @@ function JobLogDescription() {
                   <tr>
                     <td colSpan={38} style={{ padding: '60px 32px', textAlign: 'center' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-                        <span style={{ fontSize: 44 }}>📋</span>
+                        <ClipboardList size={44} color="#b9c0cf" />
                         <span style={{ fontSize: 16, fontWeight: 700, color: '#1f1f27' }}>No job log entries found</span>
                         <span style={{ fontSize: 14, color: '#7a7a8c' }}>
                           {searchTerm || statusFilter !== 'all' || sourceFilter !== 'all'
@@ -1255,13 +1264,13 @@ function JobLogDescription() {
                           <div className="all-records-actions" style={{ justifyContent: 'center' }}>
                             {canAccessAnyJlr ? (
                               <button type="button" className="action-btn edit small"
-                                onClick={() => openEditModal(entry)}>✏️ Edit</button>
+                                onClick={() => openEditModal(entry)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Pencil size={13} /> Edit</button>
                             ) : (
                               <span style={{ fontSize: 12, color: '#aaa' }}>View only</span>
                             )}
                             {(isAdminContext || jlrPerms?.full) && (
                               <button type="button" className="action-btn delete small"
-                                onClick={() => handleDelete(entry.id)}>🗑️ Delete</button>
+                                onClick={() => handleDelete(entry.id)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Trash2 size={13} /> Delete</button>
                             )}
                           </div>
                         </td>
@@ -1318,7 +1327,7 @@ function JobLogDescription() {
                   </p>
                 </div>
               </div>
-              <button className="close-modal-btn" onClick={closeModal}>✕</button>
+              <button className="close-modal-btn" onClick={closeModal} style={{ display: 'inline-flex', alignItems: 'center' }}><X size={18} /></button>
             </div>
 
             <form className="modal-form" onSubmit={handleSubmit}>
