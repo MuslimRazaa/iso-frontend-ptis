@@ -1,20 +1,11 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext } from 'react';
 
 const ThemeContext = createContext();
 
 export const ThemeProvider = ({ children }) => {
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    const saved = localStorage.getItem('ptis_dark_mode');
-    return saved === 'true';
-  });
-
-  const toggleTheme = () => {
-    setIsDarkMode(prev => {
-      const newValue = !prev;
-      localStorage.setItem('ptis_dark_mode', newValue);
-      return newValue;
-    });
-  };
+  // Dark mode has been removed — Testing portal is light-theme only.
+  const isDarkMode = false;
+  const toggleTheme = () => {};
 
   const theme = {
     bg: {

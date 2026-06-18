@@ -1239,10 +1239,31 @@ body {
 
 .lms-sidebar.collapsed .sidebar-brand {
   justify-content: center;
+  gap: 0;
+}
+
+.lms-sidebar.collapsed .sidebar-brand > div:not(.brand-logo) {
+  width: 0;
+  overflow: hidden;
+  padding: 0;
 }
 
 .lms-sidebar.collapsed .submenu.visible {
   max-height: 0;
+}
+
+.lms-sidebar.collapsed {
+  overflow-y: hidden;
+}
+
+.lms-sidebar.collapsed .sidebar-fade-text {
+  opacity: 0;
+  transition: opacity 0.22s;
+}
+
+.lms-sidebar.expanded .sidebar-fade-text {
+  opacity: 1;
+  transition: opacity 0.22s;
 }
 
 .sidebar-menu {
@@ -5303,6 +5324,26 @@ ul.submenu li {
 
 a#ChromelessStatusBar\.Options-Small14 {
     display: none !important;
+}
+
+/* Hover state: keep background white, paint only border + text with the brand gradient.
+   Toggled via JS classList on hover (background-clip:text needs its own element). */
+.grad-hover-outline {
+  background-color: #fff !important;
+  background-image: linear-gradient(#fff, #fff), linear-gradient(120deg, rgb(185, 28, 60), rgb(215, 38, 61)) !important;
+  background-origin: border-box !important;
+  background-clip: padding-box, border-box !important;
+  border: 2px solid transparent !important;
+}
+.grad-hover-outline .grad-label {
+  background: linear-gradient(120deg, rgb(185, 28, 60), rgb(215, 38, 61));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+.grad-hover-outline .grad-icon {
+  color: rgb(215, 38, 61) !important;
 }
 
 span.cui-img-cont-float.cui-img-14by14 {

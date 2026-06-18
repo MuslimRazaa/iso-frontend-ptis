@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+﻿import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   LogIn,
   User,
@@ -28,11 +28,12 @@ import {
   Sun,
   Search,
   Info,
-  Link
+  Link,
+  X
 } from 'lucide-react';
 import { Links, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTheme } from './contexts/ThemeContext';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import StandardsAdminPage from './admin/StandardsAdminPage';
 import QuestionsAdminPage from './admin/QuestionsAdminPage';
 import ptisLogo from './assets/ptisLogo.png';
@@ -439,7 +440,7 @@ const HomePage = React.memo(({
             backgroundColor: 'rgba(231, 76, 60, 0.1)',
             border: '1px solid rgba(231, 76, 60, 0.3)',
             borderRadius: '8px',
-            color: '#e74c3c',
+            color: '#d7263d',
             fontSize: '0.9em',
             marginTop: '15px',
             display: 'flex',
@@ -1388,7 +1389,7 @@ const TestingModule = () => {
     },
     buttonRed: {
       padding: '12px 24px',
-      background: 'linear-gradient(120deg, #c0392b, #e74c3c)',
+      background: 'linear-gradient(120deg, #b91c3c, #d7263d)',
       color: '#fff',
       border: 'none',
       borderRadius: '28px',
@@ -1423,7 +1424,7 @@ const TestingModule = () => {
       gap: '10px',
       padding: '15px',
       backgroundColor: '#fadbd8',
-      color: '#c0392b',
+      color: '#d7263d',
       borderRadius: '28px',
       marginBottom: '20px'
     },
@@ -1436,10 +1437,13 @@ const TestingModule = () => {
     th: {
       padding: '15px',
       textAlign: 'left',
-      color: colors.text,
-      fontWeight: 'bold',
-      borderBottom: '3px solid #c0392b',
-      backgroundColor: colors.cardAltBg
+      color: '#8a8a95',
+      fontWeight: 700,
+      fontSize: '12px',
+      textTransform: 'uppercase',
+      letterSpacing: '0.05em',
+      borderBottom: '2px solid #ececf0',
+      backgroundColor: '#f8f9fa'
     },
     td: {
       padding: '15px',
@@ -1469,7 +1473,7 @@ const TestingModule = () => {
         <div style={{ 
           backgroundColor: '#1a1a2e', 
           boxShadow: '0 2px 10px rgba(0,0,0,0.3)', 
-          borderBottom: '3px solid #c0392b',
+          borderBottom: '3px solid #d7263d',
           position: 'fixed',
           top: 0,
           left: 0,
@@ -1500,31 +1504,11 @@ const TestingModule = () => {
               <h1 style={{ fontSize: isMobile ? '1.2em' : '1.5em', fontWeight: 'bold', color: '#fff', margin: 0 }}>
                 PTIS Test
               </h1>
-              <span style={{ background: 'linear-gradient(120deg, #c0392b, #e74c3c)', color: '#fff', padding: '5px 15px', borderRadius: '28px', fontSize: '0.9em', fontWeight: 'bold' }}>
+              <span style={{ background: 'linear-gradient(120deg, #b91c3c, #d7263d)', color: '#fff', padding: '5px 15px', borderRadius: '28px', fontSize: '0.9em', fontWeight: 'bold' }}>
                 {selectedStandard}
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '20px', flexWrap: isMobile ? 'wrap' : 'nowrap', width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end' }}>
-              <button
-                onClick={toggleTheme}
-                style={{
-                  background: 'rgba(255, 255, 255, 0.1)',
-                  border: 'none',
-                  borderRadius: '28px',
-                  padding: '8px 12px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  color: '#fff',
-                  transition: 'all 0.3s ease'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
-              >
-                {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
-                <span style={{ fontSize: '0.9em' }}>{isDarkMode ? 'Light' : 'Dark'}</span>
-              </button>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#fff' }}>
                 <Clock size={20} />
                 <span style={{ fontFamily: 'monospace', fontSize: isMobile ? '1em' : '1.2em', fontWeight: 'bold' }}>
@@ -1551,9 +1535,9 @@ const TestingModule = () => {
           )}
 
           {skipped.length > 0 && !isReviewingSkipped && (
-            <div style={{ backgroundColor: '#fadbd8', border: '1px solid #c0392b', borderRadius: '8px', padding: '15px', marginBottom: '25px', textAlign: 'center' }}>
-              <AlertCircle size={20} style={{ verticalAlign: 'middle', marginRight: '8px', color: '#c0392b' }} />
-              <span style={{ color: '#c0392b', fontWeight: 'bold' }}>
+            <div style={{ backgroundColor: '#fadbd8', border: '1px solid #d7263d', borderRadius: '8px', padding: '15px', marginBottom: '25px', textAlign: 'center' }}>
+              <AlertCircle size={20} style={{ verticalAlign: 'middle', marginRight: '8px', color: '#d7263d' }} />
+              <span style={{ color: '#d7263d', fontWeight: 'bold' }}>
                 {skipped.length} Questions Skipped. You Must Answer all Questions to Submit the Test.
               </span>
             </div>
@@ -1564,7 +1548,7 @@ const TestingModule = () => {
               <>
                 <h2 style={{ fontSize: isMobile ? '1.15em' : '1.4em', fontWeight: '600', marginBottom: '25px', color: theme.text.primary, lineHeight: '1.4' }}>
                   {wasSkipped && !isReviewingSkipped && (
-                    <span style={{ color: '#c0392b', fontSize: '0.8em', marginRight: '10px' }}>⏭ SKIPPED</span>
+                    <span style={{ color: '#d7263d', fontSize: '0.8em', marginRight: '10px' }}>⏭ SKIPPED</span>
                   )}
                   <span style={{ color: theme.text.primary, fontWeight: 'bold' }}>Q{currentQuestion + 1}.</span> {question.Question}
                 </h2>
@@ -1583,7 +1567,7 @@ const TestingModule = () => {
                           padding: isMobile ? '14px' : '18px',
                           border: `2px solid ${isSelected ? theme.accent.primary : theme.border.default}`,
                           borderRadius: '28px',
-                          backgroundColor: isSelected ? (isDarkMode ? 'rgba(192, 57, 43, 0.2)' : '#ecf0f1') : theme.bg.card,
+                          backgroundColor: isSelected ? (isDarkMode ? 'rgba(215, 38, 61, 0.2)' : '#ecf0f1') : theme.bg.card,
                           transition: 'all 0.3s ease',
                           display: 'flex',
                           alignItems: 'flex-start',
@@ -1644,7 +1628,7 @@ const TestingModule = () => {
                 disabled={!selectedAnswer}
                 style={{
                   ...commonStyles.button,
-                  background: selectedAnswer ? 'linear-gradient(120deg, #c0392b, #e74c3c)' : theme.border.default,
+                  background: selectedAnswer ? 'linear-gradient(120deg, #b91c3c, #d7263d)' : theme.border.default,
                   cursor: selectedAnswer ? 'pointer' : 'not-allowed'
                 }}
               >
@@ -1693,10 +1677,10 @@ const TestingModule = () => {
       : (resultPassed ? '#e8f5e8' : '#fadbd8');
     const statusPanelBorder = isDarkMode
       ? (resultPassed ? '1px solid rgba(46, 204, 113, 0.55)' : '1px solid rgba(231, 76, 60, 0.65)')
-      : `2px solid ${resultPassed ? '#c8e6c9' : '#c0392b'}`;
+      : `2px solid ${resultPassed ? '#c8e6c9' : '#d7263d'}`;
     const statusPanelShadow = isDarkMode
       ? (resultPassed ? '0 0 20px rgba(46, 204, 113, 0.15)' : '0 0 20px rgba(231, 76, 60, 0.18)')
-      : (resultPassed ? 'none' : '0 0 20px rgba(192, 57, 43, 0.2)');
+      : (resultPassed ? 'none' : '0 0 20px rgba(215, 38, 61, 0.2)');
 
     return (
       <div style={{ minHeight: '100vh', height: '100%', background: resultPageBackground }}>
@@ -1728,11 +1712,11 @@ const TestingModule = () => {
                 </>
               ) : (
                 <>
-                  <XCircle size={80} color="#c0392b" style={{ marginBottom: '20px' }} />
+                  <XCircle size={80} color="#d7263d" style={{ marginBottom: '20px' }} />
                   <h1 style={{
                     fontSize: '2.5em',
                     fontWeight: 'bold',
-                    color: '#c0392b',
+                    color: '#d7263d',
                     margin: '0 0 10px',
                     textShadow: isDarkMode ? 'none' : '0 2px 4px rgba(0,0,0,0.1)'
                   }}>
@@ -1890,7 +1874,7 @@ const TestingModule = () => {
                     <span style={{ color: colors.textMuted, fontWeight: '500' }}>Wrong Answers:</span>
                     <span style={{
                       fontWeight: 'bold',
-                      color: '#c0392b',
+                      color: '#d7263d',
                       fontSize: '1.2em',
                       display: 'flex',
                       alignItems: 'center',
@@ -1926,7 +1910,7 @@ const TestingModule = () => {
                     <span style={{
                       fontSize: '2.2em',
                       fontWeight: 'bold',
-                      color: resultPassed ? '#27ae60' : '#e74c3c',
+                      color: resultPassed ? '#27ae60' : '#d7263d',
                       textShadow: isDarkMode ? 'none' : '0 1px 3px rgba(0,0,0,0.1)'
                     }}>
                       {testResult.PERCENTAGE}
@@ -2070,7 +2054,10 @@ const TestingModule = () => {
     const [resultsCurrentPage, setResultsCurrentPage] = useState(1);
     const [resultsGoToPage, setResultsGoToPage] = useState('');
     const resultsItemsPerPage = 50;
-    const [sidebarHovered, setSidebarHovered] = useState(false);
+    const [openSidebarMenus, setOpenSidebarMenus] = useState({});
+    const sidebarRef = useRef(null);
+    const handleSidebarEnter = () => { sidebarRef.current?.classList.replace('collapsed', 'expanded'); };
+    const handleSidebarLeave = () => { sidebarRef.current?.classList.replace('expanded', 'collapsed'); };
     const [showHeader, setShowHeader] = useState(true);
     const [lastScrollY, setLastScrollY] = useState(0);
     const [showAddResultModal, setShowAddResultModal] = useState(false);
@@ -2680,14 +2667,41 @@ const TestingModule = () => {
     }, [lastScrollY]);
 
     // Sidebar menu items
+    const sidebarIconPaths = {
+      dashboard: "M3 3v18h18v-2H5V3H3zm4 12h2v2H7v-2zm4-6h2v8h-2V9zm4-4h2v12h-2V5z",
+      results: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 2 5 5h-5V4zM8 18v-2h8v2H8zm0-4v-2h8v2H8zm0-4V8h5v2H8z",
+      practical: "M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2c0-1.1-.9-2-2-2s-2 .9-2 2zm3-1c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm-1 9-2.5-2.5 1-1 1.5 1.5 3-3 1 1-4 4z",
+      standards: "M5 6h14v2H5zm0 5h14v2H5zm0 5h9v2H5z",
+      questions: "M12 3a9 9 0 1 0 9 9 9 9 0 0 0-9-9zm0 13h-2v-2h2zm1.94-5.06-.99.95A3 3 0 0 0 12 14h-2v-.38a4.64 4.64 0 0 1 1.31-3.31l1.12-1.16A1.31 1.31 0 0 0 11.83 7 1.51 1.51 0 0 0 10 8.5H8a3.5 3.5 0 0 1 6.75-1.31 3 3 0 0 1-.81 3.75z",
+      certificates: "M12 2 9.5 7 4 7.5 8 11l-1 5 5-2.5 5 2.5-1-5 4-3.5-5.5-.5z",
+    };
+    const goTo = (tab, btnId) => {
+      setAdminActiveTab(tab);
+      if (btnId) setTimeout(() => document.getElementById(btnId)?.click(), 150);
+    };
+    const toggleSidebarMenu = (id) => setOpenSidebarMenus(prev => ({ ...prev, [id]: !prev[id] }));
     const sidebarItems = [
-      { id: 'dashboard', icon: BarChart3, label: 'Dashboard', color: '#1a1a2e' },
-      { id: 'results', icon: FileText, label: 'Test Results', color: '#1a1a2e' },
-      { id: 'practical', icon: Plus, label: 'Practical Results', color: '#1a1a2e' },
-      { id: 'standards', icon: BookOpen, label: 'Standards', color: '#1a1a2e' },
-      { id: 'questions', icon: FileText, label: 'Questions', color: '#1a1a2e' },
-      { id: 'certificates', icon: FileCheck, label: 'Certificates', color: '#1a1a2e' }
-      // Employees management moved to the main dashboard (standalone /employees).
+      { id: 'dashboard', label: 'Dashboard' },
+      { id: 'results', label: 'Test Results', children: [
+        { label: 'Add New Result', action: () => goTo('results', 'result-add-btn') },
+        { label: 'View Test Results', action: () => goTo('results') },
+      ]},
+      { id: 'practical', label: 'Practical Results', children: [
+        { label: 'Add New Practical', action: () => goTo('practical', 'practical-add-btn') },
+        { label: 'View Practicals', action: () => goTo('practical') },
+      ]},
+      { id: 'standards', label: 'Standards', children: [
+        { label: 'Add New Standard', action: () => goTo('standards', 'standards-add-btn') },
+        { label: 'View Standards', action: () => goTo('standards') },
+      ]},
+      { id: 'questions', label: 'Questions', children: [
+        { label: 'Add New Question', action: () => goTo('questions', 'questions-add-btn') },
+        { label: 'Upload Questions', action: () => goTo('questions', 'questions-upload-btn') },
+        { label: 'View Questions', action: () => goTo('questions') },
+      ]},
+      { id: 'certificates', label: 'Certificates', children: [
+        { label: 'View Certificates', action: () => goTo('certificates') },
+      ]},
     ];
 
     // Certificate Management Page Component - Memoized to prevent re-renders on parent state changes
@@ -2768,6 +2782,18 @@ const TestingModule = () => {
             .trim();
           return base || null;
         };
+
+        // Single-type standards (no General/Specific split) whose Practical_Required
+        // flag is on — their practical pass should show as its own certificate row.
+        const singlePracticalRequiredKeys = new Set();
+        standards.forEach((s) => {
+          const stdName = norm(s?.Standard_List);
+          if (!stdName) return;
+          const stdLower = stdName.toLowerCase();
+          if (stdLower.includes('general') || stdLower.includes('specific')) return;
+          if (String(s?.Practical_Required || '').trim().toLowerCase() !== 'yes') return;
+          singlePracticalRequiredKeys.add(stdLower);
+        });
 
         // Group General/Specific/Practical tests by employee
         const grouped = {};
@@ -2857,12 +2883,19 @@ const TestingModule = () => {
             }
             
             finalResults.push(resultData);
+          } else if (
+            group.practical && !group.general && !group.specific &&
+            singlePracticalRequiredKeys.has(String(group.baseType || '').trim().toLowerCase())
+          ) {
+            // Single-type standard with Practical_Required ON — show the practical
+            // pass as its own row alongside the theory single row.
+            finalResults.push(group.practical);
           }
-          // If only one test passed (general or specific), don't show button
+          // If only one of general/specific passed (without the other), don't show
         });
-        
+
         return finalResults;
-      }, [searchType, searchQuery, isPass, norm]);
+      }, [searchType, searchQuery, isPass, norm, standards]);
 
       const totalCertificatePages = Math.ceil(filteredResults.length / certificateItemsPerPage);
       const paginatedCertificateResults = filteredResults.slice(
@@ -2886,17 +2919,10 @@ const TestingModule = () => {
       return (
         <div>
           {/* Search/Filter Card */}
-          <div style={{
-            backgroundColor: theme.bg.card,
-            borderRadius: '16px',
-            overflow: 'hidden',
-            boxShadow: `0 4px 15px ${isDarkMode ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)'}`,
-            border: `1px solid ${theme.border.default}`,
-            marginBottom: '25px'
-          }}>
-            <div style={{ 
-              background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
-              padding: '18px 25px',
+          <article className="panel" style={{ marginBottom: '25px', padding: 0, overflow: 'hidden' }}>
+            <div style={{
+              padding: '20px 28px',
+              borderBottom: '1px solid #ececf0',
               display: 'flex',
               alignItems: 'center',
               gap: '12px'
@@ -2904,17 +2930,17 @@ const TestingModule = () => {
               <div style={{
                 width: '40px',
                 height: '40px',
-                borderRadius: '18px',
-                background: 'rgba(255, 255, 255, 0.15)',
+                borderRadius: '12px',
+                background: '#fff5f5',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center'
               }}>
-                <FileCheck size={20} color="#fff" />
+                <FileCheck size={20} color="#d7263d" />
               </div>
               <div style={{ textAlign: 'left' }}>
-                <h3 style={{ margin: 0, color: '#fff', fontSize: '1.2em', fontWeight: '600', textAlign: 'left' }}>Passed Candidates</h3>
-                <p style={{ margin: 0, marginTop: '4px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85em', textAlign: 'left' }}>Generate and Download Certificates For Passed Candidates</p>
+                <p className="eyebrow" style={{ margin: 0 }}>Passed Candidates</p>
+                <h3 style={{ margin: 0, marginTop: 4, fontSize: '1.1em', fontWeight: '600', textAlign: 'left' }}>Generate and download certificates for passed candidates</h3>
               </div>
             </div>
 
@@ -2934,7 +2960,7 @@ const TestingModule = () => {
                   width: '100%',
                   padding: '10px 15px',
                   border: `1px solid ${theme.border.default}`,
-                  borderRadius: '4px',
+                  borderRadius: '16px',
                   fontSize: '0.95em',
                   boxSizing: 'border-box',
                   outline: 'none',
@@ -2967,7 +2993,7 @@ const TestingModule = () => {
                   width: '100%',
                   padding: '10px 15px',
                   border: `1px solid ${theme.border.default}`,
-                  borderRadius: '4px',
+                  borderRadius: '16px',
                   fontSize: '0.95em',
                   boxSizing: 'border-box',
                   outline: 'none',
@@ -2998,38 +3024,26 @@ const TestingModule = () => {
                 transition: 'all 0.2s ease'
               }}
               onMouseOver={(e) => {
-                if (searchQuery) {
-                  e.currentTarget.style.borderColor = '#c0392b';
-                  e.currentTarget.style.color = '#c0392b';
-                  e.currentTarget.style.backgroundColor = colors.cardBg;
-                }
+                if (searchQuery) e.currentTarget.classList.add('grad-hover-outline');
               }}
               onMouseOut={(e) => {
-                e.currentTarget.style.borderColor = colors.inputBorder;
-                e.currentTarget.style.color = colors.textMuted;
-                e.currentTarget.style.backgroundColor = colors.inputBg;
+                e.currentTarget.classList.remove('grad-hover-outline');
               }}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+              <svg className="grad-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6l-1 14H6L5 6"></path>
                 <path d="M10 11v6"></path>
                 <path d="M14 11v6"></path>
                 <path d="M9 6V4h6v2"></path>
               </svg>
-              Clear Filter
+              <span className="grad-label">Clear Filter</span>
             </button>
             </div>
-          </div>
+          </article>
 
           {/* Table Card */}
-          <div style={{
-            backgroundColor: theme.bg.card,
-            borderRadius: '16px',
-            overflow: 'hidden',
-            boxShadow: `0 4px 15px ${isDarkMode ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)'}`,
-            border: `1px solid ${theme.border.default}`
-          }}>
+          <article className="panel" style={{ padding: 0, overflow: 'hidden' }}>
             {filteredResults.length === 0 ? (
               <div style={{ padding: '40px', textAlign: 'center' }}>
                 <AlertCircle size={48} color="#95a5a6" style={{ marginBottom: '15px' }} />
@@ -3041,14 +3055,14 @@ const TestingModule = () => {
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr style={{ backgroundColor: colors.tableHeaderBg }}>
-                      <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: '600', fontSize: '0.95em', color: '#fff' }}>Employee ID</th>
-                      <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: '600', fontSize: '0.95em', color: '#fff' }}>Name</th>
-                      <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: '600', fontSize: '0.95em', color: '#fff' }}>Standard</th>
-                      <th style={{ padding: '18px 20px', textAlign: 'center', fontWeight: '600', fontSize: '0.95em', color: '#fff' }}>Score</th>
-                      <th style={{ padding: '18px 20px', textAlign: 'center', fontWeight: '600', fontSize: '0.95em', color: '#fff' }}>Date</th>
-                      <th style={{ padding: '18px 20px', textAlign: 'center', fontWeight: '600', fontSize: '0.95em', color: '#fff' }}>Cert Type</th>
-                      <th style={{ padding: '18px 20px', textAlign: 'center', fontWeight: '600', fontSize: '0.95em', color: '#fff' }}>Actions</th>
+                    <tr style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #ececf0' }}>
+                      <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Employee ID</th>
+                      <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Name</th>
+                      <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Standard</th>
+                      <th style={{ padding: '18px 20px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Score</th>
+                      <th style={{ padding: '18px 20px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Date</th>
+                      <th style={{ padding: '18px 20px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Cert Type</th>
+                      <th style={{ padding: '18px 20px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3411,275 +3425,148 @@ const TestingModule = () => {
                 </button>
               </div>
             )}
-          </div>
+          </article>
         </div>
       );
     };
     }, [norm, isPass, toPctNumber, results]); // Recreate when results change to avoid stale data
 
-    const showSidebarLabel = !isMobile && sidebarHovered;
-
     return (
-      <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: theme.bg.primary }}>
-        {/* Sidebar */}
-        <div 
-          onMouseEnter={() => {
-            if (!isMobile) setSidebarHovered(true);
-          }}
-          onMouseLeave={() => {
-            if (!isMobile) setSidebarHovered(false);
-          }}
-          style={{
-          width: isMobile ? '64px' : sidebarHovered ? '220px' : '80px',
-          backgroundColor: '#ffffff',
-          boxShadow: '2px 0 16px rgba(0,0,0,0.08)',
-          display: 'flex',
-          flexDirection: 'column',
-          position: 'fixed',
-          height: '100vh',
-          left: 0,
-          top: 0,
-          borderRight: '1px solid #e8e8ee',
-          borderTopRightRadius: isMobile ? '0' : '20px',
-          borderBottomRightRadius: isMobile ? '0' : '20px',
-          transition: 'width 0.5s cubic-bezier(0.22, 0.61, 0.36, 1), box-shadow 0.5s ease',
-          overflow: 'hidden',
-          willChange: 'width',
-          zIndex: 1000
-        }}>
-          {/* Logo/Header */}
-          <div style={{
-            padding: '16px 20px',
-            borderBottom: '1px solid #e8e8ee',
-            whiteSpace: 'nowrap',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'flex-start',
-            gap: showSidebarLabel ? '10px' : '0'
-          }}>
-            <div
-              onClick={() => navigate('/dashboard')}
-              title="Back to Dashboard"
-              style={{
-                backgroundColor: '#ffffff',
-                border: '2px solid #ffffff',
-                borderRadius: '20px',
-                padding: '2px',
-                width: '40px',
-                height: '40px',
-                boxSizing: 'border-box',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                transition: 'box-shadow 0.2s ease'
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(255,255,255,0.3)';
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.boxShadow = 'none';
-              }}
-            >
-              <img 
-                src={ptisLogo} 
-                alt="PTIS Logo" 
-                style={{ 
-                  width: '32px', 
-                  height: '32px',
-                  objectFit: 'contain'
-                }} 
-              />
+      <div className="lms-shell">
+        <div className="lms-shell__pattern" aria-hidden="true" />
+        <div className="lms-shell__grid">
+        <aside
+          ref={sidebarRef}
+          className="lms-sidebar collapsed"
+          onMouseEnter={handleSidebarEnter}
+          onMouseLeave={handleSidebarLeave}
+        >
+          <div className="sidebar-brand">
+            <div className="brand-logo" aria-hidden="true">
+              <span onClick={() => navigate('/dashboard')} title="Back to Dashboard" style={{ cursor: 'pointer' }}>
+                <img src={ptisLogo} alt="PTIS" />
+              </span>
             </div>
-            <span style={{
-              fontSize: '0.95rem',
-              fontWeight: 700,
-              color: '#1f1f27',
-              maxWidth: showSidebarLabel ? '120px' : '0px',
-              opacity: showSidebarLabel ? 1 : 0,
-              transform: showSidebarLabel ? 'translateX(0)' : 'translateX(-6px)',
-              transition: 'max-width 0.3s ease, opacity 0.2s ease, transform 0.3s ease',
-              overflow: 'hidden'
-            }}>
-              Testing Portal
-            </span>
+            <div className="sidebar-fade-text" style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '1.4px', textTransform: 'uppercase', color: '#d7263d' }}>Testing Portal</span>
+              <div style={{ fontSize: 11, color: '#9a9aaa', marginTop: 1 }}>Assessment System</div>
+            </div>
           </div>
-
-          {/* Navigation */}
-          <nav style={{ flex: 1, padding: '20px 0' }}>
+          <nav className="sidebar-menu">
+            <div className="sidebar-fade-text" style={{ padding: '16px 18px 6px', overflow: 'hidden', whiteSpace: 'nowrap', pointerEvents: 'none' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '1.6px', textTransform: 'uppercase', color: '#b0b0c0' }}>Navigation</span>
+            </div>
             {sidebarItems.map(item => {
-              const Icon = item.icon;
               const isActive = adminActiveTab === item.id;
-              const showLabel = showSidebarLabel;
+              const isOpen = !!openSidebarMenus[item.id];
               return (
-                <button
-                  key={item.id}
-                  onClick={() => setAdminActiveTab(item.id)}
-                  style={{
-                    width: '100%',
-                    padding: isMobile ? '10px 14px' : '10px 20px',
-                    border: 'none',
-                    backgroundColor: isActive ? 'rgba(215,38,61,0.07)' : 'transparent',
-                    borderLeft: isActive ? '3px solid #d7263d' : '3px solid transparent',
-                    color: isActive ? '#d7263d' : '#595966',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'flex-start',
-                    gap: showLabel ? '10px' : '0',
-                    fontSize: '0.95em',
-                    fontWeight: isActive ? '700' : '500',
-                    transition: 'all 0.2s ease',
-                    whiteSpace: 'nowrap'
-                  }}
-                  onMouseOver={e => {
-                    if (!isActive) e.currentTarget.style.backgroundColor = 'rgba(215,38,61,0.04)';
-                  }}
-                  onMouseOut={e => {
-                    if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
-                  }}
-                >
-                  <span style={{
-                    width: '40px',
-                    height: '40px',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0
-                  }}>
-                    <Icon size={18} />
-                  </span>
-                  <span style={{
-                    maxWidth: showLabel ? '120px' : '0px',
-                    opacity: showLabel ? 1 : 0,
-                    transform: showLabel ? 'translateX(0)' : 'translateX(-6px)',
-                    transition: 'max-width 0.3s ease, opacity 0.2s ease, transform 0.3s ease',
-                    overflow: 'hidden',
-                    whiteSpace: 'nowrap'
-                  }}>
-                    {item.label}
-                  </span>
-                </button>
+                <div key={item.id} className="menu-group">
+                  {item.children ? (
+                    <>
+                      <button
+                        type="button"
+                        className={`menu-trigger${isActive ? ' active' : ''}${isOpen ? ' open' : ''}`}
+                        onClick={() => toggleSidebarMenu(item.id)}
+                      >
+                        <span className="menu-icon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" focusable="false"><path d={sidebarIconPaths[item.id]} /></svg>
+                        </span>
+                        <span className="menu-label">{item.label}</span>
+                        <i />
+                      </button>
+                      <ul className={`submenu${isOpen ? ' visible' : ''}`}>
+                        {item.children.map(child => (
+                          <li key={child.label}>
+                            <button
+                              type="button"
+                              onClick={child.action}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', width: '100%', textAlign: 'left', padding: 0, font: 'inherit', transition: 'color 0.15s' }}
+                              onMouseEnter={e => e.currentTarget.style.color = '#d7263d'}
+                              onMouseLeave={e => e.currentTarget.style.color = ''}
+                            >
+                              {child.label}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  ) : (
+                    <button className={`menu-trigger link${isActive ? ' active' : ''}`} onClick={() => setAdminActiveTab(item.id)}>
+                      <span className="menu-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" focusable="false"><path d={sidebarIconPaths[item.id]} /></svg>
+                      </span>
+                      <span className="menu-label">{item.label}</span>
+                      <i aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
               );
             })}
           </nav>
-        </div>
+        </aside>
 
-        {/* Main Content Area */}
-        <div style={{ marginLeft: isMobile ? '64px' : '80px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-          {/* Top Header Bar */}
-          <div style={{
-            backgroundColor: isDarkMode ? '#1a1a2e' : '#ffffff',
-            boxShadow: `0 2px 4px ${isDarkMode ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)'}`,
-            padding: isMobile ? '14px 12px' : '20px 30px',
-            borderBottom: '3px solid transparent',
-            borderImage: 'linear-gradient(90deg, #c0392b, #e74c3c, #c0392b) 1',
-            position: 'sticky',
-            top: 0,
-            zIndex: 100,
-            transform: showHeader ? 'translateY(0)' : 'translateY(-100%)',
-            transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-            willChange: 'transform'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: isMobile ? 'wrap' : 'nowrap', gap: isMobile ? '12px' : 0 }}>
-              <div>
-                <h1 style={{ margin: 0, color: theme.text.primary, fontSize: isMobile ? '1.2em' : '1.8em', fontWeight: 'bold' }}>
-                  {adminActiveTab === 'dashboard' && 'Dashboard Overview'}
-                  {adminActiveTab === 'results' && 'Test Results Management'}
-                  {adminActiveTab === 'standards' && 'Standards Management'}
-                  {adminActiveTab === 'questions' && 'Questions Management'}
-                  {adminActiveTab === 'certificates' && 'Certificate Management'}
-                  {adminActiveTab === 'employees' && 'Employee Management'}
-                  {adminActiveTab === 'practical' && 'Practical Test Management'}
-                </h1>
-                <p style={{ margin: '5px 0 0', color: theme.text.secondary, fontSize: '0.9em' }}>
-                  Welcome to PTIS Testing System Admin Panel
-                </p>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'flex-start' : 'flex-end' }}>
+        <div className="lms-main">
+          <header className="lms-header">
+            <div className="lms-header__copy">
+              <p className="eyebrow">PTIS Testing System</p>
+              <h1>
+                {adminActiveTab === 'dashboard' && <>Dashboard <span>Overview</span></>}
+                {adminActiveTab === 'results' && <>Test Results <span>Management</span></>}
+                {adminActiveTab === 'standards' && <>Standards <span>Management</span></>}
+                {adminActiveTab === 'questions' && <>Questions <span>Management</span></>}
+                {adminActiveTab === 'certificates' && <>Certificate <span>Management</span></>}
+                {adminActiveTab === 'employees' && <>Employee <span>Management</span></>}
+                {adminActiveTab === 'practical' && <>Practical Test <span>Management</span></>}
+              </h1>
+            </div>
+            <div className="lms-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {!(adminActiveTab === 'dashboard' || adminActiveTab === 'certificates') && (
                 <button
-                  onClick={toggleTheme}
                   style={{
-                    background: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
-                    border: 'none',
-                    borderRadius: '28px',
-                    padding: '10px 16px',
-                    cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '8px',
-                    color: theme.text.primary,
-                    transition: 'all 0.3s ease',
-                    fontWeight: '500'
+                    gap: 6,
+                    padding: '12px 26px',
+                    background: 'linear-gradient(120deg, #b91c3c, #d7263d)',
+                    color: '#fff',
+                    border: '1px solid transparent',
+                    borderRadius: '999px',
+                    cursor: 'pointer',
+                    fontSize: '15px',
+                    fontWeight: 600,
+                    boxShadow: '0 16px 36px rgba(215, 38, 61, 0.25)',
+                    transition: 'all 0.2s ease'
                   }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = isDarkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.1)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)'}
-                >
-                  {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-                  {!isMobile && <span>{isDarkMode ? 'Light Mode' : 'Dark Mode'}</span>}
-                </button>
-                {(adminActiveTab === 'dashboard' || adminActiveTab === 'certificates') ? null : (
-                <button
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(215, 38, 61, 0.4)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 16px 36px rgba(215, 38, 61, 0.25)';
+                  }}
                   onClick={() => {
                     if (adminActiveTab === 'results') {
-                      // Trigger add result
                       document.getElementById('result-add-btn')?.click();
                     } else if (adminActiveTab === 'standards') {
-                      // Trigger add standard
                       document.getElementById('standards-add-btn')?.click();
                     } else if (adminActiveTab === 'questions') {
-                      // Trigger add question
                       document.getElementById('questions-add-btn')?.click();
                     } else if (adminActiveTab === 'practical') {
-                      // Trigger add practical result
                       document.getElementById('practical-add-btn')?.click();
                     } else if (adminActiveTab === 'employees') {
-                      // Trigger add employee
                       document.getElementById('employees-add-btn')?.click();
                     }
                   }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.querySelector('svg').style.color = '#c0392b';
-                    e.currentTarget.style.background = '#fff';
-                    e.currentTarget.style.color = '#c0392b';
-                    e.currentTarget.style.border = '2px solid #c0392b';
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(192, 57, 43, 0.4)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.querySelector('svg').style.color = '#fff';
-                    e.currentTarget.style.background = 'linear-gradient(120deg, #c0392b, #e74c3c)';
-                    e.currentTarget.style.color = '#fff';
-                    e.currentTarget.style.border = '2px solid transparent';
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = 'none';
-                  }}
-                  style={{
-                    padding: '12px 25px',
-                    background: 'linear-gradient(120deg, #c0392b, #e74c3c)',
-                    color: '#fff',
-                    border: '2px solid transparent',
-                    borderRadius: '30px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    width: isMobile ? '100%' : 'auto',
-                    fontSize: '0.95em',
-                    fontWeight: 'bold',
-                    transition: 'all 0.3s ease'
-                  }}
                 >
-                  <Plus size={18} style={{ transition: 'color 0.3s ease' }} />
+                  <Plus size={16} />
                   Add New {adminActiveTab === 'results' ? 'Result' : adminActiveTab === 'standards' ? 'Standard' : adminActiveTab === 'questions' ? 'Question' : adminActiveTab === 'practical' ? 'Practical Result' : 'Employee'}
                 </button>
-                )}
-              </div>
+              )}
             </div>
-          </div>
+          </header>
 
-          {/* Content Area */}
-          <div style={{ flex: 1, padding: isMobile ? '16px 12px' : isTablet ? '24px 16px' : '30px', overflowY: 'auto', backgroundColor: theme.bg.primary, minHeight: '100vh' }}>
+          <section className="lms-content">
             {error && (
               <div style={commonStyles.error}>
                 <AlertCircle size={20} />
@@ -3688,386 +3575,183 @@ const TestingModule = () => {
             )}
 
             {/* Dashboard Tab */}
-            {adminActiveTab === 'dashboard' && (
-              <>
-                {/* KPI Cards */}
-                <div style={{ display: 'grid', gridTemplateColumns: dashboardFourCol, gap: '20px', marginBottom: '30px' }}>
-                  <div style={{
-                    ...commonStyles.card,
-                    background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
-                    color: '#fff',
-                    boxShadow: '0 4px 15px rgba(26, 26, 46, 0.3)'
-                  }}>
-                    <FileText size={48} color="#fff" style={{ marginBottom: '15px', opacity: 0.9 }} />
-                    <h3 style={{ fontSize: '1em', fontWeight: '500', marginBottom: '10px', color: 'rgba(255,255,255,0.9)' }}>Total Tests</h3>
-                    <p style={{ fontSize: '2.5em', fontWeight: 'bold', color: '#fff', margin: 0 }}>{totalTests}</p>
-                  </div>
-                  <div style={{
-                    ...commonStyles.card,
-                    background: 'linear-gradient(135deg, #27ae60 0%, #229954 100%)',
-                    color: '#fff',
-                    boxShadow: '0 4px 15px rgba(39, 174, 96, 0.3)'
-                  }}>
-                    <CheckCircle size={48} color="#fff" style={{ marginBottom: '15px', opacity: 0.9 }} />
-                    <h3 style={{ fontSize: '1em', fontWeight: '500', marginBottom: '10px', color: 'rgba(255,255,255,0.9)' }}>Passed</h3>
-                    <p style={{ fontSize: '2.5em', fontWeight: 'bold', color: '#fff', margin: 0 }}>{passedTests}</p>
-                  </div>
-                  <div style={{
-                    ...commonStyles.card,
-                    background: 'linear-gradient(135deg, #c0392b 0%, #e74c3c 50%, #a93226 100%)',
-                    color: '#fff',
-                    boxShadow: '0 4px 15px rgba(192, 57, 43, 0.3)'
-                  }}>
-                    <XCircle size={48} color="#fff" style={{ marginBottom: '15px', opacity: 0.9 }} />
-                    <h3 style={{ fontSize: '1em', fontWeight: '500', marginBottom: '10px', color: 'rgba(255,255,255,0.9)' }}>Failed</h3>
-                    <p style={{ fontSize: '2.5em', fontWeight: 'bold', color: '#fff', margin: 0 }}>{failedTests}</p>
-                  </div>
-                  <div style={{
-                    ...commonStyles.card,
-                    background: 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
-                    color: '#fff',
-                    boxShadow: '0 4px 15px rgba(52, 152, 219, 0.3)'
-                  }}>
-                    <BarChart3 size={48} color="#fff" style={{ marginBottom: '15px', opacity: 0.9 }} />
-                    <h3 style={{ fontSize: '1em', fontWeight: '500', marginBottom: '10px', color: 'rgba(255,255,255,0.9)' }}>Avg Score</h3>
-                    <p style={{ fontSize: '2.5em', fontWeight: 'bold', color: '#fff', margin: 0 }}>{averageScore.toFixed(1)}%</p>
-                  </div>
-                </div>
+            {adminActiveTab === 'dashboard' && (() => {
+              const chartData = results;
+              const ttStyle = { background: '#fff', border: '1px solid #ececf0', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.08)', fontSize: 13 };
+              const axStyle = { axisLine: false, tickLine: false, tick: { fill: '#9a9aaa', fontSize: 11 } };
 
-                {/* Charts Section */}
-                <div style={{ display: 'grid', gridTemplateColumns: dashboardTwoCol, gap: '20px', marginBottom: '30px' }}>
-                  {/* Pass/Fail Pie Chart */
-                  <div style={{
-                    backgroundColor: theme.bg.card,
-                    borderRadius: '28px',
-                    overflow: 'hidden',
-                    boxShadow: `0 4px 15px ${isDarkMode ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)'}`,
-                    border: `1px solid ${theme.border.default}`,
-                    padding: '25px'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-                      <TrendingUp size={24} color={theme.text.primary} />
-                      <h3 style={{ margin: 0, color: theme.text.primary, fontSize: '1.2em', fontWeight: '600' }}>Pass/Fail Distribution</h3>
-                    </div>
+              const standardStats = {};
+              chartData.forEach(r => {
+                const std = norm(r.STANDARD);
+                if (!standardStats[std]) standardStats[std] = { standard: std, passed: 0, failed: 0 };
+                if (isPass(r.STATUS)) standardStats[std].passed++; else standardStats[std].failed++;
+              });
+              const barData = Object.values(standardStats);
+
+              const ranges = { '0-40%': 0, '40-60%': 0, '60-80%': 0, '80-100%': 0 };
+              chartData.forEach(r => {
+                const score = toPctNumber(r.PERCENTAGE);
+                if (score < 40) ranges['0-40%']++;
+                else if (score < 60) ranges['40-60%']++;
+                else if (score < 80) ranges['60-80%']++;
+                else ranges['80-100%']++;
+              });
+              const histData = Object.entries(ranges).map(([range, count]) => ({ range, count }));
+
+              const areaData = chartData.slice(-20).map((r, idx) => ({
+                test: `T${idx + 1}`,
+                score: toPctNumber(r.PERCENTAGE)
+              }));
+
+              return (
+                <>
+                  <section className="lms-stat-grid" style={{ marginBottom: 32 }}>
+                    <article className="stat-card">
+                      <p>Total Tests</p>
+                      <h3>{totalTests}</h3>
+                      <span>All time</span>
+                    </article>
+                    <article className="stat-card">
+                      <p>Passed</p>
+                      <h3>{passedTests}</h3>
+                      <span>{totalTests > 0 ? ((passedTests / totalTests) * 100).toFixed(0) : 0}% pass rate</span>
+                    </article>
+                    <article className="stat-card accent">
+                      <p>Failed</p>
+                      <h3>{failedTests}</h3>
+                      <span>Needs review</span>
+                    </article>
+                    <article className="stat-card warning">
+                      <p>Avg Score</p>
+                      <h3>{averageScore.toFixed(1)}%</h3>
+                      <span>Across all tests</span>
+                    </article>
+                  </section>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: 24, marginBottom: 32 }}>
+                    <article className="panel" style={{ padding: 28 }}>
+                      <h3 style={{ margin: '0 0 20px' }}>Pass / Fail Distribution</h3>
+                      {chartData.length === 0 ? <p style={{ color: '#9a9aaa' }}>No data available</p> : (
+                        <ResponsiveContainer width="100%" height={280}>
+                          <PieChart>
+                            <Pie data={[{ name: 'Passed', value: passedTests }, { name: 'Failed', value: failedTests }]} cx="50%" cy="50%" innerRadius={70} outerRadius={110} paddingAngle={2} dataKey="value">
+                              <Cell fill="#27ae60" />
+                              <Cell fill="#d7263d" />
+                            </Pie>
+                            <Tooltip contentStyle={ttStyle} />
+                            <Legend />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      )}
+                    </article>
+
+                    <article className="panel" style={{ padding: 28 }}>
+                      <h3 style={{ margin: '0 0 20px' }}>Performance by Standard</h3>
+                      {chartData.length === 0 ? <p style={{ color: '#9a9aaa' }}>No data available</p> : (
+                        <ResponsiveContainer width="100%" height={280}>
+                          <BarChart data={barData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                            <CartesianGrid vertical={false} stroke="#ececf0" />
+                            <XAxis dataKey="standard" {...axStyle} />
+                            <YAxis {...axStyle} />
+                            <Tooltip contentStyle={ttStyle} />
+                            <Legend />
+                            <Bar dataKey="passed" fill="#27ae60" name="Passed" radius={[6, 6, 0, 0]} />
+                            <Bar dataKey="failed" fill="#d7263d" name="Failed" radius={[6, 6, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      )}
+                    </article>
+
+                    <article className="panel" style={{ padding: 28 }}>
+                      <h3 style={{ margin: '0 0 20px' }}>Score Distribution</h3>
+                      {chartData.length === 0 ? <p style={{ color: '#9a9aaa' }}>No data available</p> : (
+                        <ResponsiveContainer width="100%" height={280}>
+                          <BarChart data={histData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                            <CartesianGrid vertical={false} stroke="#ececf0" />
+                            <XAxis dataKey="range" {...axStyle} />
+                            <YAxis {...axStyle} />
+                            <Tooltip contentStyle={ttStyle} />
+                            <Bar dataKey="count" name="Tests" radius={[6, 6, 0, 0]}>
+                              {histData.map((entry, index) => (
+                                <Cell key={index} fill={entry.range === '0-40%' ? '#d7263d' : entry.range === '40-60%' ? '#e67e22' : entry.range === '60-80%' ? '#f5a623' : '#27ae60'} />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      )}
+                    </article>
+
+                    <article className="panel" style={{ padding: 28 }}>
+                      <h3 style={{ margin: '0 0 20px' }}>Performance Trend (Latest 20)</h3>
+                      {chartData.length === 0 ? <p style={{ color: '#9a9aaa' }}>No data available</p> : (
+                        <ResponsiveContainer width="100%" height={280}>
+                          <AreaChart data={areaData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                            <defs>
+                              <linearGradient id="areaScoreGradient" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#d7263d" stopOpacity={0.35} />
+                                <stop offset="100%" stopColor="#d7263d" stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid vertical={false} stroke="#ececf0" />
+                            <XAxis dataKey="test" {...axStyle} />
+                            <YAxis domain={[0, 100]} {...axStyle} />
+                            <Tooltip contentStyle={ttStyle} />
+                            <Area type="monotone" dataKey="score" stroke="#d7263d" fill="url(#areaScoreGradient)" strokeWidth={2} name="Score (%)" />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      )}
+                    </article>
+                  </div>
+
+                  <article className="panel" style={{ padding: 0, overflow: 'hidden' }}>
+                    <header style={{ padding: '24px 28px', borderBottom: '1px solid #ececf0' }}>
+                      <h2 style={{ margin: 0, fontSize: '1.1em' }}>Recent Test Results</h2>
+                    </header>
                     {results.length === 0 ? (
-                      <div style={{ textAlign: 'center', padding: '40px', color: theme.text.muted }}>
-                        <AlertCircle size={48} color={theme.text.muted} style={{ marginBottom: '10px' }} />
-                        <p>No data available</p>
-                      </div>
+                      <div style={{ padding: 40, textAlign: 'center', color: '#9a9aaa' }}>No Test Results Available</div>
                     ) : (
-                      <ResponsiveContainer width="100%" height={300}>
-                        <PieChart>
-                          <defs>
-                            <linearGradient id="passGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#2ecc71" />
-                              <stop offset="100%" stopColor="#27ae60" />
-                            </linearGradient>
-                            <linearGradient id="failGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#e74c3c" />
-                              <stop offset="100%" stopColor="#c0392b" />
-                            </linearGradient>
-                          </defs>
-                          <Pie
-                            data={[
-                              { name: 'Passed', value: passedTests, color: 'url(#passGradient)' },
-                              { name: 'Failed', value: failedTests, color: 'url(#failGradient)' }
-                            ]}
-                            cx="50%"
-                            cy="50%"
-                            labelLine={false}
-                            label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                            outerRadius={100}
-                            fill="#8884d8"
-                            dataKey="value"
-                            stroke="none"
-                          >
-                            {[
-                              { name: 'Passed', value: passedTests, color: 'url(#passGradient)' },
-                              { name: 'Failed', value: failedTests, color: 'url(#failGradient)' }
-                            ].map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
-                            ))}
-                          </Pie>
-                          <Tooltip
-                            contentStyle={{ backgroundColor: theme.bg.card, border: `1px solid ${theme.border.default}`, color: theme.text.primary }}
-                            itemStyle={{ color: theme.text.primary }}
-                            labelStyle={{ color: theme.text.primary }}
-                          />
-                          <Legend wrapperStyle={{ color: theme.text.primary }} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
-
-                  /* Standards Performance Bar Chart */}
-                  <div style={{
-                    backgroundColor: theme.bg.card,
-                    borderRadius: '28px',
-                    overflow: 'hidden',
-                    boxShadow: `0 4px 15px ${isDarkMode ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)'}`,
-                    border: `1px solid ${theme.border.default}`,
-                    padding: '25px'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-                      <Award size={24} color={theme.text.primary} />
-                      <h3 style={{ margin: 0, color: theme.text.primary, fontSize: '1.2em', fontWeight: '600' }}>Performance by Standard</h3>
-                    </div>
-                    {results.length === 0 ? (
-                      <div style={{ textAlign: 'center', padding: '40px', color: theme.text.muted }}>
-                        <AlertCircle size={48} color={theme.text.muted} style={{ marginBottom: '10px' }} />
-                        <p>No data available</p>
-                      </div>
-                    ) : (
-                      <ResponsiveContainer width="100%" height={300}>
-                        <BarChart
-                          data={(() => {
-                            const standardStats = {};
-                            results.forEach(r => {
-                              const std = norm(r.STANDARD);
-                              if (!standardStats[std]) {
-                                standardStats[std] = { standard: std, total: 0, passed: 0, failed: 0, avgScore: 0, sumScore: 0 };
-                              }
-                              standardStats[std].total++;
-                              standardStats[std].sumScore += toPctNumber(r.PERCENTAGE);
-                              if (isPass(r.STATUS)) {
-                                standardStats[std].passed++;
-                              } else {
-                                standardStats[std].failed++;
-                              }
-                            });
-                            return Object.values(standardStats).map(s => ({
-                              ...s,
-                              avgScore: (s.sumScore / s.total).toFixed(1),
-                              passRate: ((s.passed / s.total) * 100).toFixed(1)
-                            }));
-                          })()}
-                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                        >
-                          <defs>
-                            <linearGradient id="barPassGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#2ecc71" />
-                              <stop offset="100%" stopColor="#27ae60" />
-                            </linearGradient>
-                            <linearGradient id="barFailGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#e74c3c" />
-                              <stop offset="100%" stopColor="#c0392b" />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke={theme.border.default} />
-                          <XAxis dataKey="standard" tick={{ fill: theme.text.primary }} />
-                          <YAxis tick={{ fill: theme.text.primary }} />
-                          <Tooltip
-                            contentStyle={{ backgroundColor: theme.bg.card, border: `1px solid ${theme.border.default}`, color: theme.text.primary }}
-                            itemStyle={{ color: theme.text.primary }}
-                            labelStyle={{ color: theme.text.primary }}
-                          />
-                          <Legend wrapperStyle={{ color: theme.text.primary }} />
-                          <Bar dataKey="passed" fill="url(#barPassGradient)" name="Passed" />
-                          <Bar dataKey="failed" fill="url(#barFailGradient)" name="Failed" />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
-
-                  {/* Score Distribution & Performance Trend */}
-                  <div style={{
-                    backgroundColor: theme.bg.card,
-                    borderRadius: '28px',
-                    overflow: 'hidden',
-                    boxShadow: `0 4px 15px ${isDarkMode ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)'}`,
-                    border: `1px solid ${theme.border.default}`,
-                    padding: '25px'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-                      <BarChart3 size={24} color={theme.text.primary} />
-                      <h3 style={{ margin: 0, color: theme.text.primary, fontSize: '1.2em', fontWeight: '600' }}>Score Distribution</h3>
-                    </div>
-                    {results.length === 0 ? (
-                      <div style={{ textAlign: 'center', padding: '40px', color: theme.text.muted }}>
-                        <AlertCircle size={48} color={theme.text.muted} style={{ marginBottom: '10px' }} />
-                        <p>No data available</p>
-                      </div>
-                    ) : (
-                      <ResponsiveContainer width="100%" height={300}>
-                        <BarChart
-                          data={(() => {
-                            const ranges = {
-                              '0-40%': 0,
-                              '40-60%': 0,
-                              '60-80%': 0,
-                              '80-100%': 0
-                            };
-                            results.forEach(r => {
-                              const score = toPctNumber(r.PERCENTAGE);
-                              if (score < 40) ranges['0-40%']++;
-                              else if (score < 60) ranges['40-60%']++;
-                              else if (score < 80) ranges['60-80%']++;
-                              else ranges['80-100%']++;
-                            });
-                            return Object.entries(ranges).map(([range, count]) => ({
-                              range,
-                              count,
-                              fill: range === '0-40%' ? '#c0392b' : range === '40-60%' ? '#e67e22' : range === '60-80%' ? '#f39c12' : '#27ae60'
-                            }));
-                          })()}
-                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" stroke={theme.border.default} />
-                          <XAxis dataKey="range" tick={{ fill: theme.text.primary }} />
-                          <YAxis tick={{ fill: theme.text.primary }} />
-                          <Tooltip
-                            contentStyle={{ backgroundColor: theme.bg.card, border: `1px solid ${theme.border.default}`, color: theme.text.primary }}
-                            itemStyle={{ color: theme.text.primary }}
-                            labelStyle={{ color: theme.text.primary }}
-                          />
-                          <Legend 
-                            wrapperStyle={{ color: theme.text.primary }} 
-                            formatter={(value) => <span style={{ color: theme.text.primary }}>{value}</span>}
-                          />
-                          <Bar dataKey="count" name="Tests" fill={isDarkMode ? '#ffffff' : '#1a1a2e'} >
-                            {(() => {
-                              const ranges = {
-                                '0-40%': 0,
-                                '40-60%': 0,
-                                '60-80%': 0,
-                                '80-100%': 0
-                              };
-                              results.forEach(r => {
-                                const score = toPctNumber(r.PERCENTAGE);
-                                if (score < 40) ranges['0-40%']++;
-                                else if (score < 60) ranges['40-60%']++;
-                                else if (score < 80) ranges['60-80%']++;
-                                else ranges['80-100%']++;
-                              });
-                              return Object.entries(ranges).map(([range, count], index) => (
-                                <Cell 
-                                  key={`cell-${index}`} 
-                                  fill={range === '0-40%' ? '#c0392b' : range === '40-60%' ? '#e67e22' : range === '60-80%' ? '#f39c12' : '#27ae60'}
-                                />
-                              ));
-                            })()}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
-
-                  {/* Performance Trend */}
-                  <div style={{
-                    backgroundColor: theme.bg.card,
-                    borderRadius: '28px',
-                    overflow: 'hidden',
-                    boxShadow: `0 4px 15px ${isDarkMode ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)'}`,
-                    border: `1px solid ${theme.border.default}`,
-                    padding: '25px'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-                      <TrendingUp size={24} color={theme.text.primary} />
-                      <h3 style={{ margin: 0, color: theme.text.primary, fontSize: '1.2em', fontWeight: '600' }}>Performance Trend (Latest 20 Tests)</h3>
-                    </div>
-                    {results.length === 0 ? (
-                      <div style={{ textAlign: 'center', padding: '40px', color: theme.text.muted }}>
-                        <AlertCircle size={48} color={theme.text.muted} style={{ marginBottom: '10px' }} />
-                        <p>No data available</p>
-                      </div>
-                    ) : (
-                      <ResponsiveContainer width="100%" height={300}>
-                        <LineChart
-                          data={results.slice(-20).map((r, idx) => ({
-                            test: `Test ${idx + 1}`,
-                            score: toPctNumber(r.PERCENTAGE),
-                            name: norm(r.NAME)
-                          }))}
-                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" stroke={theme.border.default} />
-                          <XAxis dataKey="test" tick={{ fill: theme.text.primary }} />
-                          <YAxis domain={[0, 100]} tick={{ fill: theme.text.primary }} />
-                          <Tooltip
-                            contentStyle={{ backgroundColor: theme.bg.card, border: `1px solid ${theme.border.default}`, color: theme.text.primary }}
-                            itemStyle={{ color: theme.text.primary }}
-                            labelStyle={{ color: theme.text.primary }}
-                          />
-                          <Legend wrapperStyle={{ color: theme.text.primary }} />
-                          <Line 
-                            type="monotone" 
-                            dataKey="score" 
-                            stroke={isDarkMode ? '#ffffff' : '#1a1a2e'} 
-                            strokeWidth={2}
-                            name="Score (%)"
-                            dot={{ fill: isDarkMode ? '#ffffff' : '#1a1a2e', r: 4 }}
-                            activeDot={{ r: 6 }}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
-                </div>
-
-                {/* Recent Activity */}
-                <div style={{
-                  backgroundColor: theme.bg.card,
-                  borderRadius: '28px',
-                  overflow: 'hidden',
-                  boxShadow: `0 4px 15px ${isDarkMode ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)'}`,
-                  border: `1px solid ${theme.border.default}`
-                }}>
-                  <div style={{ padding: '25px', borderBottom: `2px solid ${theme.border.default}` }}>
-                    <h2 style={{ color: theme.text.primary, margin: 0, fontSize: '1.3em', fontWeight: '600' }}>Recent Test Results</h2>
-                  </div>
-                  {results.length === 0 ? (
-                    <div style={{ padding: '40px', textAlign: 'center' }}>
-                      <AlertCircle size={48} color={theme.text.muted} style={{ marginBottom: '15px' }} />
-                      <p style={{ color: theme.text.muted, fontSize: '1.1em' }}>No Test Results Available</p>
-                    </div>
-                  ) : (
-                    <div style={{ overflowX: 'auto' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead>
-                          <tr style={{ backgroundColor: colors.tableHeaderBg, color: 'white' }}>
-                            <th style={commonStyles.th}>Employee ID</th>
-                            <th style={commonStyles.th}>Name</th>
-                            <th style={commonStyles.th}>Standard</th>
-                            <th style={commonStyles.th}>Score</th>
-                            <th style={commonStyles.th}>Status</th>
-                            <th style={commonStyles.th}>Date</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {results.slice(-10).reverse().map((result, index) => (
-                            <tr key={index} style={{ 
-                              borderBottom: `1px solid ${colors.border}`,
-                              backgroundColor: isDarkMode ? colors.tableRowBg : 'transparent'
-                            }}>
-                              <td style={commonStyles.td}>{norm(result.ID)}</td>
-                              <td style={commonStyles.td}>{norm(result.NAME)}</td>
-                              <td style={commonStyles.td}>{norm(result.STANDARD)}</td>
-                              <td style={commonStyles.td}>{toPctNumber(result.PERCENTAGE).toFixed(2)}%</td>
-                              <td style={{
-                                ...commonStyles.td,
-                                textAlign: 'center'
-                              }}>
-                                <span style={{
-                                  padding: '6px 12px',
-                                  borderRadius: '8px',
-                                  fontSize: '0.85em',
-                                  fontWeight: 'bold',
-                                  backgroundColor: isPass(result.STATUS) ? '#d4edda' : '#f8d7da',
-                                  color: isPass(result.STATUS) ? '#155724' : '#721c24'
-                                }}>
-                                  {norm(result.STATUS)}
-                                </span>
-                              </td>
-                              <td style={commonStyles.td}>{norm(result.DATE)}</td>
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                          <thead>
+                            <tr>
+                              <th style={commonStyles.th}>Employee ID</th>
+                              <th style={commonStyles.th}>Name</th>
+                              <th style={commonStyles.th}>Standard</th>
+                              <th style={commonStyles.th}>Score</th>
+                              <th style={commonStyles.th}>Status</th>
+                              <th style={commonStyles.th}>Date</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
+                          </thead>
+                          <tbody>
+                            {results.slice(-10).reverse().map((result, index) => (
+                              <tr key={index} style={{ borderBottom: '1px solid #ececf0' }}>
+                                <td style={commonStyles.td}>{norm(result.ID)}</td>
+                                <td style={commonStyles.td}>{norm(result.NAME)}</td>
+                                <td style={commonStyles.td}>{norm(result.STANDARD)}</td>
+                                <td style={commonStyles.td}>{toPctNumber(result.PERCENTAGE).toFixed(2)}%</td>
+                                <td style={{ ...commonStyles.td, textAlign: 'center' }}>
+                                  <span style={{
+                                    padding: '6px 12px',
+                                    borderRadius: '8px',
+                                    fontSize: '0.85em',
+                                    fontWeight: 'bold',
+                                    backgroundColor: isPass(result.STATUS) ? '#d4edda' : '#f8d7da',
+                                    color: isPass(result.STATUS) ? '#155724' : '#721c24'
+                                  }}>
+                                    {norm(result.STATUS)}
+                                  </span>
+                                </td>
+                                <td style={commonStyles.td}>{norm(result.DATE)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </article>
+                </>
+              );
+            })()}
 
             {/* Results Tab */}
             {adminActiveTab === 'results' && (
@@ -4076,18 +3760,11 @@ const TestingModule = () => {
                 <button id="result-add-btn" onClick={openAddResultModal} style={{ display: 'none' }} />
 
                 {/* FILTER BAR */}
-                <div style={{ 
-                  backgroundColor: theme.bg.card,
-                  borderRadius: '28px',
-                  marginBottom: 25,
-                  boxShadow: `0 4px 15px ${isDarkMode ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)'}`,
-                  border: `1px solid ${theme.border.default}`,
-                  overflow: 'hidden'
-                }}>
+                <article className="panel" style={{ marginBottom: 25, padding: 0, overflow: 'hidden' }}>
                   {/* Filter Header */}
-                  <div style={{ 
-                    background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
-                    padding: '18px 25px',
+                  <div style={{
+                    padding: '20px 28px',
+                    borderBottom: '1px solid #ececf0',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '12px'
@@ -4095,20 +3772,20 @@ const TestingModule = () => {
                     <div style={{
                       width: '40px',
                       height: '40px',
-                      borderRadius: '18px',
-                      background: 'rgba(255, 255, 255, 0.15)',
+                      borderRadius: '12px',
+                      background: '#fff5f5',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center'
                     }}>
-                      <FileText size={20} color="#fff" />
+                      <FileText size={20} color="#d7263d" />
                     </div>
                     <div style={{ textAlign: 'left' }}>
-                      <h3 style={{ margin: 0, color: '#fff', fontSize: '1.2em', fontWeight: '600', textAlign: 'left' }}>Filter Test Results</h3>
-                      <p style={{ margin: 0, marginTop: '4px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85em', textAlign: 'left' }}>Narrow Down Results By Employee, Status, or Standard</p>
+                      <p className="eyebrow" style={{ margin: 0 }}>Filter Test Results</p>
+                      <h3 style={{ margin: 0, marginTop: 4, fontSize: '1.1em', fontWeight: '600', textAlign: 'left' }}>Narrow down by employee, status, or standard</h3>
                     </div>
                   </div>
-                  
+
                   {/* Filter Grid */}
                   <div style={{ padding: '25px' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '20px' }}>
@@ -4126,19 +3803,19 @@ const TestingModule = () => {
                             width: '6px',
                             height: '6px',
                             borderRadius: '50%',
-                            background: 'linear-gradient(135deg, #c0392b, #e74c3c)'
+                            background: 'linear-gradient(135deg, #b91c3c, #d7263d)'
                           }}></span>
                           Employee ID
                         </label>
-                        <select 
-                          value={filterEmpId} 
-                          onChange={e => onChangeEmpId(e.target.value)} 
+                        <select
+                          value={filterEmpId}
+                          onChange={e => onChangeEmpId(e.target.value)}
                           style={{
                             width: '100%',
                             padding: '12px 15px',
                             fontSize: '14px',
                             border: `2px solid ${theme.border.default}`,
-                            borderRadius: '4px',
+                            borderRadius: '16px',
                             backgroundColor: theme.bg.input,
                             color: theme.text.primary,
                             fontWeight: '500',
@@ -4173,19 +3850,19 @@ const TestingModule = () => {
                             width: '6px',
                             height: '6px',
                             borderRadius: '50%',
-                            background: 'linear-gradient(135deg, #c0392b, #e74c3c)'
+                            background: 'linear-gradient(135deg, #b91c3c, #d7263d)'
                           }}></span>
                           Employee Name
                         </label>
-                        <select 
-                          value={filterEmpName} 
-                          onChange={e => onChangeEmpName(e.target.value)} 
+                        <select
+                          value={filterEmpName}
+                          onChange={e => onChangeEmpName(e.target.value)}
                           style={{
                             width: '100%',
                             padding: '12px 15px',
                             fontSize: '14px',
                             border: `2px solid ${theme.border.default}`,
-                            borderRadius: '4px',
+                            borderRadius: '16px',
                             backgroundColor: theme.bg.input,
                             color: theme.text.primary,
                             fontWeight: '500',
@@ -4220,19 +3897,19 @@ const TestingModule = () => {
                             width: '6px',
                             height: '6px',
                             borderRadius: '50%',
-                            background: 'linear-gradient(135deg, #c0392b, #e74c3c)'
+                            background: 'linear-gradient(135deg, #b91c3c, #d7263d)'
                           }}></span>
                           Status
                         </label>
-                        <select 
-                          value={filterStatus} 
-                          onChange={e => setFilterStatus(e.target.value)} 
+                        <select
+                          value={filterStatus}
+                          onChange={e => setFilterStatus(e.target.value)}
                           style={{
                             width: '100%',
                             padding: '12px 15px',
                             fontSize: '14px',
                             border: `2px solid ${theme.border.default}`,
-                            borderRadius: '4px',
+                            borderRadius: '16px',
                             backgroundColor: theme.bg.input,
                             color: theme.text.primary,
                             fontWeight: '500',
@@ -4266,19 +3943,19 @@ const TestingModule = () => {
                             width: '6px',
                             height: '6px',
                             borderRadius: '50%',
-                            background: 'linear-gradient(135deg, #c0392b, #e74c3c)'
+                            background: 'linear-gradient(135deg, #b91c3c, #d7263d)'
                           }}></span>
                           Standard
                         </label>
-                        <select 
-                          value={filterStandard} 
-                          onChange={e => setFilterStandard(e.target.value)} 
+                        <select
+                          value={filterStandard}
+                          onChange={e => setFilterStandard(e.target.value)}
                           style={{
                             width: '100%',
                             padding: '12px 15px',
                             fontSize: '14px',
                             border: `2px solid ${theme.border.default}`,
-                            borderRadius: '4px',
+                            borderRadius: '16px',
                             backgroundColor: theme.bg.input,
                             color: theme.text.primary,
                             fontWeight: '500',
@@ -4312,7 +3989,7 @@ const TestingModule = () => {
                             width: '6px',
                             height: '6px',
                             borderRadius: '50%',
-                            background: 'linear-gradient(135deg, #c0392b, #e74c3c)'
+                            background: 'linear-gradient(135deg, #b91c3c, #d7263d)'
                           }}></span>
                           From Date
                         </label>
@@ -4325,7 +4002,7 @@ const TestingModule = () => {
                             padding: '12px 15px',
                             fontSize: '14px',
                             border: `2px solid ${theme.border.default}`,
-                            borderRadius: '4px',
+                            borderRadius: '16px',
                             backgroundColor: theme.bg.input,
                             color: theme.text.primary,
                             fontWeight: '500',
@@ -4357,7 +4034,7 @@ const TestingModule = () => {
                             width: '6px',
                             height: '6px',
                             borderRadius: '50%',
-                            background: 'linear-gradient(135deg, #c0392b, #e74c3c)'
+                            background: 'linear-gradient(135deg, #b91c3c, #d7263d)'
                           }}></span>
                           To Date
                         </label>
@@ -4370,7 +4047,7 @@ const TestingModule = () => {
                             padding: '12px 15px',
                             fontSize: '14px',
                             border: `2px solid ${theme.border.default}`,
-                            borderRadius: '4px',
+                            borderRadius: '16px',
                             backgroundColor: theme.bg.input,
                             color: theme.text.primary,
                             fontWeight: '500',
@@ -4474,296 +4151,151 @@ const TestingModule = () => {
                           }}
                           onMouseOver={e => {
                             if (filterEmpId || filterEmpName || filterStatus !== 'All' || filterStandard !== 'All' || filterDateFrom || filterDateTo) {
-                              e.currentTarget.style.borderColor = '#c0392b';
-                              e.currentTarget.style.color = '#c0392b';
-                              e.currentTarget.style.backgroundColor = colors.cardBg;
+                              e.currentTarget.classList.add('grad-hover-outline');
                             }
                           }}
                           onMouseOut={e => {
-                            e.currentTarget.style.borderColor = colors.inputBorder;
-                            e.currentTarget.style.color = colors.textMuted;
-                            e.currentTarget.style.backgroundColor = colors.inputBg;
+                            e.currentTarget.classList.remove('grad-hover-outline');
                           }}
                         >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                          <svg className="grad-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                             <polyline points="3 6 5 6 21 6"></polyline>
                             <path d="M19 6l-1 14H6L5 6"></path>
                             <path d="M10 11v6"></path>
                             <path d="M14 11v6"></path>
                             <path d="M9 6V4h6v2"></path>
                           </svg>
-                          Clear Filter
+                          <span className="grad-label">Clear Filter</span>
                         </button>
                       </div>
                     </div>
                   </div>
-                </div>
+                </article>
 
                 {/* Filtered Charts Section */}
-                {filteredResults.length > 0 && (
-                  <div style={{ display: 'grid', gridTemplateColumns: dashboardTwoCol, gap: '20px', marginBottom: '30px' }}>
-                    {/* Pass/Fail Pie Chart */}
-                    <div style={{
-                      backgroundColor: theme.bg.card,
-                      borderRadius: '28px',
-                      overflow: 'hidden',
-                      boxShadow: `0 4px 15px ${isDarkMode ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)'}`,
-                      border: `1px solid ${theme.border.default}`,
-                      padding: '25px'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-                        <TrendingUp size={24} color={theme.text.primary} />
-                        <h3 style={{ margin: 0, color: theme.text.primary, fontSize: '1.2em', fontWeight: '600' }}>Pass/Fail Distribution</h3>
-                      </div>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <PieChart>
-                          <defs>
-                            <linearGradient id="resultsPassGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#2ecc71" />
-                              <stop offset="100%" stopColor="#27ae60" />
-                            </linearGradient>
-                            <linearGradient id="resultsFailGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#e74c3c" />
-                              <stop offset="100%" stopColor="#c0392b" />
-                            </linearGradient>
-                          </defs>
-                          <Pie
-                            data={[
-                              { name: 'Passed', value: passedTests, color: 'url(#resultsPassGradient)' },
-                              { name: 'Failed', value: failedTests, color: 'url(#resultsFailGradient)' }
-                            ]}
-                            cx="50%"
-                            cy="50%"
-                            labelLine={false}
-                            label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                            outerRadius={100}
-                            fill="#8884d8"
-                            dataKey="value"
-                            stroke="none"
-                          >
-                            {[
-                              { name: 'Passed', value: passedTests, color: 'url(#resultsPassGradient)' },
-                              { name: 'Failed', value: failedTests, color: 'url(#resultsFailGradient)' }
-                            ].map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
-                            ))}
-                          </Pie>
-                          <Tooltip
-                            contentStyle={{ backgroundColor: theme.bg.card, border: `1px solid ${theme.border.default}`, color: theme.text.primary }}
-                            itemStyle={{ color: theme.text.primary }}
-                            labelStyle={{ color: theme.text.primary }}
-                          />
-                          <Legend wrapperStyle={{ color: theme.text.primary }} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
+                {(() => {
+                  const rfData = filteredResults;
+                  const ttStyle = { background: '#fff', border: '1px solid #ececf0', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.08)', fontSize: 13 };
+                  const axStyle = { axisLine: false, tickLine: false, tick: { fill: '#9a9aaa', fontSize: 11 } };
+                  const fPassed = rfData.filter(r => isPass(r.STATUS)).length;
+                  const fFailed = rfData.length - fPassed;
+                  const fStdStats = {};
+                  rfData.forEach(r => {
+                    const std = norm(r.STANDARD);
+                    if (!fStdStats[std]) fStdStats[std] = { standard: std, passed: 0, failed: 0 };
+                    if (isPass(r.STATUS)) fStdStats[std].passed++; else fStdStats[std].failed++;
+                  });
+                  const fBarData = Object.values(fStdStats);
 
-                    {/* Standards Performance Bar Chart */
-                    <div style={{
-                      backgroundColor: theme.bg.card,
-                      borderRadius: '28px',
-                      overflow: 'hidden',
-                      boxShadow: `0 4px 15px ${isDarkMode ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)'}`,
-                      border: `1px solid ${theme.border.default}`,
-                      padding: '25px'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-                        <Award size={24} color={theme.text.primary} />
-                        <h3 style={{ margin: 0, color: theme.text.primary, fontSize: '1.2em', fontWeight: '600' }}>Performance by Standard</h3>
-                      </div>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <BarChart
-                          data={(() => {
-                            const standardStats = {};
-                            filteredResults.forEach(r => {
-                              const std = norm(r.STANDARD);
-                              if (!standardStats[std]) {
-                                standardStats[std] = { standard: std, passed: 0, failed: 0, total: 0, sumScore: 0 };
-                              }
-                              standardStats[std].total++;
-                              standardStats[std].sumScore += toPctNumber(r.PERCENTAGE);
-                              if (isPass(r.STATUS)) standardStats[std].passed++;
-                              else standardStats[std].failed++;
-                            });
-                            return Object.values(standardStats).map(s => ({
-                              ...s,
-                              avgScore: (s.sumScore / s.total).toFixed(1),
-                              passRate: ((s.passed / s.total) * 100).toFixed(1)
-                            }));
-                          })()}
-                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                        >
-                          <defs>
-                            <linearGradient id="resultsBarPassGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#2ecc71" />
-                              <stop offset="100%" stopColor="#27ae60" />
-                            </linearGradient>
-                            <linearGradient id="resultsBarFailGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#e74c3c" />
-                              <stop offset="100%" stopColor="#c0392b" />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke={theme.border.default} />
-                          <XAxis dataKey="standard" tick={{ fill: theme.text.primary }} />
-                          <YAxis tick={{ fill: theme.text.primary }} />
-                          <Tooltip
-                            contentStyle={{ backgroundColor: theme.bg.card, border: `1px solid ${theme.border.default}`, color: theme.text.primary }}
-                            itemStyle={{ color: theme.text.primary }}
-                            labelStyle={{ color: theme.text.primary }}
-                          />
-                          <Legend wrapperStyle={{ color: theme.text.primary }} />
-                          <Bar dataKey="passed" fill="url(#resultsBarPassGradient)" name="Passed" />
-                          <Bar dataKey="failed" fill="url(#resultsBarFailGradient)" name="Failed" />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
+                  const fRanges = { '0-40%': 0, '40-60%': 0, '60-80%': 0, '80-100%': 0 };
+                  rfData.forEach(r => {
+                    const score = toPctNumber(r.PERCENTAGE);
+                    if (score < 40) fRanges['0-40%']++;
+                    else if (score < 60) fRanges['40-60%']++;
+                    else if (score < 80) fRanges['60-80%']++;
+                    else fRanges['80-100%']++;
+                  });
+                  const fHistData = Object.entries(fRanges).map(([range, count]) => ({ range, count }));
 
-                    /* Score Distribution */}
-                    <div style={{
-                      backgroundColor: theme.bg.card,
-                      borderRadius: '28px',
-                      overflow: 'hidden',
-                      boxShadow: `0 4px 15px ${isDarkMode ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)'}`,
-                      border: `1px solid ${theme.border.default}`,
-                      padding: '25px'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-                        <BarChart3 size={24} color={theme.text.primary} />
-                        <h3 style={{ margin: 0, color: theme.text.primary, fontSize: '1.2em', fontWeight: '600' }}>Score Distribution</h3>
-                      </div>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <BarChart
-                          data={(() => {
-                            const ranges = {
-                              '0-40%': 0,
-                              '40-60%': 0,
-                              '60-80%': 0,
-                              '80-100%': 0
-                            };
-                            filteredResults.forEach(r => {
-                              const score = toPctNumber(r.PERCENTAGE);
-                              if (score < 40) ranges['0-40%']++;
-                              else if (score < 60) ranges['40-60%']++;
-                              else if (score < 80) ranges['60-80%']++;
-                              else ranges['80-100%']++;
-                            });
-                            return Object.entries(ranges).map(([range, count]) => ({
-                              range,
-                              count,
-                              fill: range === '0-40%' ? '#c0392b' : range === '40-60%' ? '#e67e22' : range === '60-80%' ? '#f39c12' : '#27ae60'
-                            }));
-                          })()}
-                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" stroke={theme.border.default} />
-                          <XAxis dataKey="range" tick={{ fill: theme.text.primary }} />
-                          <YAxis tick={{ fill: theme.text.primary }} />
-                          <Tooltip
-                            contentStyle={{ backgroundColor: theme.bg.card, border: `1px solid ${theme.border.default}`, color: theme.text.primary }}
-                            itemStyle={{ color: theme.text.primary }}
-                            labelStyle={{ color: theme.text.primary }}
-                          />
-                          <Legend 
-                            wrapperStyle={{ color: theme.text.primary }} 
-                            formatter={(value) => <span style={{ color: theme.text.primary }}>{value}</span>}
-                          />
-                          <Bar dataKey="count" name="Tests" fill={isDarkMode ? '#ffffff' : '#1a1a2e'} >
-                            {(() => {
-                              const ranges = {
-                                '0-40%': 0,
-                                '40-60%': 0,
-                                '60-80%': 0,
-                                '80-100%': 0
-                              };
-                              filteredResults.forEach(r => {
-                                const score = toPctNumber(r.PERCENTAGE);
-                                if (score < 40) ranges['0-40%']++;
-                                else if (score < 60) ranges['40-60%']++;
-                                else if (score < 80) ranges['60-80%']++;
-                                else ranges['80-100%']++;
-                              });
-                              return Object.entries(ranges).map(([range, count], index) => (
-                                <Cell 
-                                  key={`cell-${index}`} 
-                                  fill={range === '0-40%' ? '#c0392b' : range === '40-60%' ? '#e67e22' : range === '60-80%' ? '#f39c12' : '#27ae60'}
-                                />
-                              ));
-                            })()}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
+                  const fAreaData = rfData.slice(-20).map((r, idx) => ({
+                    test: `T${idx + 1}`,
+                    score: toPctNumber(r.PERCENTAGE)
+                  }));
 
-                    {/* Performance Trend */}
-                    <div style={{
-                      backgroundColor: theme.bg.card,
-                      borderRadius: '28px',
-                      overflow: 'hidden',
-                      boxShadow: `0 4px 15px ${isDarkMode ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)'}`,
-                      border: `1px solid ${theme.border.default}`,
-                      padding: '25px'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-                        <TrendingUp size={24} color={theme.text.primary} />
-                        <h3 style={{ margin: 0, color: theme.text.primary, fontSize: '1.2em', fontWeight: '600' }}>Performance Trend</h3>
-                      </div>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <LineChart
-                          data={filteredResults.slice(-20).map((r, idx) => ({
-                            test: `Test ${idx + 1}`,
-                            score: toPctNumber(r.PERCENTAGE),
-                            name: norm(r.NAME)
-                          }))}
-                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" stroke={theme.border.default} />
-                          <XAxis dataKey="test" tick={{ fill: theme.text.primary }} />
-                          <YAxis domain={[0, 100]} tick={{ fill: theme.text.primary }} />
-                          <Tooltip
-                            contentStyle={{ backgroundColor: theme.bg.card, border: `1px solid ${theme.border.default}`, color: theme.text.primary }}
-                            itemStyle={{ color: theme.text.primary }}
-                            labelStyle={{ color: theme.text.primary }}
-                          />
-                          <Legend wrapperStyle={{ color: theme.text.primary }} />
-                          <Line 
-                            type="monotone" 
-                            dataKey="score" 
-                            stroke={isDarkMode ? '#ffffff' : '#1a1a2e'} 
-                            strokeWidth={2}
-                            name="Score (%)"
-                            dot={{ fill: isDarkMode ? '#ffffff' : '#1a1a2e', r: 4 }}
-                            activeDot={{ r: 6 }}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
+                  return (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: 24, marginBottom: 24 }}>
+                      <article className="panel" style={{ padding: 28 }}>
+                        <h3 style={{ margin: '0 0 20px' }}>Pass / Fail Distribution</h3>
+                        {rfData.length === 0 ? <p style={{ color: '#9a9aaa' }}>No data available</p> : (
+                          <ResponsiveContainer width="100%" height={280}>
+                            <PieChart>
+                              <Pie data={[{ name: 'Passed', value: fPassed }, { name: 'Failed', value: fFailed }]} cx="50%" cy="50%" innerRadius={70} outerRadius={110} paddingAngle={2} dataKey="value">
+                                <Cell fill="#27ae60" />
+                                <Cell fill="#d7263d" />
+                              </Pie>
+                              <Tooltip contentStyle={ttStyle} />
+                              <Legend />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        )}
+                      </article>
+
+                      <article className="panel" style={{ padding: 28 }}>
+                        <h3 style={{ margin: '0 0 20px' }}>Performance by Standard</h3>
+                        {rfData.length === 0 ? <p style={{ color: '#9a9aaa' }}>No data available</p> : (
+                          <ResponsiveContainer width="100%" height={280}>
+                            <BarChart data={fBarData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                              <CartesianGrid vertical={false} stroke="#ececf0" />
+                              <XAxis dataKey="standard" {...axStyle} />
+                              <YAxis {...axStyle} />
+                              <Tooltip contentStyle={ttStyle} />
+                              <Legend />
+                              <Bar dataKey="passed" fill="#27ae60" name="Passed" radius={[6, 6, 0, 0]} />
+                              <Bar dataKey="failed" fill="#d7263d" name="Failed" radius={[6, 6, 0, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        )}
+                      </article>
+
+                      <article className="panel" style={{ padding: 28 }}>
+                        <h3 style={{ margin: '0 0 20px' }}>Score Distribution</h3>
+                        {rfData.length === 0 ? <p style={{ color: '#9a9aaa' }}>No data available</p> : (
+                          <ResponsiveContainer width="100%" height={280}>
+                            <BarChart data={fHistData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                              <CartesianGrid vertical={false} stroke="#ececf0" />
+                              <XAxis dataKey="range" {...axStyle} />
+                              <YAxis {...axStyle} />
+                              <Tooltip contentStyle={ttStyle} />
+                              <Bar dataKey="count" name="Tests" radius={[6, 6, 0, 0]}>
+                                {fHistData.map((entry, index) => (
+                                  <Cell key={index} fill={entry.range === '0-40%' ? '#d7263d' : entry.range === '40-60%' ? '#e67e22' : entry.range === '60-80%' ? '#f5a623' : '#27ae60'} />
+                                ))}
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        )}
+                      </article>
+
+                      <article className="panel" style={{ padding: 28 }}>
+                        <h3 style={{ margin: '0 0 20px' }}>Performance Trend (Latest 20)</h3>
+                        {rfData.length === 0 ? <p style={{ color: '#9a9aaa' }}>No data available</p> : (
+                          <ResponsiveContainer width="100%" height={280}>
+                            <AreaChart data={fAreaData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                              <defs>
+                                <linearGradient id="resultsAreaScoreGradient" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor="#d7263d" stopOpacity={0.35} />
+                                  <stop offset="100%" stopColor="#d7263d" stopOpacity={0} />
+                                </linearGradient>
+                              </defs>
+                              <CartesianGrid vertical={false} stroke="#ececf0" />
+                              <XAxis dataKey="test" {...axStyle} />
+                              <YAxis domain={[0, 100]} {...axStyle} />
+                              <Tooltip contentStyle={ttStyle} />
+                              <Area type="monotone" dataKey="score" stroke="#d7263d" fill="url(#resultsAreaScoreGradient)" strokeWidth={2} name="Score (%)" />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        )}
+                      </article>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Results Table */}
-                <div style={{
-                  backgroundColor: theme.bg.card,
-                  borderRadius: '28px',
-                  overflow: 'hidden',
-                  boxShadow: `0 4px 15px ${isDarkMode ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)'}`,
-                  border: `1px solid ${theme.border.default}`
-                }}>
-                  <div style={{ 
-                    padding: '25px', 
-                    borderBottom: '3px solid #c0392b', 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center',
-                    background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
-                    color: 'white'
+                <article className="panel" style={{ padding: 0, overflow: 'hidden' }}>
+                  <header style={{
+                    padding: '24px 28px',
+                    borderBottom: '1px solid #ececf0',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
                   }}>
                     <div>
-                      <h2 style={{ fontSize: '1.4em', fontWeight: '600', color: '#fff', margin: 0, letterSpacing: '0.5px' }}>Test Results</h2>
-                      <p style={{ color: 'rgba(255,255,255,0.85)', marginTop: '8px', fontSize: '0.95em', margin: 0 }}>
+                      <h2 style={{ fontSize: '1.1em', fontWeight: '600', margin: 0 }}>Test Results</h2>
+                      <p style={{ color: '#9a9aaa', marginTop: 4, fontSize: '0.9em', margin: 0 }}>
                         Showing {filteredResults.length} record{filteredResults.length !== 1 ? 's' : ''}
                       </p>
                     </div>
-                  </div>
+                  </header>
                   <div style={{ overflowX: 'auto' }}>
                     {adminLoading ? (
                       <div style={commonStyles.loading}>
@@ -4777,7 +4309,7 @@ const TestingModule = () => {
                     ) : (
                       <table style={commonStyles.table}>
                         <thead>
-                          <tr style={{ backgroundColor: colors.tableHeaderBg, color: 'white' }}>
+                          <tr>
                             <th style={commonStyles.th}>S.No.</th>
                             <th style={commonStyles.th}>Employee ID</th>
                             <th style={commonStyles.th}>Name</th>
@@ -4989,7 +4521,7 @@ const TestingModule = () => {
                                         width: '36px',
                                         height: '36px',
                                         boxSizing: 'border-box',
-                                        background: 'linear-gradient(120deg, #c0392b, #e74c3c)',
+                                        background: 'linear-gradient(120deg, #b91c3c, #d7263d)',
                                         color: 'white',
                                         border: '2px solid transparent',
                                         borderRadius: '28px',
@@ -5006,7 +4538,7 @@ const TestingModule = () => {
                                         e.currentTarget.style.color = '#c0392b';
                                       }}
                                       onMouseOut={e => {
-                                        e.currentTarget.style.background = 'linear-gradient(120deg, #c0392b, #e74c3c)';
+                                        e.currentTarget.style.background = 'linear-gradient(120deg, #b91c3c, #d7263d)';
                                         e.currentTarget.style.border = '2px solid transparent';
                                         e.currentTarget.style.color = 'white';
                                       }}
@@ -5129,7 +4661,7 @@ const TestingModule = () => {
                       </button>
                     </div>
                   )}
-                </div>
+                </article>
 
                 {/* Add Result Modal */}
                 {showAddResultModal && (
@@ -5159,17 +4691,31 @@ const TestingModule = () => {
                       boxShadow: `0 20px 60px ${isDarkMode ? 'rgba(0,0,0,0.5)' : 'rgba(0, 0, 0, 0.3)'}`,
                       animation: 'fadeIn 0.2s ease'
                     }}>
-                      <h3 style={{
-                        marginTop: 0,
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
                         marginBottom: '25px',
-                        color: theme.text.primary,
-                        fontSize: '1.6em',
-                        fontWeight: '600',
-                        borderBottom: '3px solid #c0392b',
+                        borderBottom: '3px solid #d7263d',
                         paddingBottom: '15px'
                       }}>
-                        {resultEditMode ? 'Edit Result' : 'Add Result'}
-                      </h3>
+                        <h3 style={{
+                          margin: 0,
+                          color: theme.text.primary,
+                          fontSize: '1.6em',
+                          fontWeight: '600'
+                        }}>
+                          {resultEditMode ? 'Edit Result' : 'Add Result'}
+                        </h3>
+                        <button
+                          type="button"
+                          className="close-modal-btn"
+                          onClick={closeAddResultModal}
+                          style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}
+                        >
+                          <X size={18} />
+                        </button>
+                      </div>
 
                       <form onSubmit={handleAddResultSubmit}>
                         <div style={{ display: 'grid', gridTemplateColumns: twoColumnGrid, gap: '15px', marginBottom: '22px' }}>
@@ -5548,7 +5094,7 @@ const TestingModule = () => {
                             borderRadius: '4px',
                             boxSizing: 'border-box',
                             backgroundColor: colors.cardAltBg,
-                            color: addResultStatusPreview === 'Pass' ? '#27ae60' : addResultStatusPreview === 'Fail' ? '#c0392b' : colors.textMuted,
+                            color: addResultStatusPreview === 'Pass' ? '#27ae60' : addResultStatusPreview === 'Fail' ? '#d7263d' : colors.textMuted,
                             fontWeight: '600'
                           }}>
                             {addResultStatusPreview || 'Calculated from percentage and passing criteria'}
@@ -5613,7 +5159,7 @@ const TestingModule = () => {
                                 onClick={() => removeResultAttachment(resultEditTarget)}
                                 style={{
                                   padding: '6px 12px',
-                                  backgroundColor: '#c0392b',
+                                  backgroundColor: '#d7263d',
                                   color: '#fff',
                                   border: 'none',
                                   borderRadius: '20px',
@@ -5637,23 +5183,19 @@ const TestingModule = () => {
                               disabled={resultAttachmentLocked}
                               onMouseEnter={(e) => {
                                 if (resultAttachmentLocked) return;
-                                e.currentTarget.style.background = '#fff';
-                                e.currentTarget.style.color = '#c0392b';
-                                e.currentTarget.style.border = '2px solid #c0392b';
+                                e.currentTarget.classList.add('grad-hover-outline');
                                 e.currentTarget.style.transform = 'translateY(-2px)';
                                 e.currentTarget.style.boxShadow = '0 6px 20px rgba(192, 57, 43, 0.4)';
                               }}
                               onMouseLeave={(e) => {
                                 if (resultAttachmentLocked) return;
-                                e.currentTarget.style.background = 'linear-gradient(120deg, #c0392b, #e74c3c)';
-                                e.currentTarget.style.color = '#fff';
-                                e.currentTarget.style.border = '2px solid transparent';
+                                e.currentTarget.classList.remove('grad-hover-outline');
                                 e.currentTarget.style.transform = 'translateY(0)';
                                 e.currentTarget.style.boxShadow = 'none';
                               }}
                               style={{
                                 padding: '10px 16px',
-                                background: resultAttachmentLocked ? '#95a5a6' : 'linear-gradient(120deg, #c0392b, #e74c3c)',
+                                background: resultAttachmentLocked ? '#95a5a6' : 'linear-gradient(120deg, #b91c3c, #d7263d)',
                                 color: '#fff',
                                 border: '2px solid transparent',
                                 borderRadius: '8px',
@@ -5664,7 +5206,7 @@ const TestingModule = () => {
                                 opacity: resultAttachmentLocked ? 0.75 : 1
                               }}
                             >
-                              Choose File
+                              <span className="grad-label">Choose File</span>
                             </button>
                             <span style={{ fontSize: '12px', color: colors.textMuted }}>
                               {resultAttachmentFile ? resultAttachmentFile.name : 'No file chosen'}
@@ -5696,22 +5238,20 @@ const TestingModule = () => {
                               transition: 'all 0.2s ease'
                             }}
                             onMouseOver={(e) => {
-                              e.currentTarget.style.borderColor = '#c0392b';
-                              e.currentTarget.style.color = '#c0392b';
+                              e.currentTarget.classList.add('grad-hover-outline');
                             }}
                             onMouseOut={(e) => {
-                              e.currentTarget.style.borderColor = theme.border.default;
-                              e.currentTarget.style.color = theme.text.secondary;
+                              e.currentTarget.classList.remove('grad-hover-outline');
                             }}
                           >
-                            Cancel
+                            <span className="grad-label">Cancel</span>
                           </button>
                           <button
                             type="submit"
                             disabled={resultSaving}
                             style={{
                               padding: '12px 30px',
-                              background: resultSaving ? '#95a5a6' : 'linear-gradient(120deg, #c0392b, #e74c3c)',
+                              background: resultSaving ? '#95a5a6' : 'linear-gradient(120deg, #b91c3c, #d7263d)',
                               color: 'white',
                               border: 'none',
                               borderRadius: '18px',
@@ -5723,7 +5263,7 @@ const TestingModule = () => {
                             onMouseOver={(e) => {
                               if (!resultSaving) {
                                 e.currentTarget.style.transform = 'translateY(-2px)';
-                                e.currentTarget.style.boxShadow = '0 6px 20px rgba(192, 57, 43, 0.4)';
+                                e.currentTarget.style.boxShadow = '0 6px 20px rgba(215, 38, 61, 0.4)';
                               }
                             }}
                             onMouseOut={(e) => {
@@ -5767,7 +5307,8 @@ const TestingModule = () => {
             {adminActiveTab === 'employees' && (
               <EmployeesAdminPage onBack={() => setAdminActiveTab('dashboard')} />
             )}
-          </div>
+          </section>
+        </div>
         </div>
       </div>
     );
@@ -5964,6 +5505,26 @@ const TestingModule = () => {
       return { display: cleaned, key: cleaned.toLowerCase() };
     }, []);
 
+    const isPracticalRequiredFlag = useCallback((value) => (
+      String(value || '').trim().toLowerCase() === 'yes'
+    ), []);
+
+    // Single-type standards (no General/Specific split) whose Practical_Required
+    // flag is on — their theory pass alone makes the employee practical-eligible.
+    const singlePracticalRequiredKeys = useMemo(() => {
+      const set = new Set();
+      standards.forEach((s) => {
+        const stdName = String(s?.Standard_List || '').trim();
+        if (!stdName) return;
+        const stdLower = stdName.toLowerCase();
+        if (stdLower.includes('general') || stdLower.includes('specific')) return;
+        if (!isPracticalRequiredFlag(s?.Practical_Required)) return;
+        const baseType = normalizePracticalBaseType(stdName);
+        if (baseType) set.add(baseType.key);
+      });
+      return set;
+    }, [standards, normalizePracticalBaseType, isPracticalRequiredFlag]);
+
     const practicalStandards = useMemo(() => {
       const generalizedNames = new Set();
       standards.forEach((s) => {
@@ -5975,10 +5536,12 @@ const TestingModule = () => {
           if (baseType) {
             generalizedNames.add(`${baseType.display} (Practical)`);
           }
+        } else if (isPracticalRequiredFlag(s?.Practical_Required)) {
+          generalizedNames.add(`${stdName} (Practical)`);
         }
       });
       return Array.from(generalizedNames).sort((a, b) => a.localeCompare(b));
-    }, [standards, normalizePracticalBaseType]);
+    }, [standards, normalizePracticalBaseType, isPracticalRequiredFlag]);
 
     const practicalResults = useMemo(() => {
       const allPracticalResults = results.filter(
@@ -6015,12 +5578,26 @@ const TestingModule = () => {
         const hasGeneral = standardLower.includes('general');
         const hasSpecific = standardLower.includes('specific');
 
-        if (!hasGeneral && !hasSpecific) {
-          return;
-        }
-
         const baseType = normalizePracticalBaseType(standard);
         if (!baseType) return;
+
+        if (!hasGeneral && !hasSpecific) {
+          // Single-type standard — only eligible if its Practical_Required flag is on.
+          if (!singlePracticalRequiredKeys.has(baseType.key)) return;
+
+          const key = `${empId}_${baseType.key}`;
+          if (!grouped[key]) {
+            grouped[key] = {
+              empId,
+              empName: r.NAME,
+              baseType: baseType.display,
+              general: true,
+              specific: true,
+              practical: false,
+            };
+          }
+          return;
+        }
 
         const key = `${empId}_${baseType.key}`;
 
@@ -6063,7 +5640,7 @@ const TestingModule = () => {
           if (a.empId !== b.empId) return a.empId.localeCompare(b.empId);
           return a.baseType.localeCompare(b.baseType);
         });
-    }, [results, normalizePracticalBaseType]);
+    }, [results, normalizePracticalBaseType, singlePracticalRequiredKeys]);
 
     const eligibleEmployeeIds = useMemo(
       () => [...new Set(eligibleEmployees.map((emp) => emp.empId))],
@@ -6129,9 +5706,9 @@ const TestingModule = () => {
     const practicalTabStyle = (isActive) => ({
       padding: '10px 18px',
       borderRadius: '28px',
-      border: isActive ? '2px solid #c0392b' : `2px solid ${practicalTabBorder}`,
+      border: isActive ? '2px solid #d7263d' : `2px solid ${practicalTabBorder}`,
       background: isActive
-        ? 'linear-gradient(120deg, #c0392b, #e74c3c)'
+        ? 'linear-gradient(120deg, #b91c3c, #d7263d)'
         : colors.cardBg,
       color: isActive ? '#fff' : colors.text,
       fontWeight: '700',
@@ -6139,7 +5716,7 @@ const TestingModule = () => {
       cursor: 'pointer',
       transition: 'all 0.2s ease',
       boxShadow: isActive
-        ? '0 10px 18px rgba(192, 57, 43, 0.25)'
+        ? '0 10px 18px rgba(215, 38, 61, 0.25)'
         : '0 4px 10px rgba(0,0,0,0.08)',
       display: 'inline-flex',
       alignItems: 'center',
@@ -6291,18 +5868,11 @@ const TestingModule = () => {
     return (
       <div style={{ padding: isMobile ? '16px 12px' : '30px' }}>
         {/* Header Section with Filters */}
-        <div style={{
-          backgroundColor: theme.bg.card,
-          borderRadius: '28px',
-          overflow: 'hidden',
-          boxShadow: `0 4px 15px ${isDarkMode ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)'}`,
-          border: `1px solid ${theme.border.default}`,
-          marginBottom: '25px'
-        }}>
+        <article className="panel" style={{ marginBottom: '25px', padding: 0, overflow: 'hidden' }}>
           {/* Header */}
-          <div style={{ 
-            background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
-            padding: '18px 25px',
+          <div style={{
+            padding: '20px 28px',
+            borderBottom: '1px solid #ececf0',
             display: 'flex',
             alignItems: 'center',
             gap: '12px'
@@ -6310,17 +5880,17 @@ const TestingModule = () => {
             <div style={{
               width: '40px',
               height: '40px',
-              borderRadius: '18px',
-              background: 'rgba(255, 255, 255, 0.15)',
+              borderRadius: '12px',
+              background: '#fff5f5',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }}>
-              <FileCheck size={20} color="#fff" />
+              <FileCheck size={20} color="#d7263d" />
             </div>
             <div style={{ textAlign: 'left' }}>
-              <h3 style={{ margin: 0, color: '#fff', fontSize: '1.2em', fontWeight: '600', textAlign: 'left' }}>Practical Test Management</h3>
-              <p style={{ margin: 0, marginTop: '4px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85em', textAlign: 'left' }}>Add and Manage Practical Test Results</p>
+              <p className="eyebrow" style={{ margin: 0 }}>Practical Test Management</p>
+              <h3 style={{ margin: 0, marginTop: 4, fontSize: '1.1em', fontWeight: '600', textAlign: 'left' }}>Add and manage practical test results</h3>
             </div>
           </div>
 
@@ -6341,7 +5911,7 @@ const TestingModule = () => {
                   width: '100%',
                   padding: '10px 15px',
                   border: `2px solid ${colors.inputBorder}`,
-                  borderRadius: '4px',
+                  borderRadius: '16px',
                     fontSize: '0.95em',
                   boxSizing: 'border-box',
                   outline: 'none',
@@ -6373,7 +5943,7 @@ const TestingModule = () => {
                   width: '100%',
                   padding: '10px 15px',
                   border: `2px solid ${colors.inputBorder}`,
-                  borderRadius: '4px',
+                  borderRadius: '16px',
                     fontSize: '0.95em',
                   boxSizing: 'border-box',
                   outline: 'none',
@@ -6401,29 +5971,23 @@ const TestingModule = () => {
                 opacity: searchQuery ? 1 : 0.5
               }}
               onMouseOver={(e) => {
-                if (searchQuery) {
-                  e.currentTarget.style.borderColor = '#c0392b';
-                  e.currentTarget.style.color = '#c0392b';
-                  e.currentTarget.style.backgroundColor = colors.cardBg;
-                }
+                if (searchQuery) e.currentTarget.classList.add('grad-hover-outline');
               }}
               onMouseOut={(e) => {
-                e.currentTarget.style.borderColor = colors.inputBorder;
-                e.currentTarget.style.color = colors.textMuted;
-                e.currentTarget.style.backgroundColor = colors.inputBg;
+                e.currentTarget.classList.remove('grad-hover-outline');
               }}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+              <svg className="grad-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6l-1 14H6L5 6"></path>
                 <path d="M10 11v6"></path>
                 <path d="M14 11v6"></path>
                 <path d="M9 6V4h6v2"></path>
               </svg>
-              Clear Filter
+              <span className="grad-label">Clear Filter</span>
             </button>
           </div>
-        </div>
+        </article>
 
         <div style={{
           display: 'flex',
@@ -6440,25 +6004,18 @@ const TestingModule = () => {
             onMouseOver={(e) => {
               e.currentTarget.style.transform = 'translateY(-1px)';
               if (practicalActiveTable !== 'eligible') {
-                e.currentTarget.style.borderColor = '#c0392b';
-                e.currentTarget.style.color = '#c0392b';
-                e.currentTarget.style.background = colors.cardAltBg;
+                e.currentTarget.classList.add('grad-hover-outline');
               } else {
                 e.currentTarget.style.filter = 'brightness(1.05)';
               }
             }}
             onMouseOut={(e) => {
               e.currentTarget.style.transform = 'translateY(0)';
-              if (practicalActiveTable !== 'eligible') {
-                e.currentTarget.style.borderColor = practicalTabBorder;
-                e.currentTarget.style.color = colors.text;
-                e.currentTarget.style.background = colors.cardBg;
-              } else {
-                e.currentTarget.style.filter = 'none';
-              }
+              e.currentTarget.classList.remove('grad-hover-outline');
+              e.currentTarget.style.filter = 'none';
             }}
           >
-            Eligible Employees ({eligibleEmployees.length})
+            <span className="grad-label">Eligible Employees ({eligibleEmployees.length})</span>
           </button>
           <button
             type="button"
@@ -6468,25 +6025,18 @@ const TestingModule = () => {
             onMouseOver={(e) => {
               e.currentTarget.style.transform = 'translateY(-1px)';
               if (practicalActiveTable !== 'results') {
-                e.currentTarget.style.borderColor = '#c0392b';
-                e.currentTarget.style.color = '#c0392b';
-                e.currentTarget.style.background = colors.cardAltBg;
+                e.currentTarget.classList.add('grad-hover-outline');
               } else {
                 e.currentTarget.style.filter = 'brightness(1.05)';
               }
             }}
             onMouseOut={(e) => {
               e.currentTarget.style.transform = 'translateY(0)';
-              if (practicalActiveTable !== 'results') {
-                e.currentTarget.style.borderColor = practicalTabBorder;
-                e.currentTarget.style.color = colors.text;
-                e.currentTarget.style.background = colors.cardBg;
-              } else {
-                e.currentTarget.style.filter = 'none';
-              }
+              e.currentTarget.classList.remove('grad-hover-outline');
+              e.currentTarget.style.filter = 'none';
             }}
           >
-            Practical Results ({practicalResults.length})
+            <span className="grad-label">Practical Results ({practicalResults.length})</span>
           </button>
         </div>
 
@@ -6495,17 +6045,10 @@ const TestingModule = () => {
 
         {/* Eligible Employees Section */}
         {practicalActiveTable === 'eligible' && (
-          <div style={{
-            backgroundColor: colors.cardBg,
-            borderRadius: '28px',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            overflow: 'hidden',
-            marginBottom: '25px'
-          }}>
+          <article className="panel" style={{ marginBottom: '25px', padding: 0, overflow: 'hidden' }}>
             <div style={{
-              background: 'linear-gradient(120deg, #c0392b, #e74c3c)',
-              color: '#fff',
-              padding: '16px 20px',
+              padding: '20px 28px',
+              borderBottom: '1px solid #ececf0',
               fontWeight: '600',
               fontSize: '1.1em'
             }}>
@@ -6685,29 +6228,23 @@ const TestingModule = () => {
                 </button>
               </div>
             )}
-          </div>
+          </article>
         )}
 
         {/* Practical Results Table */}
         {practicalActiveTable === 'results' && (
-          <div style={{
-            backgroundColor: colors.cardBg,
-            borderRadius: '28px',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            border: `1px solid ${theme.border.default}`,
-            overflow: 'hidden'
-          }}>
+          <article className="panel" style={{ padding: 0, overflow: 'hidden' }}>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ backgroundColor: colors.tableHeaderBg, color: '#fff' }}>
-                  <th style={{ padding: '16px 20px', textAlign: 'left', fontWeight: '600' }}>Employee ID</th>
-                  <th style={{ padding: '16px 20px', textAlign: 'left', fontWeight: '600' }}>Name</th>
-                  <th style={{ padding: '16px 20px', textAlign: 'left', fontWeight: '600' }}>Standard</th>
-                  <th style={{ padding: '16px 20px', textAlign: 'center', fontWeight: '600' }}>Percentage</th>
-                  <th style={{ padding: '16px 20px', textAlign: 'center', fontWeight: '600' }}>Status</th>
-                  <th style={{ padding: '16px 20px', textAlign: 'center', fontWeight: '600' }}>Date</th>
-                  <th style={{ padding: '16px 20px', textAlign: 'center', fontWeight: '600' }}>Actions</th>
+                <tr style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #ececf0' }}>
+                  <th style={{ padding: '16px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Employee ID</th>
+                  <th style={{ padding: '16px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Name</th>
+                  <th style={{ padding: '16px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Standard</th>
+                  <th style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Percentage</th>
+                  <th style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Status</th>
+                  <th style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Date</th>
+                  <th style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -6802,7 +6339,7 @@ const TestingModule = () => {
                             onClick={() => handleDelete(result)}
                             style={{
                               padding: '8px',
-                              background: 'linear-gradient(120deg, #c0392b, #e74c3c)',
+                              background: 'linear-gradient(120deg, #b91c3c, #d7263d)',
                               color: 'white',
                               border: '2px solid transparent',
                               borderRadius: '28px',
@@ -6819,7 +6356,7 @@ const TestingModule = () => {
                               e.currentTarget.style.color = '#c0392b';
                             }}
                             onMouseOut={(e) => {
-                              e.currentTarget.style.background = 'linear-gradient(120deg, #c0392b, #e74c3c)';
+                              e.currentTarget.style.background = 'linear-gradient(120deg, #b91c3c, #d7263d)';
                               e.currentTarget.style.border = '2px solid transparent';
                               e.currentTarget.style.color = 'white';
                             }}
@@ -6947,7 +6484,7 @@ const TestingModule = () => {
                 </button>
               </div>
             )}
-          </div>
+          </article>
         )}
 
         {/* Add Practical Result Modal */}
@@ -6978,18 +6515,39 @@ const TestingModule = () => {
               boxShadow: `0 20px 60px ${isDarkMode ? 'rgba(0,0,0,0.5)' : 'rgba(0, 0, 0, 0.3)'}`,
               animation: 'fadeIn 0.2s ease'
             }}>
-              <h3 style={{ 
-                marginTop: 0, 
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
                 marginBottom: '25px',
-                color: theme.text.primary,
-                fontSize: '1.6em',
-                fontWeight: '600',
-                borderBottom: '3px solid #c0392b',
+                borderBottom: '3px solid #d7263d',
                 paddingBottom: '15px'
               }}>
-                {editMode ? 'Edit Practical Result' : 'Add Practical Result'}
-              </h3>
-              
+                <h3 style={{
+                  margin: 0,
+                  color: theme.text.primary,
+                  fontSize: '1.6em',
+                  fontWeight: '600'
+                }}>
+                  {editMode ? 'Edit Practical Result' : 'Add Practical Result'}
+                </h3>
+                <button
+                  type="button"
+                  className="close-modal-btn"
+                  onClick={() => {
+                    setShowModal(false);
+                    setEditMode(false);
+                    setCurrentResult(null);
+                    setIsPracticalPercentageManuallyEdited(false);
+                    setFormData({ employeeId: '', employeeName: '', standard: '', standardFullName: '', totalQuestions: '100', correctAnswers: '', percentage: '', passingCriteria: '75' });
+                    resetAttachment();
+                  }}
+                  style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
               <form onSubmit={handleSubmit}>
                 <div style={{ display: 'grid', gridTemplateColumns: twoColumnGrid, gap: '15px', marginBottom: '22px' }}>
                   <div>
@@ -7328,7 +6886,7 @@ const TestingModule = () => {
                         onClick={() => removePracticalAttachment(currentResult)}
                         style={{
                           padding: '6px 12px',
-                          backgroundColor: '#c0392b',
+                          backgroundColor: '#d7263d',
                           color: '#fff',
                           border: 'none',
                           borderRadius: '20px',
@@ -7346,22 +6904,18 @@ const TestingModule = () => {
                       type="button"
                       onClick={() => attachmentInputRef.current?.click()}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.background = '#fff';
-                        e.currentTarget.style.color = '#c0392b';
-                        e.currentTarget.style.border = '2px solid #c0392b';
+                        e.currentTarget.classList.add('grad-hover-outline');
                         e.currentTarget.style.transform = 'translateY(-2px)';
                         e.currentTarget.style.boxShadow = '0 6px 20px rgba(192, 57, 43, 0.4)';
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'linear-gradient(120deg, #c0392b, #e74c3c)';
-                        e.currentTarget.style.color = '#fff';
-                        e.currentTarget.style.border = '2px solid transparent';
+                        e.currentTarget.classList.remove('grad-hover-outline');
                         e.currentTarget.style.transform = 'translateY(0)';
                         e.currentTarget.style.boxShadow = 'none';
                       }}
                       style={{
                         padding: '10px 16px',
-                        background: 'linear-gradient(120deg, #c0392b, #e74c3c)',
+                        background: 'linear-gradient(120deg, #b91c3c, #d7263d)',
                         color: '#fff',
                         border: '2px solid transparent',
                         borderRadius: '8px',
@@ -7371,7 +6925,7 @@ const TestingModule = () => {
                         transition: 'all 0.2s ease'
                       }}
                     >
-                      Choose File
+                      <span className="grad-label">Choose File</span>
                     </button>
                     <span style={{ fontSize: '12px', color: colors.textMuted }}>
                       {attachmentFile ? attachmentFile.name : 'No file chosen'}
@@ -7409,22 +6963,20 @@ const TestingModule = () => {
                       transition: 'all 0.2s ease'
                     }}
                     onMouseOver={(e) => {
-                      e.currentTarget.style.borderColor = '#c0392b';
-                      e.currentTarget.style.color = '#c0392b';
+                      e.currentTarget.classList.add('grad-hover-outline');
                     }}
                     onMouseOut={(e) => {
-                      e.currentTarget.style.borderColor = theme.border.default;
-                      e.currentTarget.style.color = theme.text.secondary;
+                      e.currentTarget.classList.remove('grad-hover-outline');
                     }}
                   >
-                    Cancel
+                    <span className="grad-label">Cancel</span>
                   </button>
                   <button
                     type="submit"
                     disabled={loading}
                     style={{
                       padding: '12px 30px',
-                      background: loading ? '#95a5a6' : 'linear-gradient(120deg, #c0392b, #e74c3c)',
+                      background: loading ? '#95a5a6' : 'linear-gradient(120deg, #b91c3c, #d7263d)',
                       color: 'white',
                       border: 'none',
                       borderRadius: '18px',
@@ -7436,7 +6988,7 @@ const TestingModule = () => {
                     onMouseOver={(e) => {
                       if (!loading) {
                         e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(192, 57, 43, 0.4)';
+                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(215, 38, 61, 0.4)';
                       }
                     }}
                     onMouseOut={(e) => {
@@ -7665,7 +7217,7 @@ const TestingModule = () => {
                   width: '100%',
                   padding: '10px 15px',
                   border: `2px solid ${colors.inputBorder}`,
-                  borderRadius: '4px',
+                  borderRadius: '16px',
                     fontSize: '0.95em',
                   boxSizing: 'border-box',
                   outline: 'none',
@@ -7698,7 +7250,7 @@ const TestingModule = () => {
                   width: '100%',
                   padding: '10px 15px',
                   border: `2px solid ${colors.inputBorder}`,
-                  borderRadius: '4px',
+                  borderRadius: '16px',
                     fontSize: '0.95em',
                   boxSizing: 'border-box',
                   outline: 'none',
@@ -7729,26 +7281,20 @@ const TestingModule = () => {
                 transition: 'all 0.2s ease'
               }}
               onMouseOver={(e) => {
-                if (searchQuery) {
-                  e.currentTarget.style.borderColor = '#c0392b';
-                  e.currentTarget.style.color = '#c0392b';
-                  e.currentTarget.style.backgroundColor = colors.cardBg;
-                }
+                if (searchQuery) e.currentTarget.classList.add('grad-hover-outline');
               }}
               onMouseOut={(e) => {
-                e.currentTarget.style.borderColor = colors.inputBorder;
-                e.currentTarget.style.color = colors.textMuted;
-                e.currentTarget.style.backgroundColor = colors.inputBg;
+                e.currentTarget.classList.remove('grad-hover-outline');
               }}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+              <svg className="grad-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6l-1 14H6L5 6"></path>
                 <path d="M10 11v6"></path>
                 <path d="M14 11v6"></path>
                 <path d="M9 6V4h6v2"></path>
               </svg>
-              Clear Filter
+              <span className="grad-label">Clear Filter</span>
             </button>
             </div>
           </div>
@@ -7810,7 +7356,7 @@ const TestingModule = () => {
                         onClick={() => handleDelete(employee.ID)}
                         style={{
                           padding: '8px',
-                          background: 'linear-gradient(120deg, #c0392b, #e74c3c)',
+                          background: 'linear-gradient(120deg, #b91c3c, #d7263d)',
                           color: 'white',
                           border: '2px solid transparent',
                           borderRadius: '28px',
@@ -7827,7 +7373,7 @@ const TestingModule = () => {
                           e.currentTarget.style.color = '#c0392b';
                         }}
                         onMouseOut={e => {
-                          e.currentTarget.style.background = 'linear-gradient(120deg, #c0392b, #e74c3c)';
+                          e.currentTarget.style.background = 'linear-gradient(120deg, #b91c3c, #d7263d)';
                           e.currentTarget.style.border = '2px solid transparent';
                           e.currentTarget.style.color = 'white';
                         }}
@@ -7982,17 +7528,31 @@ const TestingModule = () => {
               boxShadow: `0 20px 60px ${isDarkMode ? 'rgba(0,0,0,0.5)' : 'rgba(0, 0, 0, 0.3)'}`,
               animation: 'fadeIn 0.2s ease'
             }}>
-              <h3 style={{ 
-                marginTop: 0, 
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
                 marginBottom: '25px',
-                color: colors.text,
-                fontSize: '1.6em',
-                fontWeight: '600',
-                borderBottom: '3px solid #c0392b',
+                borderBottom: '3px solid #d7263d',
                 paddingBottom: '15px'
               }}>
-                {editMode ? 'Edit Employee' : 'Add New Employee'}
-              </h3>
+                <h3 style={{
+                  margin: 0,
+                  color: colors.text,
+                  fontSize: '1.6em',
+                  fontWeight: '600'
+                }}>
+                  {editMode ? 'Edit Employee' : 'Add New Employee'}
+                </h3>
+                <button
+                  type="button"
+                  className="close-modal-btn"
+                  onClick={() => setShowModal(false)}
+                  style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
               <form onSubmit={handleSubmit}>
                 <div style={{ marginBottom: '22px' }}>
                   <label style={{ 
@@ -8074,17 +7634,17 @@ const TestingModule = () => {
                       transition: 'all 0.2s ease',
                       opacity: saving ? 0.5 : 1
                     }}
-                    onMouseOver={e => !saving && (e.currentTarget.style.borderColor = '#c0392b', e.currentTarget.style.color = '#c0392b')}
-                    onMouseOut={e => !saving && (e.currentTarget.style.borderColor = colors.inputBorder, e.currentTarget.style.color = colors.textMuted)}
+                    onMouseOver={e => !saving && e.currentTarget.classList.add('grad-hover-outline')}
+                    onMouseOut={e => e.currentTarget.classList.remove('grad-hover-outline')}
                   >
-                    Cancel
+                    <span className="grad-label">Cancel</span>
                   </button>
                   <button
                     type="submit"
                     disabled={saving}
                     style={{
                       padding: '12px 30px',
-                      background: saving ? '#95a5a6' : 'linear-gradient(120deg, #c0392b, #e74c3c)',
+                      background: saving ? '#95a5a6' : 'linear-gradient(120deg, #b91c3c, #d7263d)',
                       color: 'white',
                       border: 'none',
                       borderRadius: '18px',
@@ -8097,7 +7657,7 @@ const TestingModule = () => {
                     onMouseOver={e => {
                       if (!saving) {
                         e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(192, 57, 43, 0.4)';
+                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(215, 38, 61, 0.4)';
                       }
                     }}
                     onMouseOut={e => {

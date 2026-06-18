@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Edit2, Trash2, BookOpen } from 'lucide-react';
+﻿import React, { useState, useEffect, useRef } from 'react';
+import { Edit2, Trash2, BookOpen, X } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { API_BASE_URL as HOST_API_BASE_URL } from '../../config/api';
 import '../PTIS_App.css';
@@ -32,7 +32,8 @@ const StandardsAdminPage = ({ onBack, showToast }) => {
     Minutes: '0',
     Seconds: '0',
     Negative_Marking: 'Yes',
-    Certificate_Template: ''
+    Certificate_Template: '',
+    Practical_Required: 'No'
   });
 
   const isMobile = viewportWidth <= 768;
@@ -77,22 +78,50 @@ const StandardsAdminPage = ({ onBack, showToast }) => {
   };
 
 
+  // Practical_Required is stored locally as a fallback since the backend
+  // standards table may not have this column yet — keeps the flag working
+  // purely on the frontend regardless of backend support.
+  const PRACTICAL_REQUIRED_STORAGE_KEY = 'ptis_practical_required_standards';
+
+  const getPracticalRequiredMap = () => {
+    try {
+      return JSON.parse(localStorage.getItem(PRACTICAL_REQUIRED_STORAGE_KEY) || '{}');
+    } catch {
+      return {};
+    }
+  };
+
+  const savePracticalRequiredFlag = (standardName, value) => {
+    try {
+      const map = getPracticalRequiredMap();
+      map[standardName] = value;
+      localStorage.setItem(PRACTICAL_REQUIRED_STORAGE_KEY, JSON.stringify(map));
+    } catch {
+      // ignore storage errors
+    }
+  };
+
   const fetchData = async () => {
     try {
       const [standardsRes, infosRes] = await Promise.all([
         fetch(`${API_BASE_URL}/api/standards/legacy`),
         fetch(`${API_BASE_URL}/api/standards/legacy/info`)
       ]);
-      
+
       if (!standardsRes.ok || !infosRes.ok) {
         throw new Error('Failed to fetch data from server');
       }
-      
+
       const standardsData = await standardsRes.json();
       const infosData = await infosRes.json();
-      
+      const practicalMap = getPracticalRequiredMap();
+
       // Ensure data is array
-      setStandards(Array.isArray(standardsData) ? standardsData : []);
+      const normalizedStandards = (Array.isArray(standardsData) ? standardsData : []).map(s => ({
+        ...s,
+        Practical_Required: s.Practical_Required || practicalMap[s.Standard_List] || 'No'
+      }));
+      setStandards(normalizedStandards);
       setInfos(Array.isArray(infosData) ? infosData : []);
       setLoading(false);
     } catch (error) {
@@ -123,7 +152,8 @@ const StandardsAdminPage = ({ onBack, showToast }) => {
       Minutes: '0',
       Seconds: '0',
       Negative_Marking: 'Yes',
-      Certificate_Template: ''
+      Certificate_Template: '',
+      Practical_Required: 'No'
     });
     setShowModal(true);
   };
@@ -144,7 +174,8 @@ const StandardsAdminPage = ({ onBack, showToast }) => {
       Minutes: info?.Minutes || '0',
       Seconds: info?.Seconds || '0',
       Negative_Marking: standard.Negative_Marking || 'Yes',
-      Certificate_Template: standard.Certificate_Template || ''
+      Certificate_Template: standard.Certificate_Template || '',
+      Practical_Required: standard.Practical_Required || 'No'
     });
     setShowModal(true);
   };
@@ -270,8 +301,13 @@ const StandardsAdminPage = ({ onBack, showToast }) => {
         Passing_Criteria: formData.Passing_Criteria,
         Hours: parseInt(formData.Hours),
         Minutes: parseInt(formData.Minutes),
-        Seconds: parseInt(formData.Seconds)
+        Seconds: parseInt(formData.Seconds),
+        Practical_Required: formData.Practical_Required
       };
+
+      // Persist locally too — backend may not have a column for this yet,
+      // so the flag must keep working purely on the frontend.
+      savePracticalRequiredFlag(targetStandard, formData.Practical_Required);
 
       if (editMode) {
         await fetch(`${API_BASE_URL}/api/standards/legacy/${encodeURIComponent(currentStandard)}`, {
@@ -365,18 +401,11 @@ const StandardsAdminPage = ({ onBack, showToast }) => {
       
       <div style={{ maxWidth: '1400px', margin: '0 auto', padding: isMobile ? '0 6px' : 0 }}>
         {/* Search/Filter Card */}
-        <div style={{ 
-          backgroundColor: colors.cardBg, 
-          borderRadius: '16px',
-overflow: 'hidden',
-          boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
-          border: `1px solid ${colors.border}`,
-          marginBottom: '25px'
-        }}>
+        <article className="panel" style={{ marginBottom: '25px', padding: 0, overflow: 'hidden' }}>
           {/* Header */}
-          <div style={{ 
-            background: 'linear-gradient(120deg, #1a1a2e, #16213e)',
-            padding: '18px 25px',
+          <div style={{
+            padding: '20px 28px',
+            borderBottom: '1px solid #ececf0',
             display: 'flex',
             alignItems: 'center',
             gap: '12px'
@@ -384,17 +413,17 @@ overflow: 'hidden',
             <div style={{
               width: '40px',
               height: '40px',
-              borderRadius: '18px',
-              background: 'rgba(255, 255, 255, 0.15)',
+              borderRadius: '12px',
+              background: '#fff5f5',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }}>
-              <BookOpen size={20} color="#fff" />
+              <BookOpen size={20} color="#d7263d" />
             </div>
             <div style={{ textAlign: 'left' }}>
-              <h3 style={{ margin: 0, color: '#fff', fontSize: '1.2em', fontWeight: '600', textAlign: 'left' }}>Standards Management</h3>
-              <p style={{ margin: 0, marginTop: '4px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85em', textAlign: 'left' }}>View And Manage All Testing Standards</p>
+              <p className="eyebrow" style={{ margin: 0 }}>Standards Management</p>
+              <h3 style={{ margin: 0, marginTop: 4, fontSize: '1.1em', fontWeight: '600', textAlign: 'left' }}>View and manage all testing standards</h3>
             </div>
           </div>
 
@@ -417,7 +446,7 @@ overflow: 'hidden',
                   width: '100%',
                   padding: '10px 15px',
                   border: `1px solid ${colors.inputBorder}`,
-                  borderRadius: '4px',
+                  borderRadius: '16px',
                   fontSize: '0.95em',
                   boxSizing: 'border-box',
                   outline: 'none',
@@ -470,33 +499,28 @@ overflow: 'hidden',
               Clear Filter
             </button>
           </div>
-        </div>
+        </article>
 
         {/* Table Card */}
-        <div style={{ 
-          backgroundColor: colors.cardBg, 
-          borderRadius: '16px',
-overflow: 'hidden',
-          boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
-          border: `1px solid ${colors.border}`
-        }}>
+        <article className="panel" style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ backgroundColor: colors.tableHeaderBg, color: 'white' }}>
-                  <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: '600', fontSize: '0.95em', color: '#fff' }}>Standard Name</th>
-                  <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: '600', fontSize: '0.95em', color: '#fff' }}>Short Name</th>
-                  <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: '600', fontSize: '0.95em', color: '#fff' }}>Total Questions</th>
-                  <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: '600', fontSize: '0.95em', color: '#fff' }}>Passing Criteria</th>
-                  <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: '600', fontSize: '0.95em', color: '#fff' }}>Time Limit</th>
-                  <th style={{ padding: '18px 20px', textAlign: 'center', fontWeight: '600', fontSize: '0.95em', color: '#fff' }}>Negative Marking</th>
-                  <th style={{ padding: '18px 20px', textAlign: 'center', fontWeight: '600', fontSize: '0.95em', color: '#fff' }}>Actions</th>
+                <tr style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #ececf0' }}>
+                  <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Standard Name</th>
+                  <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Short Name</th>
+                  <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Total Questions</th>
+                  <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Passing Criteria</th>
+                  <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Time Limit</th>
+                  <th style={{ padding: '18px 20px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Negative Marking</th>
+                  <th style={{ padding: '18px 20px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Practical</th>
+                  <th style={{ padding: '18px 20px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredStandards.length === 0 ? (
                   <tr>
-                    <td colSpan="7" style={{ padding: '60px 20px', textAlign: 'center', color: colors.textMuted, fontSize: '1.1em' }}>
+                    <td colSpan="8" style={{ padding: '60px 20px', textAlign: 'center', color: colors.textMuted, fontSize: '1.1em' }}>
                       {searchQuery ? 'No matching standards found' : 'No standards found. Click "Add New Standard" to create one.'}
                     </td>
                   </tr>
@@ -547,6 +571,19 @@ overflow: 'hidden',
                             {standard.Negative_Marking === 'Yes' || standard.Negative_Marking === 'yes' ? 'Enabled' : 'Disabled'}
                           </span>
                         </td>
+                        <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                          <span style={{
+                            backgroundColor: (standard.Practical_Required === 'Yes' || standard.Practical_Required === 'yes') ? '#fee' : '#f1f1f4',
+                            color: (standard.Practical_Required === 'Yes' || standard.Practical_Required === 'yes') ? '#c00' : '#8a8a95',
+                            padding: '6px 12px',
+                            borderRadius: '28px',
+                            fontSize: '0.85em',
+                            fontWeight: '600',
+                            display: 'inline-block'
+                          }}>
+                            {standard.Practical_Required === 'Yes' || standard.Practical_Required === 'yes' ? 'Required' : 'Not Required'}
+                          </span>
+                        </td>
                         <td style={{ padding: '16px 20px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                           <button
                             onClick={() => handleEdit(standard)}
@@ -579,7 +616,7 @@ overflow: 'hidden',
                             onClick={() => handleDelete(standard.Standard_List)}
                             style={{
                               padding: '8px',
-                              background: 'linear-gradient(120deg, #c0392b, #e74c3c)',
+                              background: 'linear-gradient(120deg, #b91c3c, #d7263d)',
                               color: 'white',
                               border: '2px solid transparent',
                               borderRadius: '28px',
@@ -596,7 +633,7 @@ overflow: 'hidden',
                               e.currentTarget.style.color = '#c0392b';
                             }}
                             onMouseOut={e => {
-                              e.currentTarget.style.background = 'linear-gradient(120deg, #c0392b, #e74c3c)';
+                              e.currentTarget.style.background = 'linear-gradient(120deg, #b91c3c, #d7263d)';
                               e.currentTarget.style.border = '2px solid transparent';
                               e.currentTarget.style.color = 'white';
                             }}
@@ -716,7 +753,7 @@ overflow: 'hidden',
             </button>
             </div>
           )}
-        </div>
+        </article>
       </div>
 
       {/* Modern Modal for Add/Edit */}
@@ -747,18 +784,32 @@ overflow: 'hidden',
             boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
             animation: 'fadeIn 0.2s ease'
           }}>
-            <h3 style={{ 
-              marginTop: 0, 
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
               marginBottom: '25px',
-              color: colors.text,
-              fontSize: '1.6em',
-              fontWeight: '600',
-              borderBottom: '3px solid #c0392b',
+              borderBottom: '3px solid #d7263d',
               paddingBottom: '15px'
             }}>
-              {editMode ? 'Edit Standard' : 'Add New Standard'}
-            </h3>
-            
+              <h3 style={{
+                margin: 0,
+                color: colors.text,
+                fontSize: '1.6em',
+                fontWeight: '600'
+              }}>
+                {editMode ? 'Edit Standard' : 'Add New Standard'}
+              </h3>
+              <button
+                type="button"
+                className="close-modal-btn"
+                onClick={() => { setShowModal(false); resetTemplateFile(); }}
+                style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
             <form onSubmit={handleSubmit}>
               <div style={{ marginBottom: '22px' }}>
                 <label style={{ 
@@ -1032,7 +1083,7 @@ overflow: 'hidden',
                     }}
                     onMouseLeave={(e) => {
                       if (templateUploading) return;
-                      e.currentTarget.style.background = 'linear-gradient(120deg, #c0392b, #e74c3c)';
+                      e.currentTarget.style.background = 'linear-gradient(120deg, #b91c3c, #d7263d)';
                       e.currentTarget.style.color = '#fff';
                       e.currentTarget.style.border = '2px solid transparent';
                       e.currentTarget.style.transform = 'translateY(0)';
@@ -1040,7 +1091,7 @@ overflow: 'hidden',
                     }}
                     style={{
                       padding: '10px 16px',
-                      background: templateUploading ? '#95a5a6' : 'linear-gradient(120deg, #c0392b, #e74c3c)',
+                      background: templateUploading ? '#95a5a6' : 'linear-gradient(120deg, #b91c3c, #d7263d)',
                       color: '#fff',
                       border: '2px solid transparent',
                       borderRadius: '8px',
@@ -1084,7 +1135,7 @@ overflow: 'hidden',
                   <label style={{
                     flex: 1,
                     padding: '15px',
-                    border: `2px solid ${formData.Negative_Marking === 'Yes' ? '#c0392b' : colors.inputBorder}`,
+                    border: `2px solid ${formData.Negative_Marking === 'Yes' ? '#d7263d' : colors.inputBorder}`,
                     borderRadius: '28px',
                     cursor: 'pointer',
                     textAlign: 'center',
@@ -1099,7 +1150,7 @@ overflow: 'hidden',
                       onChange={handleChange}
                       style={{ marginRight: '8px' }}
                     />
-                    <span style={{ fontWeight: '600', color: formData.Negative_Marking === 'Yes' ? '#c0392b' : colors.textMuted }}>
+                    <span style={{ fontWeight: '600', color: formData.Negative_Marking === 'Yes' ? '#d7263d' : colors.textMuted }}>
                       Enabled
                     </span>
                   </label>
@@ -1128,6 +1179,64 @@ overflow: 'hidden',
                 </div>
               </div>
 
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{
+                  display: 'block',
+                  marginBottom: 10,
+                  fontWeight: '600',
+                  color: colors.text,
+                  fontSize: '0.9em'
+                }}>
+                  Practical Required
+                </label>
+                <div style={{ display: 'flex', gap: '12px', flexDirection: isMobile ? 'column' : 'row' }}>
+                  <label style={{
+                    flex: 1,
+                    padding: '15px',
+                    border: `2px solid ${formData.Practical_Required === 'Yes' ? '#d7263d' : colors.inputBorder}`,
+                    borderRadius: '28px',
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                    transition: 'all 0.2s ease',
+                    backgroundColor: formData.Practical_Required === 'Yes' ? (isDarkMode ? '#2d1f1f' : '#fee') : colors.inputBg
+                  }}>
+                    <input
+                      type="radio"
+                      name="Practical_Required"
+                      value="Yes"
+                      checked={formData.Practical_Required === 'Yes'}
+                      onChange={handleChange}
+                      style={{ marginRight: '8px' }}
+                    />
+                    <span style={{ fontWeight: '600', color: formData.Practical_Required === 'Yes' ? '#d7263d' : colors.textMuted }}>
+                      Yes — practical is compulsory
+                    </span>
+                  </label>
+                  <label style={{
+                    flex: 1,
+                    padding: '15px',
+                    border: `2px solid ${formData.Practical_Required === 'No' ? '#27ae60' : colors.inputBorder}`,
+                    borderRadius: '28px',
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                    transition: 'all 0.2s ease',
+                    backgroundColor: formData.Practical_Required === 'No' ? (isDarkMode ? '#1f2d1f' : '#efe') : colors.inputBg
+                  }}>
+                    <input
+                      type="radio"
+                      name="Practical_Required"
+                      value="No"
+                      checked={formData.Practical_Required === 'No'}
+                      onChange={handleChange}
+                      style={{ marginRight: '8px' }}
+                    />
+                    <span style={{ fontWeight: '600', color: formData.Practical_Required === 'No' ? '#27ae60' : colors.textMuted }}>
+                      No — theory only
+                    </span>
+                  </label>
+                </div>
+              </div>
+
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '30px', flexWrap: 'wrap' }}>
                 <button
                   type="button"
@@ -1147,17 +1256,17 @@ overflow: 'hidden',
                     width: isMobile ? '100%' : 'auto',
                     transition: 'all 0.2s ease'
                   }}
-                  onMouseOver={e => (e.currentTarget.style.borderColor = '#c0392b', e.currentTarget.style.color = '#c0392b')}
-                  onMouseOut={e => (e.currentTarget.style.borderColor = colors.border, e.currentTarget.style.color = colors.textMuted)}
+                  onMouseOver={e => e.currentTarget.classList.add('grad-hover-outline')}
+                  onMouseOut={e => e.currentTarget.classList.remove('grad-hover-outline')}
                 >
-                  Cancel
+                  <span className="grad-label">Cancel</span>
                 </button>
                 <button
                   type="submit"
                   disabled={templateUploading}
                   style={{
                     padding: '12px 30px',
-                    background: templateUploading ? colors.inputBorder : 'linear-gradient(120deg, #c0392b, #e74c3c)',
+                    background: templateUploading ? colors.inputBorder : 'linear-gradient(120deg, #b91c3c, #d7263d)',
                     color: templateUploading ? colors.textMuted : 'white',
                     border: 'none',
                     borderRadius: '18px',
@@ -1170,7 +1279,7 @@ overflow: 'hidden',
                   onMouseOver={e => {
                     if (templateUploading) return;
                     e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(192, 57, 43, 0.4)';
+                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(215, 38, 61, 0.4)';
                   }}
                   onMouseOut={e => {
                     e.currentTarget.style.transform = 'translateY(0)';

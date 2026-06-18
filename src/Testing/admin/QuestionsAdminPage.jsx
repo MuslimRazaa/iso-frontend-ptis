@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Edit2, Trash2, Upload, FileSpreadsheet, Download } from 'lucide-react';
+﻿import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { Edit2, Trash2, Upload, FileSpreadsheet, Download, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useTheme } from '../contexts/ThemeContext';
 import { API_BASE_URL as HOST_API_BASE_URL } from '../../config/api';
@@ -329,6 +329,12 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
     const file = e.target.files[0];
     if (!file) return;
 
+    if (file.size > 100 * 1024 * 1024) {
+      if (showToast) showToast('File size exceeds 100 MB limit. Please upload a smaller file.', 'error');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
     setExcelFile(file);
     const reader = new FileReader();
     
@@ -487,19 +493,11 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
       />
       
       {/* Modern Filters */}
-      <div style={{ 
-        backgroundColor: colors.cardBg,
-        borderRadius: '16px',
-
-        marginBottom: '25px',
-        boxShadow: '0 4px 15px rgba(0,0,0,0.08)',
-        border: `1px solid ${colors.border}`,
-        overflow: 'hidden'
-      }}>
+      <article className="panel" style={{ marginBottom: '25px', padding: 0, overflow: 'hidden' }}>
         {/* Filter Header */}
-        <div style={{ 
-          background: 'linear-gradient(120deg, #1a1a2e, #16213e)',
-          padding: '18px 25px',
+        <div style={{
+          padding: '20px 28px',
+          borderBottom: '1px solid #ececf0',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -510,20 +508,20 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
             <div style={{
               width: '40px',
               height: '40px',
-              borderRadius: '18px',
-              background: 'rgba(255, 255, 255, 0.15)',
+              borderRadius: '12px',
+              background: '#fff5f5',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d7263d" strokeWidth="2">
                 <circle cx="11" cy="11" r="8"></circle>
                 <path d="m21 21-4.35-4.35"></path>
               </svg>
             </div>
             <div>
-              <h3 style={{ margin: 0, color: '#fff', fontSize: '1.2em', fontWeight: '600' }}>Filter & Search Questions</h3>
-              <p style={{ margin: 0, marginTop: '4px', color: 'rgba(255,255,255,0.8)', fontSize: '0.85em' }}>Filter By Standard Or Search In Question Text</p>
+              <p className="eyebrow" style={{ margin: 0 }}>Filter & Search Questions</p>
+              <h3 style={{ margin: 0, marginTop: 4, fontSize: '1.1em', fontWeight: '600' }}>Filter by standard or search in question text</h3>
             </div>
           </div>
           <span style={{
@@ -531,8 +529,8 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
             alignItems: 'center',
             gap: '8px',
             padding: '8px 16px',
-            backgroundColor: 'rgba(255,255,255,0.2)',
-            color: '#fff',
+            backgroundColor: '#fff5f5',
+            color: '#d7263d',
             borderRadius: '28px',
             fontSize: '0.9em',
             fontWeight: '600'
@@ -566,7 +564,7 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
                   width: '6px',
                   height: '6px',
                   borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #c0392b, #e74c3c)'
+                  background: 'linear-gradient(135deg, #b91c3c, #d7263d)'
                 }}></span>
                 Filter by Standard
               </label>
@@ -578,7 +576,7 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
                   padding: '12px 15px',
                   fontSize: '14px',
                   border: `2px solid ${colors.inputBorder}`,
-                  borderRadius: '4px',
+                  borderRadius: '16px',
                   backgroundColor: colors.cardAltBg,
                   color: colors.text,
                   fontWeight: '500',
@@ -621,7 +619,7 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
                   width: '6px',
                   height: '6px',
                   borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #c0392b, #e74c3c)'
+                  background: 'linear-gradient(135deg, #b91c3c, #d7263d)'
                 }}></span>
                 Search Questions
               </label>
@@ -636,7 +634,7 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
                     padding: '12px 15px 12px 45px',
                     fontSize: '14px',
                     border: `2px solid ${colors.inputBorder}`,
-                    borderRadius: '4px',
+                    borderRadius: '16px',
                     backgroundColor: colors.cardAltBg,
                     color: colors.text,
                     transition: 'all 0.2s ease',
@@ -731,7 +729,7 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
                   alignItems: 'center',
                   gap: '8px',
                   padding: '10px 20px',
-                  background: bulkDeleting ? '#aaa' : 'linear-gradient(120deg, #c0392b, #e74c3c)',
+                  background: bulkDeleting ? '#aaa' : 'linear-gradient(120deg, #b91c3c, #d7263d)',
                   color: 'white',
                   border: '2px solid transparent',
                   borderRadius: '22px',
@@ -739,7 +737,7 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
                   fontSize: '14px',
                   fontWeight: '600',
                   transition: 'all 0.3s ease',
-                  boxShadow: bulkDeleting ? 'none' : '0 4px 12px rgba(192, 57, 43, 0.3)',
+                  boxShadow: bulkDeleting ? 'none' : '0 4px 12px rgba(215, 38, 61, 0.3)',
                   position: 'relative',
                   overflow: 'hidden'
                 }}
@@ -754,10 +752,10 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
                 }}
                 onMouseOut={e => {
                   if (!bulkDeleting) {
-                    e.currentTarget.style.background = 'linear-gradient(120deg, #c0392b, #e74c3c)';
+                    e.currentTarget.style.background = 'linear-gradient(120deg, #b91c3c, #d7263d)';
                     e.currentTarget.style.color = 'white';
                     e.currentTarget.style.border = '2px solid transparent';
-                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(192, 57, 43, 0.3)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(215, 38, 61, 0.3)';
                     e.currentTarget.style.transform = 'translateY(0)';
                   }
                 }}
@@ -855,17 +853,10 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
             </button>
           </div>
         </div>
-      </div>
+      </article>
 
       {/* Excel Upload Section */}
-      <div style={{
-        backgroundColor: colors.cardBg,
-        borderRadius: '16px',
-padding: '24px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-        border: `1px solid ${colors.border}`,
-        marginBottom: '24px'
-      }}>
+      <article className="panel" style={{ padding: '24px', marginBottom: '24px' }}>
         <h3 style={{
           margin: '0 0 16px 0',
           color: colors.text,
@@ -891,6 +882,7 @@ padding: '24px',
           
           {/* Upload from Excel Button */}
           <button
+            id="questions-upload-btn"
             onClick={() => fileInputRef.current?.click()}
             style={{
               display: 'flex',
@@ -949,7 +941,7 @@ padding: '24px',
               alignItems: 'center',
               gap: '8px',
               padding: '10px 20px',
-              background: 'linear-gradient(120deg, #c0392b, #e74c3c)',
+              background: 'linear-gradient(120deg, #b91c3c, #d7263d)',
               color: 'white',
               border: '2px solid transparent',
               borderRadius: '22px',
@@ -957,7 +949,7 @@ padding: '24px',
               fontSize: '14px',
               fontWeight: '600',
               transition: 'all 0.3s ease',
-              boxShadow: '0 4px 12px rgba(192, 57, 43, 0.3)',
+              boxShadow: '0 4px 12px rgba(215, 38, 61, 0.3)',
               position: 'relative',
               overflow: 'hidden'
             }}
@@ -969,10 +961,10 @@ padding: '24px',
               e.currentTarget.style.transform = 'translateY(-2px)';
             }}
             onMouseOut={e => {
-              e.currentTarget.style.background = 'linear-gradient(120deg, #c0392b, #e74c3c)';
+              e.currentTarget.style.background = 'linear-gradient(120deg, #b91c3c, #d7263d)';
               e.currentTarget.style.color = 'white';
               e.currentTarget.style.border = '2px solid transparent';
-              e.currentTarget.style.boxShadow = '0 4px 12px rgba(192, 57, 43, 0.3)';
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(215, 38, 61, 0.3)';
               e.currentTarget.style.transform = 'translateY(0)';
             }}
           >
@@ -1011,21 +1003,15 @@ padding: '24px',
             <span>Selected: {excelFile.name} ({excelData?.length || 0} questions)</span>
           </div>
         )}
-      </div>
+      </article>
 
       {/* Questions Table */}
-      <div style={{
-        backgroundColor: colors.cardBg,
-        borderRadius: '16px',
-overflow: 'hidden',
-        boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
-        border: `1px solid ${colors.border}`
-      }}>
+      <article className="panel" style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ backgroundColor: colors.tableHeaderBg, color: 'white' }}>
-                <th style={{ padding: '15px', textAlign: 'center', border: `1px solid ${colors.border}`, width: '44px' }}>
+              <tr style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #ececf0' }}>
+                <th style={{ padding: '15px', textAlign: 'center', width: '44px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95', fontWeight: 700 }}>
                   <input
                     type="checkbox"
                     title="Select all visible questions"
@@ -1034,11 +1020,11 @@ overflow: 'hidden',
                     style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#3b82f6' }}
                   />
                 </th>
-                <th style={{ padding: '15px', textAlign: 'left', border: `1px solid ${colors.border}`, width: '60px' }}>S.No.</th>
-                <th style={{ padding: '15px', textAlign: 'left', border: `1px solid ${colors.border}` }}>Question</th>
-                <th style={{ padding: '15px', textAlign: 'left', border: `1px solid ${colors.border}`, width: '150px' }}>Standard</th>
-                <th style={{ padding: '15px', textAlign: 'left', border: `1px solid ${colors.border}`, width: '80px' }}>Answer</th>
-                <th style={{ padding: '15px', textAlign: 'center', border: `1px solid ${colors.border}`, width: '180px' }}>Actions</th>
+                <th style={{ padding: '15px', textAlign: 'left', width: '60px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95', fontWeight: 700 }}>S.No.</th>
+                <th style={{ padding: '15px', textAlign: 'left', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95', fontWeight: 700 }}>Question</th>
+                <th style={{ padding: '15px', textAlign: 'left', width: '150px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95', fontWeight: 700 }}>Standard</th>
+                <th style={{ padding: '15px', textAlign: 'left', width: '80px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95', fontWeight: 700 }}>Answer</th>
+                <th style={{ padding: '15px', textAlign: 'center', width: '180px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95', fontWeight: 700 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1100,7 +1086,7 @@ overflow: 'hidden',
                       onClick={() => handleDelete(question.NO)}
                       style={{
                         padding: '8px',
-                        background: 'linear-gradient(120deg, #c0392b, #e74c3c)',
+                        background: 'linear-gradient(120deg, #b91c3c, #d7263d)',
                         color: 'white',
                         border: '2px solid transparent',
                         borderRadius: '28px',
@@ -1117,7 +1103,7 @@ overflow: 'hidden',
                         e.currentTarget.style.color = '#c0392b';
                       }}
                       onMouseOut={e => {
-                        e.currentTarget.style.background = 'linear-gradient(120deg, #c0392b, #e74c3c)';
+                        e.currentTarget.style.background = 'linear-gradient(120deg, #b91c3c, #d7263d)';
                         e.currentTarget.style.border = '2px solid transparent';
                         e.currentTarget.style.color = 'white';
                       }}
@@ -1244,7 +1230,7 @@ overflow: 'hidden',
             </button>
           </div>
         )}
-      </div>
+      </article>
 
       {/* Modal for Add/Edit */}
       {showModal && (
@@ -1274,18 +1260,32 @@ overflow: 'hidden',
             boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
             animation: 'fadeIn 0.2s ease'
           }}>
-            <h3 style={{ 
-              marginTop: 0, 
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
               marginBottom: '25px',
-              color: colors.text,
-              fontSize: '1.6em',
-              fontWeight: '600',
-              borderBottom: '3px solid #c0392b',
+              borderBottom: '3px solid #d7263d',
               paddingBottom: '15px'
             }}>
-              {editMode ? 'Edit Question' : 'Add New Question'}
-            </h3>
-            
+              <h3 style={{
+                margin: 0,
+                color: colors.text,
+                fontSize: '1.6em',
+                fontWeight: '600'
+              }}>
+                {editMode ? 'Edit Question' : 'Add New Question'}
+              </h3>
+              <button
+                type="button"
+                className="close-modal-btn"
+                onClick={() => setShowModal(false)}
+                style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
             <form onSubmit={handleSubmit}>
               <div style={{ marginBottom: '22px' }}>
                 <label style={{ 
@@ -1549,16 +1549,16 @@ overflow: 'hidden',
                     width: isMobile ? '100%' : 'auto',
                     transition: 'all 0.2s ease'
                   }}
-                  onMouseOver={e => (e.currentTarget.style.borderColor = '#c0392b', e.currentTarget.style.color = '#c0392b')}
-                  onMouseOut={e => (e.currentTarget.style.borderColor = colors.border, e.currentTarget.style.color = colors.textMuted)}
+                  onMouseOver={e => e.currentTarget.classList.add('grad-hover-outline')}
+                  onMouseOut={e => e.currentTarget.classList.remove('grad-hover-outline')}
                 >
-                  Cancel
+                  <span className="grad-label">Cancel</span>
                 </button>
                 <button
                   type="submit"
                   style={{
                     padding: '12px 30px',
-                    background: 'linear-gradient(120deg, #c0392b, #e74c3c)',
+                    background: 'linear-gradient(120deg, #b91c3c, #d7263d)',
                     color: 'white',
                     border: 'none',
                     borderRadius: '18px',
@@ -1570,7 +1570,7 @@ overflow: 'hidden',
                   }}
                   onMouseOver={(e) => {
                     e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(192, 57, 43, 0.4)';
+                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(215, 38, 61, 0.4)';
                   }}
                   onMouseOut={(e) => {
                     e.currentTarget.style.transform = 'translateY(0)';
@@ -1613,19 +1613,40 @@ overflow: 'hidden',
             position: 'relative',
             border: `2px solid ${colors.border}`
           }}>
-            <h2 style={{
-              margin: '0 0 24px 0',
-              color: colors.text,
-              fontSize: '28px',
-              fontWeight: '700',
-              letterSpacing: '-0.5px',
+            <div style={{
               display: 'flex',
+              justifyContent: 'space-between',
               alignItems: 'center',
-              gap: '12px'
+              marginBottom: '24px'
             }}>
-              <FileSpreadsheet size={32} color="#27ae60" />
-              Preview Excel Data
-            </h2>
+              <h2 style={{
+                margin: 0,
+                color: colors.text,
+                fontSize: '28px',
+                fontWeight: '700',
+                letterSpacing: '-0.5px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px'
+              }}>
+                <FileSpreadsheet size={32} color="#27ae60" />
+                Preview Excel Data
+              </h2>
+              <button
+                type="button"
+                className="close-modal-btn"
+                onClick={() => {
+                  setShowExcelUploadModal(false);
+                  setExcelData(null);
+                  setExcelFile(null);
+                  setUploadSummary(null);
+                  setUploadErrors([]);
+                }}
+                style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}
+              >
+                <X size={18} />
+              </button>
+            </div>
 
             <div style={{
               padding: '16px',

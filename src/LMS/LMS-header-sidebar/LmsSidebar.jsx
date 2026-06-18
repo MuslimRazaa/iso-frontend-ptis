@@ -80,8 +80,15 @@ function LmsSidebar() {
         <div className="brand-logo" aria-hidden="true">
          <Link to={dashboardPath}><img src={ptisLogo} alt="PTIS" /></Link>
         </div>
+        <div className="sidebar-fade-text" style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '1.4px', textTransform: 'uppercase', color: '#d7263d' }}>Learning</span>
+          <div style={{ fontSize: 11, color: '#9a9aaa', marginTop: 1 }}>Management System</div>
+        </div>
       </div>
       <nav className="sidebar-menu">
+        <div className="sidebar-fade-text" style={{ padding: '16px 18px 6px', overflow: 'hidden', whiteSpace: 'nowrap', pointerEvents: 'none' }}>
+          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '1.6px', textTransform: 'uppercase', color: '#b0b0c0' }}>Navigation</span>
+        </div>
         {menuConfig.map((menu) => (
           <div key={menu.id} className="menu-group">
             {menu.children?.length ? (
