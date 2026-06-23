@@ -1150,6 +1150,21 @@ const TestingModule = () => {
     return () => clearInterval(intervalId);
   }, [isAdmin, currentPage, adminActiveTab, loadStandards, loadResults]);
 
+  // Keep standards fresh while on the Practical tab (eligibility depends on the
+  // Practical_Required flag). Refetch on entry + poll, so a checklist change made
+  // elsewhere shows up here right away.
+  useEffect(() => {
+    if (!(isAdmin && currentPage === 'admin' && adminActiveTab === 'practical')) return;
+
+    loadStandards();
+    const intervalId = setInterval(() => {
+      loadStandards();
+      loadResults(false);
+    }, 10000);
+
+    return () => clearInterval(intervalId);
+  }, [isAdmin, currentPage, adminActiveTab, loadStandards, loadResults]);
+
   const PENDING_RESULTS_STORAGE_KEY = 'ptis_pending_results';
   const PENDING_RESULTS_BASE_DELAY_MS = 5000;
   const PENDING_RESULTS_MAX_DELAY_MS = 5 * 60 * 1000;
@@ -2741,6 +2756,10 @@ const TestingModule = () => {
         const isDarkMode = isDarkModeRef.current;
         const colors = colorsRef.current;
         const isMobile = isMobileRef.current;
+        // Read fresh values from refs each render (avoids a stale closure so newly
+        // added/deleted practicals reflect immediately).
+        const results = resultsRef.current;
+        const standards = standardsRef.current;
         const [searchType, setSearchType] = useState('id'); // 'id' or 'name'
         const [searchQuery, setSearchQuery] = useState('');
         const [certificateCurrentPage, setCertificateCurrentPage] = useState(1);
@@ -2813,8 +2832,20 @@ const TestingModule = () => {
           return base || null;
         };
 
+        // Canonical base key: strips the General/Specific/Practical tag and
+        // normalizes separators + case, so the SAME standard matches regardless
+        // of hyphen vs space (e.g. theory "DS-1" and practical "DS 1 (Practical)").
+        const canonicalBase = (value) =>
+          norm(value)
+            .replace(/\(\s*(general|specific|practical)\s*\)/ig, '')
+            .replace(/\s+(general|specific|practical)\b/ig, '')
+            .replace(/[_-]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toLowerCase();
+
         // Single-type standards (no General/Specific split) whose Practical_Required
-        // flag is on — their practical pass should show as its own certificate row.
+        // flag is on — their theory needs a practical before a certificate issues.
         const singlePracticalRequiredKeys = new Set();
         standards.forEach((s) => {
           const stdName = norm(s?.Standard_List);
@@ -2822,64 +2853,49 @@ const TestingModule = () => {
           const stdLower = stdName.toLowerCase();
           if (stdLower.includes('general') || stdLower.includes('specific')) return;
           if (String(s?.Practical_Required || '').trim().toLowerCase() !== 'yes') return;
-          singlePracticalRequiredKeys.add(stdLower);
+          singlePracticalRequiredKeys.add(canonicalBase(stdName));
         });
 
-        // Group General/Specific/Practical tests by employee
+        // Group General/Specific/Practical/single tests by employee + canonical
+        // base, so a theory result and its practical always land in one group.
         const grouped = {};
         passed.forEach(r => {
           const standard = norm(r.STANDARD);
           const empId = norm(r.ID);
           const standardLower = standard.toLowerCase();
-          const baseType = normalizeCombinedBaseType(standard);
+          const key = `${empId}_${canonicalBase(standard)}`;
 
-          if (baseType) {
-            // Determine test type (General, Specific, or Practical)
-            let testType;
-            if (standardLower.includes('practical')) {
-              testType = 'Practical';
-            } else if (standardLower.includes('general')) {
-              testType = 'General';
-            } else if (standardLower.includes('specific')) {
-              testType = 'Specific';
-            }
+          if (!grouped[key]) {
+            grouped[key] = {
+              empId,
+              empName: norm(r.NAME),
+              baseType: standard,
+              general: null,
+              specific: null,
+              practical: null,
+              single: null
+            };
+          }
 
-            const key = `${empId}_${baseType.toLowerCase()}`;
-            
-            if (!grouped[key]) {
-              grouped[key] = {
-                empId,
-                empName: norm(r.NAME),
-                baseType,
-                general: null,
-                specific: null,
-                practical: null
-              };
+          if (standardLower.includes('practical')) {
+            if (!grouped[key].practical || isNewerResult(r, grouped[key].practical)) {
+              grouped[key].practical = r;
             }
-            
-            if (testType === 'General') {
-              if (!grouped[key].general || isNewerResult(r, grouped[key].general)) {
-                grouped[key].general = r;
-              }
-            } else if (testType === 'Specific') {
-              if (!grouped[key].specific || isNewerResult(r, grouped[key].specific)) {
-                grouped[key].specific = r;
-              }
-            } else if (testType === 'Practical') {
-              if (!grouped[key].practical || isNewerResult(r, grouped[key].practical)) {
-                grouped[key].practical = r;
-              }
+          } else if (standardLower.includes('general')) {
+            grouped[key].baseType = normalizeCombinedBaseType(standard) || grouped[key].baseType;
+            if (!grouped[key].general || isNewerResult(r, grouped[key].general)) {
+              grouped[key].general = r;
+            }
+          } else if (standardLower.includes('specific')) {
+            grouped[key].baseType = normalizeCombinedBaseType(standard) || grouped[key].baseType;
+            if (!grouped[key].specific || isNewerResult(r, grouped[key].specific)) {
+              grouped[key].specific = r;
             }
           } else {
-            // Regular certificate (single test)
-            const key = `${empId}_${standard}`;
-            if (!grouped[key] || !grouped[key].single || isNewerResult(r, grouped[key].single)) {
-              grouped[key] = {
-                empId,
-                empName: norm(r.NAME),
-                baseType: standard,
-                single: r
-              };
+            // Single (no General/Specific/Practical tag)
+            grouped[key].baseType = standard;
+            if (!grouped[key].single || isNewerResult(r, grouped[key].single)) {
+              grouped[key].single = r;
             }
           }
         });
@@ -2889,6 +2905,25 @@ const TestingModule = () => {
         Object.values(grouped).forEach(group => {
           if (group.single) {
             // Regular single certificate
+            const requiresPractical = singlePracticalRequiredKeys.has(canonicalBase(group.single.STANDARD));
+
+            // If this single standard requires a practical, the certificate is
+            // only ready once the practical is also done (theory + practical =
+            // one 2-row certificate). The practical now lives in the same group.
+            if (requiresPractical) {
+              if (group.practical) {
+                finalResults.push({
+                  ...group.single,
+                  IS_SINGLE_WITH_PRACTICAL: true,
+                  PRACTICAL_DATA: group.practical
+                });
+              }
+              // Practical required but not yet added -> NOT certificate-eligible
+              // yet (candidate is only eligible for the practical). Skip the row
+              // so no certificate can be generated until the practical exists.
+              return;
+            }
+
             finalResults.push(group.single);
           } else if (group.general && group.specific) {
             // PT/MPT with both tests passed - show as single row for combined certificate
@@ -2913,19 +2948,15 @@ const TestingModule = () => {
             }
             
             finalResults.push(resultData);
-          } else if (
-            group.practical && !group.general && !group.specific &&
-            singlePracticalRequiredKeys.has(String(group.baseType || '').trim().toLowerCase())
-          ) {
-            // Single-type standard with Practical_Required ON — show the practical
-            // pass as its own row alongside the theory single row.
-            finalResults.push(group.practical);
           }
-          // If only one of general/specific passed (without the other), don't show
+          // Practical-only groups are intentionally not pushed on their own: a
+          // single-standard practical is certified together with its theory row
+          // (merged above), and theory must be passed first to be eligible.
+          // If only one of general/specific passed (without the other), don't show.
         });
 
         return finalResults;
-      }, [searchType, searchQuery, isPass, norm, standards]);
+      }, [searchType, searchQuery, isPass, norm, standards, results]);
 
       const totalCertificatePages = Math.ceil(filteredResults.length / certificateItemsPerPage);
       const paginatedCertificateResults = filteredResults.slice(
@@ -3264,6 +3295,19 @@ const TestingModule = () => {
                                     passing_criteria: norm(result.PASSING_CRITERIA),
                                     certification_type: selectedCertType
                                   };
+
+                                  // Single standard that requires a practical: send the
+                                  // practical result too so the backend issues a 2-row
+                                  // certificate. The backend re-checks the standard's
+                                  // practical checklist before honoring this.
+                                  if (result.IS_SINGLE_WITH_PRACTICAL && result.PRACTICAL_DATA) {
+                                    certData.is_single_with_practical = true;
+                                    certData.practical_data = {
+                                      standard: norm(result.PRACTICAL_DATA.STANDARD),
+                                      percentage: toPctNumber(result.PRACTICAL_DATA.PERCENTAGE).toFixed(2),
+                                      passing_criteria: norm(result.PRACTICAL_DATA.PASSING_CRITERIA)
+                                    };
+                                  }
                                 }
 
                                 if (selectedCertType === 'Recertification') {
@@ -5620,7 +5664,11 @@ const TestingModule = () => {
             grouped[key] = {
               empId,
               empName: r.NAME,
-              baseType: baseType.display,
+              // Single standard: keep the ORIGINAL name (e.g. "DS-1"), not the
+              // hyphen-normalized base, so the practical is saved/displayed as
+              // "DS-1 (Practical)".
+              baseType: standard,
+              practicalStandardName: `${standard} (Practical)`,
               general: true,
               specific: true,
               practical: false,
@@ -5637,6 +5685,7 @@ const TestingModule = () => {
             empId,
             empName: r.NAME,
             baseType: baseType.display,
+            practicalStandardName: `${baseType.display} (Practical)`,
             general: false,
             specific: false,
             practical: false,
@@ -5685,16 +5734,16 @@ const TestingModule = () => {
     );
 
     // Standards still PENDING a practical for the currently selected employee:
-    // eligible (theory passed) but practical not yet added. With no employee
+    // eligible (theory passed) but practical not yet added. When no employee is
     // selected, fall back to the full practical-standards list.
     const availableStandardsForEmployee = useMemo(() => {
       if (!formData.employeeId) return practicalStandards;
       const pending = eligibleEmployees
         .filter((g) => String(g.empId) === String(formData.employeeId) && !g.practical)
-        .map((g) => `${g.baseType} (Practical)`);
+        .map((g) => g.practicalStandardName || `${g.baseType} (Practical)`);
       const set = new Set(pending);
-      // Keep the currently selected standard visible (e.g. in edit mode the
-      // practical already exists, so it would otherwise be filtered out as done).
+      // Keep the currently selected standard visible — e.g. in edit mode the
+      // practical already exists, so it would otherwise be filtered out as "done".
       if (formData.standard) set.add(formData.standard);
       return [...set].sort((a, b) => a.localeCompare(b));
     }, [formData.employeeId, formData.standard, eligibleEmployees, practicalStandards]);
