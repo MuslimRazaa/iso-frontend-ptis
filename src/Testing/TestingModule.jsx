@@ -1109,6 +1109,21 @@ const TestingModule = () => {
     if (showLoader) setAdminLoading(false);
   }, [fetchData]);
 
+  // Refetch standards so changes (e.g. the Practical_Required checklist) reflect
+  // immediately — without a manual page reload — wherever standards drive the UI
+  // (eligible candidates, practical standard list, etc.).
+  const loadStandards = useCallback(async () => {
+    const hostUserType = localStorage.getItem('userType');
+    const hostUserEmail = localStorage.getItem('userEmail');
+    const isHostUser = hostUserType !== 'admin' && !!hostUserEmail;
+
+    const standardsData = isHostUser
+      ? await fetchData(`/standards/legacy/for-user?email=${encodeURIComponent(hostUserEmail)}`)
+      : await fetchData('/standards');
+
+    setStandards((prev) => (Array.isArray(standardsData) ? standardsData : prev));
+  }, [fetchData]);
+
   // Keep results fresh while admin is actively viewing the Test Results tab.
   useEffect(() => {
     if (!(isAdmin && currentPage === 'admin' && adminActiveTab === 'results')) return;
@@ -1119,6 +1134,21 @@ const TestingModule = () => {
 
     return () => clearInterval(intervalId);
   }, [isAdmin, currentPage, adminActiveTab, loadResults]);
+
+  // Keep standards fresh while on the Practical tab (eligibility depends on the
+  // Practical_Required flag). Refetch on entry + poll, so a checklist change made
+  // elsewhere shows up here right away.
+  useEffect(() => {
+    if (!(isAdmin && currentPage === 'admin' && adminActiveTab === 'practical')) return;
+
+    loadStandards();
+    const intervalId = setInterval(() => {
+      loadStandards();
+      loadResults(false);
+    }, 10000);
+
+    return () => clearInterval(intervalId);
+  }, [isAdmin, currentPage, adminActiveTab, loadStandards, loadResults]);
 
   const PENDING_RESULTS_STORAGE_KEY = 'ptis_pending_results';
   const PENDING_RESULTS_BASE_DELAY_MS = 5000;
@@ -5285,7 +5315,7 @@ const TestingModule = () => {
 
             {/* Standards Tab */}
             {adminActiveTab === 'standards' && (
-              <StandardsAdminPage onBack={() => setAdminActiveTab('dashboard')} showToast={showToast} />
+              <StandardsAdminPage onBack={() => setAdminActiveTab('dashboard')} showToast={showToast} onSaved={loadStandards} />
             )}
 
             {/* Questions Tab */}

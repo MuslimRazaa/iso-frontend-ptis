@@ -4,7 +4,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { API_BASE_URL as HOST_API_BASE_URL } from '../../config/api';
 import '../PTIS_App.css';
 
-const StandardsAdminPage = ({ onBack, showToast }) => {
+const StandardsAdminPage = ({ onBack, showToast, onSaved }) => {
   const API_BASE_URL = (HOST_API_BASE_URL || '').replace(/\/$/, '');
   const { theme, isDarkMode, toggleTheme } = useTheme();
   const [viewportWidth, setViewportWidth] = useState(() =>
@@ -192,6 +192,7 @@ const StandardsAdminPage = ({ onBack, showToast }) => {
 
       if (showToast) showToast('Standard deleted successfully!', 'success');
       fetchData();
+      if (onSaved) onSaved();
     } catch (error) {
       console.error('Error deleting standard:', error);
       if (showToast) showToast('Failed to delete standard', 'error');
@@ -336,6 +337,10 @@ const StandardsAdminPage = ({ onBack, showToast }) => {
       setShowModal(false);
       resetTemplateFile();
       fetchData();
+      // Notify the parent (Testing module) so dependent views — e.g. practical
+      // eligibility that reads the Practical_Required flag — refresh immediately
+      // without a manual page reload.
+      if (onSaved) onSaved();
     } catch (error) {
       console.error('Error saving standard:', error);
       if (showToast) showToast('Failed to save standard', 'error');
