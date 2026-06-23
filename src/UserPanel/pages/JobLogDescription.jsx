@@ -1305,9 +1305,8 @@ function JobLogDescription() {
 
       {/* ══ MODAL ════════════════════════════════════════════ */}
       {isModalOpen && (
-        <div className="modal-overlay" onClick={closeModal}>
-          <div className="modal-content" style={{ maxWidth: 900 }}
-            onClick={e => e.stopPropagation()}>
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: 900 }}>
 
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

@@ -3179,7 +3179,10 @@ body {
   max-width: 700px;
   width: 100%;
   max-height: 90vh;
-  overflow-y: auto;
+  /* Flex column so the header/footer stay fixed and only the body scrolls. */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   box-shadow: 0 35px 80px rgba(15, 23, 42, 0.2);
 }
 
@@ -3188,6 +3191,7 @@ body {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 24px;
+  flex-shrink: 0; /* stays fixed at the top while the body scrolls */
 }
 
 .modal-header h2 {
@@ -3220,6 +3224,10 @@ body {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  /* Only the form body scrolls; the action buttons below stay pinned. */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .modal-form label {
@@ -3296,6 +3304,12 @@ body {
   margin-top: 16px;
   padding-top: 16px;
   border-top: 1px solid #efeff2;
+  /* Pin the Cancel / Add Entry buttons to the bottom of the scrollable form. */
+  position: sticky;
+  bottom: 0;
+  background: #ffffff;
+  padding-bottom: 4px;
+  z-index: 1;
 }
 
 .no-videos {
