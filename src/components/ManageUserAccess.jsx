@@ -10,6 +10,8 @@ const ManageUserAccess = () => {
     cvs: false,
     reports: false,
     testing: false,
+    iso_forms: false,
+    iso_forms_admin: false,
     // JLR (Job Log) department-level access
     jlr_operations: false,
     jlr_qhse: false,
@@ -47,6 +49,8 @@ const ManageUserAccess = () => {
       cvs: employee.cvs_access === 1,
       reports: employee.reports_access === 1,
       testing: employee.testing_access === 1,
+      iso_forms: employee.iso_forms_access === 1,
+      iso_forms_admin: employee.iso_forms_admin_access === 1,
       jlr_operations: employee.jlr_operations_access === 1,
       jlr_qhse:       employee.jlr_qhse_access       === 1,
       jlr_inventory:  employee.jlr_inventory_access  === 1,
@@ -73,6 +77,8 @@ const ManageUserAccess = () => {
           cvs_access: permissions.cvs,
           reports_access: permissions.reports,
           testing_access: permissions.testing,
+          iso_forms_access: permissions.iso_forms,
+          iso_forms_admin_access: permissions.iso_forms_admin,
           jlr_operations_access: permissions.jlr_operations,
           jlr_qhse_access:       permissions.jlr_qhse,
           jlr_inventory_access:  permissions.jlr_inventory,
@@ -99,6 +105,10 @@ const ManageUserAccess = () => {
   const togglePermission = (module) => {
     setPermissions(prev => {
       const next = { ...prev, [module]: !prev[module] };
+      // ISO Forms admin access implies base ISO Forms access
+      if (module === 'iso_forms_admin' && next.iso_forms_admin) {
+        next.iso_forms = true;
+      }
       // "Full Access" master switch — turning it ON enables every JLR department
       if (module === 'jlr_full' && next.jlr_full) {
         next.jlr_operations = true;
@@ -146,6 +156,8 @@ const ManageUserAccess = () => {
               if (employee.cvs_access === 1) assignedModules.push('CVs');
               if (employee.reports_access === 1) assignedModules.push('Reports');
               if (employee.testing_access === 1) assignedModules.push('Testing');
+              if (employee.iso_forms_admin_access === 1) assignedModules.push('ISO Forms: Admin');
+              else if (employee.iso_forms_access === 1) assignedModules.push('ISO Forms');
               if (employee.jlr_full_access === 1) {
                 assignedModules.push('JLR: Full');
               } else {
@@ -303,6 +315,43 @@ const ManageUserAccess = () => {
                       type="checkbox"
                       checked={permissions.testing}
                       onChange={() => togglePermission('testing')}
+                    />
+                    <span className="toggle-slider"></span>
+                  </label>
+                </div>
+
+                <div className="permission-item">
+                  <div className="permission-info">
+                    <div className="permission-icon" style={{ background: 'linear-gradient(135deg, #fff5f6 0%, #ffe0e3 100%)', border: '1px solid #f29a9a' }}>📋</div>
+                    <div>
+                      <strong>ISO Forms</strong>
+                      <p>Fill out ISO/QA forms and be selected as an approver</p>
+                    </div>
+                  </div>
+                  <label className="toggle-switch">
+                    <input
+                      type="checkbox"
+                      checked={permissions.iso_forms || permissions.iso_forms_admin}
+                      disabled={permissions.iso_forms_admin}
+                      onChange={() => togglePermission('iso_forms')}
+                    />
+                    <span className="toggle-slider"></span>
+                  </label>
+                </div>
+
+                <div className="permission-item">
+                  <div className="permission-info">
+                    <div className="permission-icon" style={{ background: '#d7263d', color: '#fff' }}>🛠️</div>
+                    <div>
+                      <strong>ISO Forms: Template Builder</strong>
+                      <p>Additionally create and edit form templates (includes ISO Forms access)</p>
+                    </div>
+                  </div>
+                  <label className="toggle-switch">
+                    <input
+                      type="checkbox"
+                      checked={permissions.iso_forms_admin}
+                      onChange={() => togglePermission('iso_forms_admin')}
                     />
                     <span className="toggle-slider"></span>
                   </label>

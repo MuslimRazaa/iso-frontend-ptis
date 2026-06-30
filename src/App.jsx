@@ -40,6 +40,15 @@ import EmployeesLayout from './Employees/EmployeesLayout'
 import JLRLayout from './JLR/JLRLayout'
 import JLRHome from './JLR/pages/JLRHome'
 
+// Admin - ISO Forms (standalone module, dynamic form builder)
+import ISOFormsLayout from './ISOForms/ISOFormsLayout'
+import ISOFormsHome from './ISOForms/pages/ISOFormsHome'
+import TemplatesList from './ISOForms/admin/TemplatesList'
+import TemplateBuilder from './ISOForms/admin/TemplateBuilder'
+import FormFiller from './ISOForms/pages/FormFiller'
+import FormEntriesList from './ISOForms/pages/FormEntriesList'
+import FormDetail from './ISOForms/pages/FormDetail'
+
 // Testing Module (standalone, integrated from ptis-lms)
 import TestingModule from './Testing/TestingModule'
 import { ThemeProvider as TestingThemeProvider } from './Testing/contexts/ThemeContext'
@@ -152,6 +161,30 @@ function App() {
             <Route path="/user/job-log/*" element={<JLRLayout />}>
               <Route index element={<JLRHome />} />
               <Route path="entries" element={<JobLogDescription />} />
+            </Route>
+
+            {/* Admin — ISO Forms (standalone module, dynamic form builder) */}
+            <Route path="/iso-forms/*" element={<ISOFormsLayout />}>
+              <Route index element={<ISOFormsHome />} />
+              <Route path="templates" element={<TemplatesList />} />
+              <Route path="templates/new" element={<TemplateBuilder />} />
+              <Route path="templates/:id/edit" element={<TemplateBuilder />} />
+              <Route path="new" element={<FormFiller />} />
+              <Route path="new/:templateId" element={<FormFiller />} />
+              <Route path="entries" element={<FormEntriesList />} />
+              <Route path="entries/:id" element={<FormDetail />} />
+            </Route>
+
+            {/* User — ISO Forms (same standalone layout, role-based fields) */}
+            <Route path="/user/iso-forms/*" element={<ISOFormsLayout />}>
+              <Route index element={<ISOFormsHome />} />
+              <Route path="templates" element={<TemplatesList />} />
+              <Route path="templates/new" element={<TemplateBuilder />} />
+              <Route path="templates/:id/edit" element={<TemplateBuilder />} />
+              <Route path="new" element={<FormFiller />} />
+              <Route path="new/:templateId" element={<FormFiller />} />
+              <Route path="entries" element={<FormEntriesList />} />
+              <Route path="entries/:id" element={<FormDetail />} />
             </Route>
 
             {/* User — LMS (user-specific layout, no admin pages) */}

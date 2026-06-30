@@ -110,7 +110,7 @@ const UserDashboard = () => {
             status: "attention",
             statusLabel: "Review",
             metric: "3 forms awaiting sign-off",
-            permission: userPermissions.cvs, // Using cvs permission for ISO forms access
+            permission: userPermissions.iso_forms,
             icon: "iso"
         },
         {
