@@ -3230,7 +3230,8 @@ body {
   overflow-y: auto;
 }
 
-.modal-form label {
+.modal-form label,
+.modal-form .field-col {
   display: flex;
   flex-direction: column;
   gap: 8px;
