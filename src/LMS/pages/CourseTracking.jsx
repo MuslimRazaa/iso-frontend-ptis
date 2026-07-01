@@ -115,6 +115,13 @@ function CourseTracking() {
 
   useEffect(() => { fetchProgress() }, [])
 
+  // Auto-refresh so the admin sees learners' status (progress, time, test
+  // pass/fail) update over time without a manual reload.
+  useEffect(() => {
+    const id = setInterval(fetchProgress, 30000)
+    return () => clearInterval(id)
+  }, [])
+
   const stats = useMemo(() => {
     const s = { total: rows.length, in_progress: 0, completed: 0, enrolled: 0, overdue: 0 }
     rows.forEach((r) => { s[rowState(r)] += 1 })
@@ -219,6 +226,7 @@ function CourseTracking() {
                 <th>Employee</th>
                 <th>Course</th>
                 <th>Status</th>
+                <th>Test</th>
                 <th>Progress</th>
                 <th>Time Spent</th>
                 <th>Time Left</th>
@@ -251,6 +259,24 @@ function CourseTracking() {
                       }}>
                         <meta.Icon size={14} /> {meta.label}
                       </span>
+                    </td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {Number(r.test_attempts) > 0 ? (
+                        <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
+                          <span style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 9px', borderRadius: 99,
+                            background: r.test_passed ? 'rgba(29,129,76,0.12)' : 'rgba(192,57,43,0.12)',
+                            color: r.test_passed ? '#1d814c' : '#c0392b', fontSize: 12, fontWeight: 700,
+                          }}>
+                            {r.test_passed ? 'Passed' : 'Failed'}{r.test_score != null ? ` · ${Math.round(Number(r.test_score))}%` : ''}
+                          </span>
+                          <span style={{ fontSize: 11, color: '#9a9aaa' }}>
+                            {fmtDate(r.test_date)}{Number(r.test_attempts) > 1 ? ` · ${r.test_attempts} tries` : ''}
+                          </span>
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: 12.5, color: '#9a9aaa' }}>Not taken</span>
+                      )}
                     </td>
                     <td><ProgressBar value={r.progress_percentage} /></td>
                     <td style={{ whiteSpace: 'nowrap', color: '#2b2b38', fontWeight: 600 }}>{fmtDuration(r.total_time_spent)}</td>

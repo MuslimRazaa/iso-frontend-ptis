@@ -791,6 +791,7 @@ function JobLogDescription() {
   const [customers, setCustomers] = useState([])      // [{ id, name }]
   const [jlLocations, setJlLocations] = useState([])  // [{ id, name }]
   const [jlInspectors, setJlInspectors] = useState([])// [{ id, name }]
+  const [jlTeams, setJlTeams] = useState([])          // [{ id, name }]
 
   const fetchList = useCallback(async (path, setter) => {
     try {
@@ -803,9 +804,10 @@ function JobLogDescription() {
   const fetchCustomers   = useCallback(() => fetchList('customers',  setCustomers),   [fetchList])
   const fetchJlLocations = useCallback(() => fetchList('locations',  setJlLocations), [fetchList])
   const fetchInspectors  = useCallback(() => fetchList('inspectors', setJlInspectors),[fetchList])
+  const fetchTeams       = useCallback(() => fetchList('teams',      setJlTeams),     [fetchList])
 
-  useEffect(() => { fetchCustomers(); fetchJlLocations(); fetchInspectors() },
-    [fetchCustomers, fetchJlLocations, fetchInspectors])
+  useEffect(() => { fetchCustomers(); fetchJlLocations(); fetchInspectors(); fetchTeams() },
+    [fetchCustomers, fetchJlLocations, fetchInspectors, fetchTeams])
 
   // Generic admin add → POST, refresh that list, return the saved name so the
   // caller can immediately select it.
@@ -830,12 +832,24 @@ function JobLogDescription() {
   const addCustomer  = (name) => addToList('customers',  name, fetchCustomers,   'customer')
   const addLocation  = (name) => addToList('locations',  name, fetchJlLocations, 'location')
   const addInspector = (name) => addToList('inspectors', name, fetchInspectors,  'inspector')
+  const addTeam      = (name) => addToList('teams',      name, fetchTeams,       'team member')
 
-  // Inspector options = base roster + any admin-added inspectors.
+  // Inspector Name options = base roster + admin-added inspectors.
   const inspectorOptions = useMemo(
     () => Array.from(new Set([...DUMMY_INSPECTORS, ...jlInspectors.map(i => i.name)]))
       .sort((a, b) => a.localeCompare(b)),
     [jlInspectors]
+  )
+
+  // Inspector Team options = the previous inspector roster (DUMMY + added
+  // inspectors) PLUS the team-member roster (seeded + admin-added).
+  const teamOptions = useMemo(
+    () => Array.from(new Set([
+      ...DUMMY_INSPECTORS,
+      ...jlInspectors.map(i => i.name),
+      ...jlTeams.map(t => t.name),
+    ])).sort((a, b) => a.localeCompare(b)),
+    [jlInspectors, jlTeams]
   )
 
   const appendInspector = (field, name) => {
@@ -859,10 +873,11 @@ function JobLogDescription() {
     let saved = ''
     if (addModal.kind === 'customer') saved = await addCustomer(name)
     else if (addModal.kind === 'location') saved = await addLocation(name)
+    else if (addModal.kind === 'team') saved = await addTeam(name)
     else saved = await addInspector(name)
     setAddModalSaving(false)
     if (saved) {
-      if (addModal.kind === 'inspector') appendInspector(addModal.field, saved)
+      if (addModal.kind === 'inspector' || addModal.kind === 'team') appendInspector(addModal.field, saved)
       else handleModalChange(addModal.field, saved)
       closeAdd()
     }
@@ -1597,14 +1612,14 @@ function JobLogDescription() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <MultiSelect
                         value={modalState.inspectorTeam}
-                        options={inspectorOptions}
+                        options={teamOptions}
                         placeholder="Select team members…"
                         disabled={!canEdit('operations')}
                         onChange={val => handleModalChange('inspectorTeam', val)} />
                     </div>
                     {isAdminContext && (
-                      <button type="button" className="ghost-btn" onClick={() => openAdd('inspector', 'Inspector', 'inspectorTeam')}
-                        disabled={!canEdit('operations')} title="Add new inspector"
+                      <button type="button" className="ghost-btn" onClick={() => openAdd('team', 'Team member', 'inspectorTeam')}
+                        disabled={!canEdit('operations')} title="Add new team member"
                         style={{ padding: '0 12px', whiteSpace: 'nowrap', flexShrink: 0, height: 42 }}>+ Add</button>
                     )}
                   </div></div>
