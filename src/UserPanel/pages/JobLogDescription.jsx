@@ -242,6 +242,12 @@ const emptyEntry = {
   stockRequisition: '', goodsIssueNote: '', consumption: '', gatePass: ''
 }
 
+// Region (stored in the `source` column) — fixed dropdown choices.
+const REGION_OPTIONS = ['South Region', 'North Region']
+
+// Reference — fixed dropdown choices; "Others" switches to a manual text box.
+const REFERENCE_OPTIONS = ['Via Email', 'Via Phone call', 'Via Whatsapp']
+
 /* ─────────────────────────────────────────────────────────────
    Field → JLR department mapping (used by permission system)
 ───────────────────────────────────────────────────────────── */
@@ -989,6 +995,24 @@ function JobLogDescription() {
   const closeModal = () => { setIsModalOpen(false); setModalMode('add'); setEditingId(null); setModalState(emptyEntry) }
   const handleModalChange = (k, v) => setModalState(p => ({ ...p, [k]: v }))
 
+  // Man Hours is auto-calculated: Calculated Days × Man Power × 10 (not manual).
+  useEffect(() => {
+    const cd = parseFloat(modalState.calculatedDays)
+    const mp = parseFloat(modalState.manPower)
+    const mh = (Number.isFinite(cd) && Number.isFinite(mp)) ? String(cd * mp * 10) : ''
+    setModalState(prev => (prev.manHours === mh ? prev : { ...prev, manHours: mh }))
+  }, [modalState.calculatedDays, modalState.manPower])
+
+  // Reference dropdown: fixed options + "Others" (manual). Track the chosen
+  // option separately so "Others" stays selected even before text is typed.
+  const [refChoice, setRefChoice] = useState('')
+  useEffect(() => {
+    if (!isModalOpen) return
+    const r = modalState.reference || ''
+    setRefChoice(REFERENCE_OPTIONS.includes(r) ? r : (r ? 'Others' : ''))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isModalOpen, editingId])
+
   const handleSubmit = async e => {
     e.preventDefault()
     const rd = calculateDays(modalState.startDate, modalState.endDate)
@@ -1585,9 +1609,29 @@ function JobLogDescription() {
                     disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('workOrder', e.target.value)} /></label>
                 <label><span>Reference</span>
-                  <input type="text" value={modalState.reference} placeholder="PTIS-REF-XXX"
+                  <select value={refChoice}
                     disabled={!canEdit('operations')}
-                    onChange={e => handleModalChange('reference', e.target.value)} /></label>
+                    onChange={e => {
+                      const v = e.target.value
+                      setRefChoice(v)
+                      if (v === 'Others') {
+                        // keep any existing custom text; clear if it was a fixed option
+                        if (REFERENCE_OPTIONS.includes(modalState.reference)) handleModalChange('reference', '')
+                      } else {
+                        handleModalChange('reference', v) // fixed option or '' (Select)
+                      }
+                    }}>
+                    <option value="">— Select —</option>
+                    {REFERENCE_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                    <option value="Others">Others (enter manually)</option>
+                  </select>
+                  {refChoice === 'Others' && (
+                    <input type="text" value={modalState.reference} placeholder="Enter reference…"
+                      style={{ marginTop: 6 }}
+                      disabled={!canEdit('operations')}
+                      onChange={e => handleModalChange('reference', e.target.value)} />
+                  )}
+                </label>
               </div>
 
               <div className="form-row">
@@ -1678,10 +1722,11 @@ function JobLogDescription() {
                   <input type="number" min="0" value={modalState.manPower} placeholder="0"
                     disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('manPower', e.target.value)} /></label>
-                <label><span>Man Hrs</span>
-                  <input type="number" min="0" value={modalState.manHours} placeholder="0"
-                    disabled={!canEdit('operations')}
-                    onChange={e => handleModalChange('manHours', e.target.value)} /></label>
+                <label><span>Man Hrs (auto)</span>
+                  <input type="number" readOnly value={modalState.manHours}
+                    title="Calculated Days × Man Power × 10"
+                    placeholder="0"
+                    style={{ background: '#f4f4f7', color: '#777', cursor: 'not-allowed' }} /></label>
                 <label><span>Driven Km</span>
                   <input type="number" min="0" value={modalState.drivenKm} placeholder="0"
                     disabled={!canEdit('operations')}
@@ -1707,10 +1752,15 @@ function JobLogDescription() {
                     disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('completionDate', e.target.value)} /></label>
                 <label><span>Region *</span>
-                  <input type="text" value={modalState.source} required
-                    placeholder="Islamabad / Karachi / Other"
+                  <select value={modalState.source} required
                     disabled={!canEdit('operations')}
-                    onChange={e => handleModalChange('source', e.target.value)} /></label>
+                    onChange={e => handleModalChange('source', e.target.value)}>
+                    <option value="">— Select region —</option>
+                    {REGION_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                    {modalState.source && !REGION_OPTIONS.includes(modalState.source) && (
+                      <option value={modalState.source}>{modalState.source}</option>
+                    )}
+                  </select></label>
               </div>
 
               <label><span>Operations Remarks</span>
