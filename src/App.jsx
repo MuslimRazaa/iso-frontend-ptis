@@ -39,6 +39,7 @@ import EmployeesLayout from './Employees/EmployeesLayout'
 // Admin - Job Log Description (standalone module)
 import JLRLayout from './JLR/JLRLayout'
 import JLRHome from './JLR/pages/JLRHome'
+import JLRBackups from './JLR/pages/JLRBackups'
 
 // Admin - ISO Forms (standalone module, dynamic form builder)
 import ISOFormsLayout from './ISOForms/ISOFormsLayout'
@@ -155,6 +156,7 @@ function App() {
             <Route path="/job-log/*" element={<JLRLayout />}>
               <Route index element={<JLRHome />} />
               <Route path="entries" element={<JobLogDescription />} />
+              <Route path="backups" element={<JLRBackups />} />
             </Route>
 
             {/* User — Job Log Description (same standalone layout, role-based fields) */}

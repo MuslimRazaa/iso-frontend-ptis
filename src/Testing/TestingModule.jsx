@@ -1109,6 +1109,21 @@ const TestingModule = () => {
     if (showLoader) setAdminLoading(false);
   }, [fetchData]);
 
+  // Refetch standards so changes (e.g. the Practical_Required checklist) reflect
+  // immediately — without a manual page reload — wherever standards drive the UI
+  // (eligible candidates, practical standard list, etc.).
+  const loadStandards = useCallback(async () => {
+    const hostUserType = localStorage.getItem('userType');
+    const hostUserEmail = localStorage.getItem('userEmail');
+    const isHostUser = hostUserType !== 'admin' && !!hostUserEmail;
+
+    const standardsData = isHostUser
+      ? await fetchData(`/standards/legacy/for-user?email=${encodeURIComponent(hostUserEmail)}`)
+      : await fetchData('/standards');
+
+    setStandards((prev) => (Array.isArray(standardsData) ? standardsData : prev));
+  }, [fetchData]);
+
   // Keep results fresh while admin is actively viewing the Test Results tab.
   useEffect(() => {
     if (!(isAdmin && currentPage === 'admin' && adminActiveTab === 'results')) return;
@@ -1119,6 +1134,21 @@ const TestingModule = () => {
 
     return () => clearInterval(intervalId);
   }, [isAdmin, currentPage, adminActiveTab, loadResults]);
+
+  // Keep standards fresh while on the Practical tab (eligibility depends on the
+  // Practical_Required flag). Refetch on entry + poll, so a checklist change made
+  // elsewhere shows up here right away.
+  useEffect(() => {
+    if (!(isAdmin && currentPage === 'admin' && adminActiveTab === 'practical')) return;
+
+    loadStandards();
+    const intervalId = setInterval(() => {
+      loadStandards();
+      loadResults(false);
+    }, 10000);
+
+    return () => clearInterval(intervalId);
+  }, [isAdmin, currentPage, adminActiveTab, loadStandards, loadResults]);
 
   const PENDING_RESULTS_STORAGE_KEY = 'ptis_pending_results';
   const PENDING_RESULTS_BASE_DELAY_MS = 5000;
@@ -5285,7 +5315,7 @@ const TestingModule = () => {
 
             {/* Standards Tab */}
             {adminActiveTab === 'standards' && (
-              <StandardsAdminPage onBack={() => setAdminActiveTab('dashboard')} showToast={showToast} />
+              <StandardsAdminPage onBack={() => setAdminActiveTab('dashboard')} showToast={showToast} onSaved={loadStandards} />
             )}
 
             {/* Questions Tab */}
@@ -5594,6 +5624,7 @@ const TestingModule = () => {
               general: true,
               specific: true,
               practical: false,
+              isSingle: true, // single standard -> "Tests Passed" shows "Theory"
             };
           }
           return;
@@ -5609,6 +5640,7 @@ const TestingModule = () => {
             general: false,
             specific: false,
             practical: false,
+            isSingle: false,
           };
         }
 
@@ -5651,6 +5683,21 @@ const TestingModule = () => {
       () => [...new Set(eligibleEmployees.map((emp) => emp.empName))],
       [eligibleEmployees]
     );
+
+    // Standards still PENDING a practical for the currently selected employee:
+    // eligible (theory passed) but practical not yet added. With no employee
+    // selected, fall back to the full practical-standards list.
+    const availableStandardsForEmployee = useMemo(() => {
+      if (!formData.employeeId) return practicalStandards;
+      const pending = eligibleEmployees
+        .filter((g) => String(g.empId) === String(formData.employeeId) && !g.practical)
+        .map((g) => `${g.baseType} (Practical)`);
+      const set = new Set(pending);
+      // Keep the currently selected standard visible (e.g. in edit mode the
+      // practical already exists, so it would otherwise be filtered out as done).
+      if (formData.standard) set.add(formData.standard);
+      return [...set].sort((a, b) => a.localeCompare(b));
+    }, [formData.employeeId, formData.standard, eligibleEmployees, practicalStandards]);
 
     const [eligibleCurrentPage, setEligibleCurrentPage] = useState(1);
     const [eligibleGoToPage, setEligibleGoToPage] = useState('');
@@ -6088,7 +6135,7 @@ const TestingModule = () => {
                           backgroundColor: '#d4edda',
                           color: '#155724'
                         }}>
-                          General + Specific
+                          {emp.isSingle ? 'Theory' : 'General + Specific'}
                         </span>
                       </td>
                       <td style={{ padding: '14px 20px', textAlign: 'center' }}>
@@ -6565,10 +6612,11 @@ const TestingModule = () => {
                       onChange={(e) => {
                         const selectedId = e.target.value;
                         const selectedEmp = eligibleEmployees.find(emp => String(emp.empId) === String(selectedId));
-                        setFormData({ 
-                          ...formData, 
+                        setFormData({
+                          ...formData,
                           employeeId: selectedId,
-                          employeeName: selectedEmp ? selectedEmp.empName : ''
+                          employeeName: selectedEmp ? selectedEmp.empName : '',
+                          standard: '' // reset — standards depend on the selected employee
                         });
                       }}
                       required
@@ -6613,10 +6661,11 @@ const TestingModule = () => {
                       onChange={(e) => {
                         const selectedName = e.target.value;
                         const selectedEmp = eligibleEmployees.find(emp => emp.empName === selectedName);
-                        setFormData({ 
-                          ...formData, 
+                        setFormData({
+                          ...formData,
                           employeeName: selectedName,
-                          employeeId: selectedEmp ? selectedEmp.empId : ''
+                          employeeId: selectedEmp ? selectedEmp.empId : '',
+                          standard: '' // reset — standards depend on the selected employee
                         });
                       }}
                       required
@@ -6680,8 +6729,12 @@ const TestingModule = () => {
                     onFocus={e => !editMode && (e.target.style.borderColor = '#1a1a2e')}
                     onBlur={e => !editMode && (e.target.style.borderColor = colors.inputBorder)}
                   >
-                    <option value="">Select Standard</option>
-                    {practicalStandards.map(stdName => (
+                    <option value="">
+                      {!formData.employeeId
+                        ? 'Select employee first'
+                        : (availableStandardsForEmployee.length === 0 ? 'No pending standards' : 'Select Standard')}
+                    </option>
+                    {availableStandardsForEmployee.map(stdName => (
                       <option key={stdName} value={stdName}>
                         {stdName}
                       </option>

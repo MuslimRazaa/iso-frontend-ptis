@@ -47,6 +47,12 @@ const fromDB = row => ({
   source: row.source || '',
   remark: row.remark || '',
   remarks: row.remarks || '',
+  // Per-department remarks
+  remarkOperations: row.remark_operations || '',
+  remarkQhse: row.remark_qhse || '',
+  remarkInventory: row.remark_inventory || '',
+  remarkAccounts: row.remark_accounts || '',
+  remarkIt: row.remark_it || '',
   // Inventory department fields
   stockRequisition: row.stock_requisition || '',
   goodsIssueNote: row.goods_issue_note || '',
@@ -88,6 +94,11 @@ const toDB = data => ({
   source: data.source || null,
   remark: data.remark || null,
   remarks: data.remarks || null,
+  remark_operations: data.remarkOperations || null,
+  remark_qhse: data.remarkQhse || null,
+  remark_inventory: data.remarkInventory || null,
+  remark_accounts: data.remarkAccounts || null,
+  remark_it: data.remarkIt || null,
   stock_requisition: data.stockRequisition || null,
   goods_issue_note: data.goodsIssueNote || null,
   consumption: data.consumption || null,
@@ -227,8 +238,15 @@ const emptyEntry = {
   manHours: '', drivenKm: '', jmps: '', tra: '', equipCL: '', vLog: '', tbt: '',
   status: '', completionDate: '', rept: '', exp: '', iso: '', accounts: '', it: '',
   submissionDate: '', source: '', remark: '', remarks: '',
+  remarkOperations: '', remarkQhse: '', remarkInventory: '', remarkAccounts: '', remarkIt: '',
   stockRequisition: '', goodsIssueNote: '', consumption: '', gatePass: ''
 }
+
+// Region (stored in the `source` column) — fixed dropdown choices.
+const REGION_OPTIONS = ['South Region', 'North Region']
+
+// Reference — fixed dropdown choices; "Others" switches to a manual text box.
+const REFERENCE_OPTIONS = ['Via Email', 'Via Phone call', 'Via Whatsapp']
 
 /* ─────────────────────────────────────────────────────────────
    Field → JLR department mapping (used by permission system)
@@ -243,16 +261,17 @@ const FIELD_DEPT = {
   manPower: 'operations', manHours: 'operations', drivenKm: 'operations',
   jmps: 'operations', status: 'operations', completionDate: 'operations',
   source: 'operations', remark: 'operations', remarks: 'operations',
+  remarkOperations: 'operations',
   // QHSE
   tra: 'qhse', equipCL: 'qhse', vLog: 'qhse', tbt: 'qhse', iso: 'qhse',
-  rept: 'qhse', submissionDate: 'qhse',
+  rept: 'qhse', submissionDate: 'qhse', remarkQhse: 'qhse',
   // Inventory
   stockRequisition: 'inventory', goodsIssueNote: 'inventory',
-  consumption: 'inventory', gatePass: 'inventory',
+  consumption: 'inventory', gatePass: 'inventory', remarkInventory: 'inventory',
   // Accounts
-  exp: 'accounts', accounts: 'accounts',
+  exp: 'accounts', accounts: 'accounts', remarkAccounts: 'accounts',
   // IT
-  it: 'it',
+  it: 'it', remarkIt: 'it',
 }
 
 const PAGE_SIZE = 100
@@ -451,7 +470,7 @@ const DUMMY_INSPECTORS = [
 ];
 
 /* Searchable multi-select (select2-style) — value is a comma-separated string */
-function MultiSelect({ value, onChange, options, placeholder = 'Select…', disabled }) {
+function MultiSelect({ value, onChange, options, placeholder = 'Select…', disabled, onAdd }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const ref = useRef(null)
@@ -468,6 +487,14 @@ function MultiSelect({ value, onChange, options, placeholder = 'Select…', disa
   const toggle = (name) =>
     commit(selected.includes(name) ? selected.filter(s => s !== name) : [...selected, name])
   const remove = (name) => commit(selected.filter(s => s !== name))
+
+  const q = query.trim()
+  const canAdd = !!onAdd && q.length > 0 && !options.some(o => o.toLowerCase() === q.toLowerCase())
+  const doAdd = async () => {
+    const added = (onAdd && await onAdd(q)) || q
+    if (added && !selected.includes(added)) commit([...selected, added])
+    setQuery('')
+  }
 
   const filtered = options.filter(
     o => o.toLowerCase().includes(query.toLowerCase()) || selected.includes(o)
@@ -530,7 +557,13 @@ function MultiSelect({ value, onChange, options, placeholder = 'Select…', disa
               }}
             />
           </div>
-          {filtered.length === 0 && (
+          {canAdd && (
+            <div onClick={doAdd}
+              style={{ padding: '9px 14px', cursor: 'pointer', fontSize: 13.5, color: '#d7263d', fontWeight: 600, borderBottom: '1px solid #efeff2' }}>
+              + Add “{q}”
+            </div>
+          )}
+          {filtered.length === 0 && !canAdd && (
             <div style={{ padding: '12px 14px', color: '#9a9aaa', fontSize: 13 }}>No matches</div>
           )}
           {filtered.map(name => {
@@ -546,6 +579,98 @@ function MultiSelect({ value, onChange, options, placeholder = 'Select…', disa
                 onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = '#fff' }}
               >
                 <input type="checkbox" readOnly checked={isSel} style={{ accentColor: '#d7263d' }} />
+                {name}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* Single-select, searchable dropdown (used for Client & Location).
+   Pass onAdd to allow admins to add a new value inline ("+ Add …"). */
+function SearchSelect({ value, onChange, options, placeholder = 'Select…', searchPlaceholder = 'Search…', disabled, onAdd }) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const ref = useRef(null)
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setQuery('') } }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const q = query.trim()
+  const filtered = options.filter(o => o.toLowerCase().includes(q.toLowerCase()))
+  const canAdd = !!onAdd && q.length > 0 && !options.some(o => o.toLowerCase() === q.toLowerCase())
+
+  const pick = (name) => { onChange(name); setOpen(false); setQuery('') }
+  const doAdd = async () => {
+    const added = (onAdd && await onAdd(q)) || q
+    if (added) pick(added)
+  }
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <div
+        onClick={() => { if (!disabled) setOpen(o => !o) }}
+        style={{
+          minHeight: 42, width: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center',
+          padding: '0 36px 0 12px', border: '1px solid #e0e0e6', borderRadius: 8,
+          background: disabled ? '#f4f4f7' : '#ffffff',
+          color: disabled ? '#aaa' : (value ? '#1f1f27' : '#9a9aaa'),
+          cursor: disabled ? 'not-allowed' : 'pointer', position: 'relative', fontSize: 14,
+        }}
+      >
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {value || placeholder}
+        </span>
+        <span style={{
+          position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+          color: '#9a9aaa', fontSize: 11, pointerEvents: 'none',
+        }}>▼</span>
+      </div>
+
+      {open && !disabled && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50,
+          background: '#fff', border: '1px solid #e0e0e6', borderRadius: 8,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.12)', maxHeight: 240, overflowY: 'auto',
+        }}>
+          <div style={{ padding: 8, borderBottom: '1px solid #efeff2', position: 'sticky', top: 0, background: '#fff' }}>
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={searchPlaceholder}
+              style={{
+                width: '100%', boxSizing: 'border-box', padding: '8px 10px',
+                border: '1px solid #e0e0e6', borderRadius: 6, fontSize: 13, outline: 'none',
+              }}
+            />
+          </div>
+          {canAdd && (
+            <div onClick={doAdd}
+              style={{ padding: '9px 14px', cursor: 'pointer', fontSize: 13.5, color: '#d7263d', fontWeight: 600, borderBottom: '1px solid #efeff2' }}>
+              + Add “{q}”
+            </div>
+          )}
+          {filtered.length === 0 && !canAdd && (
+            <div style={{ padding: '12px 14px', color: '#9a9aaa', fontSize: 13 }}>No matches</div>
+          )}
+          {filtered.map(name => {
+            const isSel = name === value
+            return (
+              <div key={name} onClick={() => pick(name)}
+                style={{
+                  padding: '9px 14px', cursor: 'pointer', fontSize: 13.5,
+                  background: isSel ? '#fdf2f3' : '#fff', color: '#1f1f27',
+                }}
+                onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = '#f7f7f9' }}
+                onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = '#fff' }}
+              >
                 {name}
               </div>
             )
@@ -668,6 +793,102 @@ function JobLogDescription() {
 
   useEffect(() => { fetchEntries() }, [fetchEntries])
 
+  /* ── Managed dropdown lists: Customers, Locations, Inspectors ── */
+  const [customers, setCustomers] = useState([])      // [{ id, name }]
+  const [jlLocations, setJlLocations] = useState([])  // [{ id, name }]
+  const [jlInspectors, setJlInspectors] = useState([])// [{ id, name }]
+  const [jlTeams, setJlTeams] = useState([])          // [{ id, name }]
+
+  const fetchList = useCallback(async (path, setter) => {
+    try {
+      const res = await fetch(`${API_ENDPOINTS.JOB_LOG}/${path}`)
+      const json = await res.json()
+      setter(Array.isArray(json.data) ? json.data : [])
+    } catch { /* keep previous list on failure */ }
+  }, [])
+
+  const fetchCustomers   = useCallback(() => fetchList('customers',  setCustomers),   [fetchList])
+  const fetchJlLocations = useCallback(() => fetchList('locations',  setJlLocations), [fetchList])
+  const fetchInspectors  = useCallback(() => fetchList('inspectors', setJlInspectors),[fetchList])
+  const fetchTeams       = useCallback(() => fetchList('teams',      setJlTeams),     [fetchList])
+
+  useEffect(() => { fetchCustomers(); fetchJlLocations(); fetchInspectors(); fetchTeams() },
+    [fetchCustomers, fetchJlLocations, fetchInspectors, fetchTeams])
+
+  // Generic admin add → POST, refresh that list, return the saved name so the
+  // caller can immediately select it.
+  const addToList = async (path, name, refresh, label) => {
+    const clean = (name || '').trim()
+    if (!clean) return ''
+    try {
+      const res = await fetch(`${API_ENDPOINTS.JOB_LOG}/${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: clean }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || `Server error ${res.status}`)
+      await refresh()
+      return json.data?.name || clean
+    } catch (err) {
+      alert(`Add ${label} failed: ${err.message}`)
+      return ''
+    }
+  }
+  const addCustomer  = (name) => addToList('customers',  name, fetchCustomers,   'customer')
+  const addLocation  = (name) => addToList('locations',  name, fetchJlLocations, 'location')
+  const addInspector = (name) => addToList('inspectors', name, fetchInspectors,  'inspector')
+  const addTeam      = (name) => addToList('teams',      name, fetchTeams,       'team member')
+
+  // Inspector Name options = base roster + admin-added inspectors.
+  const inspectorOptions = useMemo(
+    () => Array.from(new Set([...DUMMY_INSPECTORS, ...jlInspectors.map(i => i.name)]))
+      .sort((a, b) => a.localeCompare(b)),
+    [jlInspectors]
+  )
+
+  // Inspector Team options = the previous inspector roster (DUMMY + added
+  // inspectors) PLUS the team-member roster (seeded + admin-added).
+  const teamOptions = useMemo(
+    () => Array.from(new Set([
+      ...DUMMY_INSPECTORS,
+      ...jlInspectors.map(i => i.name),
+      ...jlTeams.map(t => t.name),
+    ])).sort((a, b) => a.localeCompare(b)),
+    [jlInspectors, jlTeams]
+  )
+
+  const appendInspector = (field, name) => {
+    const cur = (modalState[field] || '').split(',').map(s => s.trim()).filter(Boolean)
+    if (!cur.includes(name)) handleModalChange(field, [...cur, name].join(', '))
+  }
+
+  // Themed "Add new …" modal — opened ONLY by the + Add buttons (never by
+  // clicking a field or its dropdown).
+  const [addModal, setAddModal] = useState(null) // { kind, label, field } | null
+  const [addModalValue, setAddModalValue] = useState('')
+  const [addModalSaving, setAddModalSaving] = useState(false)
+  const openAdd = (kind, label, field) => { setAddModalValue(''); setAddModal({ kind, label, field }) }
+  const closeAdd = () => { setAddModal(null); setAddModalValue(''); setAddModalSaving(false) }
+  const submitAddModal = async (e) => {
+    e?.preventDefault?.()
+    if (!addModal) return
+    const name = addModalValue.trim()
+    if (!name) return
+    setAddModalSaving(true)
+    let saved = ''
+    if (addModal.kind === 'customer') saved = await addCustomer(name)
+    else if (addModal.kind === 'location') saved = await addLocation(name)
+    else if (addModal.kind === 'team') saved = await addTeam(name)
+    else saved = await addInspector(name)
+    setAddModalSaving(false)
+    if (saved) {
+      if (addModal.kind === 'inspector' || addModal.kind === 'team') appendInspector(addModal.field, saved)
+      else handleModalChange(addModal.field, saved)
+      closeAdd()
+    }
+  }
+
   const nextSerial = useMemo(() => {
     const max = entries.reduce((a, e) => Math.max(a, Number(e.sNo) || 0), 0)
     return max + 1
@@ -764,6 +985,8 @@ function JobLogDescription() {
       status: f('status'), completionDate: f('completionDate'), rept: f('rept'),
       exp: f('exp'), iso: f('iso'), accounts: f('accounts'), it: f('it'),
       submissionDate: f('submissionDate'), source: f('source'), remark: f('remark'), remarks: f('remarks'),
+      remarkOperations: f('remarkOperations'), remarkQhse: f('remarkQhse'),
+      remarkInventory: f('remarkInventory'), remarkAccounts: f('remarkAccounts'), remarkIt: f('remarkIt'),
       stockRequisition: f('stockRequisition'), goodsIssueNote: f('goodsIssueNote'),
       consumption: f('consumption'), gatePass: f('gatePass'),
     })
@@ -771,6 +994,24 @@ function JobLogDescription() {
   }
   const closeModal = () => { setIsModalOpen(false); setModalMode('add'); setEditingId(null); setModalState(emptyEntry) }
   const handleModalChange = (k, v) => setModalState(p => ({ ...p, [k]: v }))
+
+  // Man Hours is auto-calculated: Calculated Days × Man Power × 10 (not manual).
+  useEffect(() => {
+    const cd = parseFloat(modalState.calculatedDays)
+    const mp = parseFloat(modalState.manPower)
+    const mh = (Number.isFinite(cd) && Number.isFinite(mp)) ? String(cd * mp * 10) : ''
+    setModalState(prev => (prev.manHours === mh ? prev : { ...prev, manHours: mh }))
+  }, [modalState.calculatedDays, modalState.manPower])
+
+  // Reference dropdown: fixed options + "Others" (manual). Track the chosen
+  // option separately so "Others" stays selected even before text is typed.
+  const [refChoice, setRefChoice] = useState('')
+  useEffect(() => {
+    if (!isModalOpen) return
+    const r = modalState.reference || ''
+    setRefChoice(REFERENCE_OPTIONS.includes(r) ? r : (r ? 'Others' : ''))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isModalOpen, editingId])
 
   const handleSubmit = async e => {
     e.preventDefault()
@@ -1173,7 +1414,6 @@ function JobLogDescription() {
                   <th title="Goods Issue Note">GIN</th>
                   <th>Consumption</th>
                   <th title="Gate Pass">Gate Pass</th>
-                  <th>Remark</th>
                   <th>Remarks</th>
                   <th style={{ textAlign: 'center' }}>Actions</th>
                 </tr>
@@ -1254,11 +1494,15 @@ function JobLogDescription() {
                         <td className="all-records-cell-text" style={{ fontSize: 12, color: '#a87800' }}>{rv(entry.goodsIssueNote)}</td>
                         <td className="all-records-cell-text" style={{ fontSize: 12, color: '#a87800' }}>{rv(entry.consumption)}</td>
                         <td className="all-records-cell-text" style={{ fontSize: 12, color: '#a87800' }}>{rv(entry.gatePass)}</td>
-                        <td className="all-records-cell-remarks" style={{ maxWidth: 200, fontSize: 13, color: '#595966' }}>
-                          {rv(entry.remark)}
-                        </td>
-                        <td className="all-records-cell-remarks" style={{ maxWidth: 200, fontSize: 13, color: '#595966' }}>
-                          {rv(entry.remarks)}
+                        <td className="all-records-cell-remarks" style={{ maxWidth: 240, fontSize: 13, color: '#595966', whiteSpace: 'pre-line' }}>
+                          {rv([
+                            entry.remarkOperations && `Operations: ${entry.remarkOperations}`,
+                            entry.remarkQhse && `QHSE: ${entry.remarkQhse}`,
+                            entry.remarkInventory && `Inventory: ${entry.remarkInventory}`,
+                            entry.remarkAccounts && `Accounts: ${entry.remarkAccounts}`,
+                            entry.remarkIt && `IT: ${entry.remarkIt}`,
+                            entry.remark, entry.remarks,
+                          ].filter(Boolean).join('\n'))}
                         </td>
                         <td className="all-records-cell-actions" style={{ textAlign: 'center' }}>
                           <div className="all-records-actions" style={{ justifyContent: 'center' }}>
@@ -1305,9 +1549,8 @@ function JobLogDescription() {
 
       {/* ══ MODAL ════════════════════════════════════════════ */}
       {isModalOpen && (
-        <div className="modal-overlay" onClick={closeModal}>
-          <div className="modal-content" style={{ maxWidth: 900 }}
-            onClick={e => e.stopPropagation()}>
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: 900 }}>
 
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -1341,53 +1584,113 @@ function JobLogDescription() {
                   <input type="date" value={modalState.entryDate} required
                     disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('entryDate', e.target.value)} /></label>
-                <label><span>Client *</span>
-                  <input type="text" value={modalState.client} placeholder="e.g. OGDCL" required
-                    disabled={!canEdit('operations')}
-                    onChange={e => handleModalChange('client', e.target.value)} /></label>
+                <div className="field-col"><span>Client *</span>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <SearchSelect
+                        value={modalState.client}
+                        options={Array.from(new Set([
+                          ...customers.map(c => c.name),
+                          ...(modalState.client ? [modalState.client] : []),
+                        ]))}
+                        placeholder="— Select customer —"
+                        searchPlaceholder="Search customer…"
+                        disabled={!canEdit('operations')}
+                        onChange={val => handleModalChange('client', val)} />
+                    </div>
+                    {isAdminContext && (
+                      <button type="button" className="ghost-btn" onClick={() => openAdd('customer', 'Customer', 'client')}
+                        disabled={!canEdit('operations')} title="Add new customer"
+                        style={{ padding: '0 12px', whiteSpace: 'nowrap', flexShrink: 0, height: 42 }}>+ Add</button>
+                    )}
+                  </div></div>
                 <label><span>Work Order *</span>
                   <input type="text" value={modalState.workOrder} placeholder="WO-XXXX" required
                     disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('workOrder', e.target.value)} /></label>
                 <label><span>Reference</span>
-                  <input type="text" value={modalState.reference} placeholder="PTIS-REF-XXX"
+                  <select value={refChoice}
                     disabled={!canEdit('operations')}
-                    onChange={e => handleModalChange('reference', e.target.value)} /></label>
-              </div>
-
-              <div className="form-row">
-                <label><span>Inspector Name *</span>
-                  <MultiSelect
-                    value={modalState.inspectorName}
-                    options={DUMMY_INSPECTORS}
-                    placeholder="Select inspector(s)…"
-                    disabled={!canEdit('operations')}
-                    onChange={val => handleModalChange('inspectorName', val)} /></label>
-                <label><span>Inspector Team</span>
-                  <MultiSelect
-                    value={modalState.inspectorTeam}
-                    options={DUMMY_INSPECTORS}
-                    placeholder="Select team members…"
-                    disabled={!canEdit('operations')}
-                    onChange={val => handleModalChange('inspectorTeam', val)} /></label>
-              </div>
-
-              <div className="form-row">
-                <label><span>Location *</span>
-                  <input
-                    type="text"
-                    list="jlr-locations-list"
-                    value={modalState.location}
-                    placeholder="Type to search or enter new…"
-                    required
-                    autoComplete="off"
-                    disabled={!canEdit('operations')}
-                    onChange={e => handleModalChange('location', e.target.value)}
-                  />
-                  <datalist id="jlr-locations-list">
-                    {KNOWN_LOCATIONS.map(loc => <option key={loc} value={loc} />)}
-                  </datalist>
+                    onChange={e => {
+                      const v = e.target.value
+                      setRefChoice(v)
+                      if (v === 'Others') {
+                        // keep any existing custom text; clear if it was a fixed option
+                        if (REFERENCE_OPTIONS.includes(modalState.reference)) handleModalChange('reference', '')
+                      } else {
+                        handleModalChange('reference', v) // fixed option or '' (Select)
+                      }
+                    }}>
+                    <option value="">— Select —</option>
+                    {REFERENCE_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                    <option value="Others">Others (enter manually)</option>
+                  </select>
+                  {refChoice === 'Others' && (
+                    <input type="text" value={modalState.reference} placeholder="Enter reference…"
+                      style={{ marginTop: 6 }}
+                      disabled={!canEdit('operations')}
+                      onChange={e => handleModalChange('reference', e.target.value)} />
+                  )}
                 </label>
+              </div>
+
+              <div className="form-row">
+                <div className="field-col"><span>Inspector Name *</span>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <MultiSelect
+                        value={modalState.inspectorName}
+                        options={inspectorOptions}
+                        placeholder="Select inspector(s)…"
+                        disabled={!canEdit('operations')}
+                        onChange={val => handleModalChange('inspectorName', val)} />
+                    </div>
+                    {isAdminContext && (
+                      <button type="button" className="ghost-btn" onClick={() => openAdd('inspector', 'Inspector', 'inspectorName')}
+                        disabled={!canEdit('operations')} title="Add new inspector"
+                        style={{ padding: '0 12px', whiteSpace: 'nowrap', flexShrink: 0, height: 42 }}>+ Add</button>
+                    )}
+                  </div></div>
+                <div className="field-col"><span>Inspector Team</span>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <MultiSelect
+                        value={modalState.inspectorTeam}
+                        options={teamOptions}
+                        placeholder="Select team members…"
+                        disabled={!canEdit('operations')}
+                        onChange={val => handleModalChange('inspectorTeam', val)} />
+                    </div>
+                    {isAdminContext && (
+                      <button type="button" className="ghost-btn" onClick={() => openAdd('team', 'Team member', 'inspectorTeam')}
+                        disabled={!canEdit('operations')} title="Add new team member"
+                        style={{ padding: '0 12px', whiteSpace: 'nowrap', flexShrink: 0, height: 42 }}>+ Add</button>
+                    )}
+                  </div></div>
+              </div>
+
+              <div className="form-row">
+                <div className="field-col"><span>Location *</span>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <SearchSelect
+                        value={modalState.location}
+                        options={Array.from(new Set([
+                          ...jlLocations.map(l => l.name),
+                          ...KNOWN_LOCATIONS,
+                          ...(modalState.location ? [modalState.location] : []),
+                        ])).sort((a, b) => String(a).localeCompare(String(b)))}
+                        placeholder="— Select location —"
+                        searchPlaceholder="Search location…"
+                        disabled={!canEdit('operations')}
+                        onChange={val => handleModalChange('location', val)} />
+                    </div>
+                    {isAdminContext && (
+                      <button type="button" className="ghost-btn" onClick={() => openAdd('location', 'Location', 'location')}
+                        disabled={!canEdit('operations')} title="Add new location"
+                        style={{ padding: '0 12px', whiteSpace: 'nowrap', flexShrink: 0, height: 42 }}>+ Add</button>
+                    )}
+                  </div></div>
                 <label><span>Nature of Job *</span>
                   <input type="text" value={modalState.natureOfJob} placeholder="Visual / NDT …" required
                     disabled={!canEdit('operations')}
@@ -1419,10 +1722,11 @@ function JobLogDescription() {
                   <input type="number" min="0" value={modalState.manPower} placeholder="0"
                     disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('manPower', e.target.value)} /></label>
-                <label><span>Man Hrs</span>
-                  <input type="number" min="0" value={modalState.manHours} placeholder="0"
-                    disabled={!canEdit('operations')}
-                    onChange={e => handleModalChange('manHours', e.target.value)} /></label>
+                <label><span>Man Hrs (auto)</span>
+                  <input type="number" readOnly value={modalState.manHours}
+                    title="Calculated Days × Man Power × 10"
+                    placeholder="0"
+                    style={{ background: '#f4f4f7', color: '#777', cursor: 'not-allowed' }} /></label>
                 <label><span>Driven Km</span>
                   <input type="number" min="0" value={modalState.drivenKm} placeholder="0"
                     disabled={!canEdit('operations')}
@@ -1448,29 +1752,37 @@ function JobLogDescription() {
                     disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('completionDate', e.target.value)} /></label>
                 <label><span>Region *</span>
-                  <input type="text" value={modalState.source} required
-                    placeholder="Islamabad / Karachi / Other"
+                  <select value={modalState.source} required
                     disabled={!canEdit('operations')}
-                    onChange={e => handleModalChange('source', e.target.value)} /></label>
+                    onChange={e => handleModalChange('source', e.target.value)}>
+                    <option value="">— Select region —</option>
+                    {REGION_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                    {modalState.source && !REGION_OPTIONS.includes(modalState.source) && (
+                      <option value={modalState.source}>{modalState.source}</option>
+                    )}
+                  </select></label>
               </div>
 
-              <label><span>Remark</span>
-                <textarea rows="3" value={modalState.remark}
-                  placeholder="Any notes or observations…"
+              <label><span>Operations Remarks</span>
+                <textarea rows="2" value={modalState.remarkOperations}
+                  placeholder="Operations notes…"
                   disabled={!canEdit('operations')}
-                  onChange={e => handleModalChange('remark', e.target.value)} />
-              </label>
-
-              <label><span>Remarks</span>
-                <textarea rows="3" value={modalState.remarks}
-                  placeholder="Additional remarks…"
-                  disabled={!canEdit('operations')}
-                  onChange={e => handleModalChange('remarks', e.target.value)} />
+                  onChange={e => handleModalChange('remarkOperations', e.target.value)} />
               </label>
 
               <ModalSection Icon={MdOutlineHealthAndSafety} title="QHSE" hint="Safety & compliance" />
               <div className="form-row">
-                {[['tra', 'TRA'], ['equipCL', 'Equip C/L'], ['vLog', 'V. Log'], ['tbt', 'TBT'], ['rept', 'REPT (Report)'], ['iso', 'ISO']].map(([f, l]) => (
+                <label><span>TRA</span>
+                  <input type="number" min="0" value={modalState.tra}
+                    placeholder="e.g. 3"
+                    disabled={!canEdit('qhse')}
+                    onChange={e => handleModalChange('tra', e.target.value)} /></label>
+                <label><span>TBT</span>
+                  <input type="number" min="0" value={modalState.tbt}
+                    placeholder="e.g. 5"
+                    disabled={!canEdit('qhse')}
+                    onChange={e => handleModalChange('tbt', e.target.value)} /></label>
+                {[['equipCL', 'Equip C/L'], ['vLog', 'V. Log'], ['rept', 'REPT (Report)'], ['iso', 'ISO']].map(([f, l]) => (
                   <label key={f}><span>{l}</span>
                     <select value={modalState[f]} disabled={!canEdit('qhse')}
                       onChange={e => handleModalChange(f, e.target.value)}>
@@ -1487,6 +1799,12 @@ function JobLogDescription() {
                     disabled={!canEdit('qhse')}
                     onChange={e => handleModalChange('submissionDate', e.target.value)} /></label>
               </div>
+              <label><span>QHSE Remarks</span>
+                <textarea rows="2" value={modalState.remarkQhse}
+                  placeholder="QHSE notes…"
+                  disabled={!canEdit('qhse')}
+                  onChange={e => handleModalChange('remarkQhse', e.target.value)} />
+              </label>
 
               <ModalSection Icon={BsBoxSeam} title="Inventory" hint="Stock & materials" />
               <div className="form-row">
@@ -1511,6 +1829,12 @@ function JobLogDescription() {
                     disabled={!canEdit('inventory')}
                     onChange={e => handleModalChange('gatePass', e.target.value)} /></label>
               </div>
+              <label><span>Inventory Remarks</span>
+                <textarea rows="2" value={modalState.remarkInventory}
+                  placeholder="Inventory notes…"
+                  disabled={!canEdit('inventory')}
+                  onChange={e => handleModalChange('remarkInventory', e.target.value)} />
+              </label>
 
               <ModalSection Icon={BsWallet2} title="Accounts" hint="Expenses & sign-off" />
               <div className="form-row">
@@ -1525,6 +1849,12 @@ function JobLogDescription() {
                   </label>
                 ))}
               </div>
+              <label><span>Accounts Remarks</span>
+                <textarea rows="2" value={modalState.remarkAccounts}
+                  placeholder="Accounts notes…"
+                  disabled={!canEdit('accounts')}
+                  onChange={e => handleModalChange('remarkAccounts', e.target.value)} />
+              </label>
 
               <ModalSection Icon={BsLaptop} title="IT" hint="IT sign-off" />
               <div className="form-row">
@@ -1536,6 +1866,12 @@ function JobLogDescription() {
                     <option value="Done">Done</option><option value="Pending">Pending</option>
                   </select></label>
               </div>
+              <label><span>IT Remarks</span>
+                <textarea rows="2" value={modalState.remarkIt}
+                  placeholder="IT notes…"
+                  disabled={!canEdit('it')}
+                  onChange={e => handleModalChange('remarkIt', e.target.value)} />
+              </label>
 
               <div className="modal-actions">
                 <button type="button" className="ghost-btn" onClick={closeModal} disabled={saving}>Cancel</button>
@@ -1544,6 +1880,41 @@ function JobLogDescription() {
                   {saving
                     ? 'Saving…'
                     : modalMode === 'add' ? 'Add Entry' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Themed "Add new …" modal (Customer / Location / Inspector) */}
+      {addModal && (
+        <div className="modal-overlay" style={{ zIndex: 2100 }}>
+          <div className="modal-content" style={{ maxWidth: 460 }}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 42, height: 42, borderRadius: 12,
+                  background: '#fdf2f3', border: '1px solid #ffd1d8', color: '#d7263d',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 700,
+                }}>+</div>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: 20 }}>Add {addModal.label}</h2>
+                  <p style={{ margin: 0, fontSize: 13, color: '#7a7a8c' }}>Saved to the list and selected right away.</p>
+                </div>
+              </div>
+              <button className="close-modal-btn" onClick={closeAdd} style={{ display: 'inline-flex', alignItems: 'center' }}><X size={18} /></button>
+            </div>
+            <form className="modal-form" onSubmit={submitAddModal}>
+              <label><span>{addModal.label} Name</span>
+                <input type="text" autoFocus value={addModalValue}
+                  placeholder={`Enter ${addModal.label.toLowerCase()} name…`}
+                  onChange={e => setAddModalValue(e.target.value)} />
+              </label>
+              <div className="modal-actions">
+                <button type="button" className="ghost-btn" onClick={closeAdd} disabled={addModalSaving}>Cancel</button>
+                <button type="submit" className="primary-btn" disabled={addModalSaving || !addModalValue.trim()}>
+                  {addModalSaving ? 'Saving…' : `Add ${addModal.label}`}
                 </button>
               </div>
             </form>
