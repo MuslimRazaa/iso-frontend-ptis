@@ -12,14 +12,20 @@ const write = (key, value) => {
   try {
     localStorage.setItem(key, JSON.stringify(value))
   } catch {
-    // Quota exceeded (large attachment data URLs) — drop attachment content
-    // rather than losing the whole submission/decision.
-    const stripped = value.map(row => (
-      row.attachments
-        ? { ...row, attachments: row.attachments.replace(/"data_url":"[^"]*"/g, '"data_url":null') }
-        : row
-    ))
-    localStorage.setItem(key, JSON.stringify(stripped))
+    // Quota exceeded — strip large binary blobs (attachment data URLs or
+    // embedded originalPdf) then retry. Data is still recorded, just without
+    // inline binary content until a real backend can store it.
+    const stripped = value.map(row => {
+      const out = { ...row }
+      // entries: remove inline attachment content
+      if (typeof out.attachments === 'string') {
+        out.attachments = out.attachments.replace(/"data_url":"data:[^"]*"/g, '"data_url":null')
+      }
+      // templates: remove embedded original PDF
+      if (out.originalPdf) out.originalPdf = null
+      return out
+    })
+    try { localStorage.setItem(key, JSON.stringify(stripped)) } catch { /* give up gracefully */ }
   }
 }
 

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { API_ENDPOINTS } from '../../config/api'
 import { getOfflineTemplate, addOfflineTemplate, updateOfflineTemplate } from '../utils/offlineStore'
+import PdfImportModal from '../components/PdfImportModal'
 
 const FIELD_TYPES = [
   { value: 'text',           label: 'Short Text' },
@@ -36,12 +37,23 @@ function TemplateBuilder() {
   const base = isUserSide ? '/user/iso-forms' : '/iso-forms'
   const isEdit = Boolean(id)
 
+  const isAdmin = !isUserSide || (() => {
+    try { return JSON.parse(localStorage.getItem('userPermissions') || '{}').iso_forms_admin === true } catch { return false }
+  })()
+
+  useEffect(() => {
+    if (!isAdmin) navigate(`${base}/templates`, { replace: true })
+  }, [isAdmin])
+
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [fields, setFields] = useState([blankField()])
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [showImport, setShowImport] = useState(false)
+  const [originalPdfBase64, setOriginalPdfBase64] = useState('')
+  const [originalPdfName, setOriginalPdfName] = useState('')
 
   useEffect(() => {
     if (!isEdit) return
@@ -50,6 +62,8 @@ function TemplateBuilder() {
       if (!active || !json) return
       setName(json.name || '')
       setDescription(json.description || '')
+      setOriginalPdfBase64(json.originalPdf || '')
+      setOriginalPdfName(json.originalPdfName || '')
       const parsedFields = typeof json.fields === 'string' ? JSON.parse(json.fields) : json.fields
       const normalized = Array.isArray(parsedFields)
         ? parsedFields.map(f => ({ owner: 'requester', ...f }))
@@ -63,6 +77,18 @@ function TemplateBuilder() {
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [id, isEdit])
+
+  const handlePdfImport = (importedFields, pdfBase64, pdfName) => {
+    // Drop the initial blank field if nothing else has been added yet
+    setFields(prev => {
+      const hasContent = prev.some(f => f.label.trim())
+      return hasContent ? [...prev, ...importedFields] : importedFields
+    })
+    setOriginalPdfBase64(pdfBase64)
+    setOriginalPdfName(pdfName)
+    if (!name.trim()) setName(pdfName.replace(/\.pdf$/i, '').replace(/[-_]/g, ' '))
+    setShowImport(false)
+  }
 
   const addField = () => setFields(prev => [...prev, blankField()])
   const removeField = (fieldId) => setFields(prev => prev.filter(f => f.id !== fieldId))
@@ -84,7 +110,13 @@ function TemplateBuilder() {
     if (fields.some(f => !f.label.trim())) { setError('Every field needs a label.'); return }
 
     setSaving(true)
-    const payload = { name: name.trim(), description: description.trim(), fields }
+    const payload = {
+      name: name.trim(),
+      description: description.trim(),
+      fields,
+      originalPdf: originalPdfBase64 || undefined,
+      originalPdfName: originalPdfName || undefined,
+    }
     try {
       const url = isEdit ? `${API_ENDPOINTS.ISO_FORMS_TEMPLATES}/${id}` : API_ENDPOINTS.ISO_FORMS_TEMPLATES
       const res = await fetch(url, {
@@ -109,10 +141,24 @@ function TemplateBuilder() {
 
   return (
     <div style={{ padding: 'clamp(24px, 4vw, 48px)', maxWidth: 860, margin: '0 auto' }}>
-      <p className="eyebrow" style={{ margin: 0 }}>Form Templates</p>
-      <h1 style={{ margin: '4px 0 24px', fontSize: 26, fontWeight: 800, color: '#14141c' }}>
-        {isEdit ? 'Edit Template' : 'New Template'}
-      </h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
+        <div>
+          <p className="eyebrow" style={{ margin: 0 }}>Form Templates</p>
+          <h1 style={{ margin: '4px 0 0', fontSize: 26, fontWeight: 800, color: '#14141c' }}>
+            {isEdit ? 'Edit Template' : 'New Template'}
+          </h1>
+        </div>
+        <button type="button" className="ghost-btn" onClick={() => setShowImport(true)}>
+          📄 Import Fields from PDF
+        </button>
+      </div>
+
+      {originalPdfName && (
+        <div style={{ background: '#e7f6ec', border: '1px solid #a8d5b5', color: '#1a7f4e', borderRadius: 12, padding: '10px 16px', marginBottom: 16, fontSize: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>📎 PDF attached: <strong>{originalPdfName}</strong> — filled forms will download in this exact layout</span>
+          <button type="button" onClick={() => { setOriginalPdfBase64(''); setOriginalPdfName('') }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1a7f4e', fontSize: 18, lineHeight: 1 }}>×</button>
+        </div>
+      )}
 
       {error && (
         <div style={{ background: '#fdecea', border: '1px solid #f5c2c0', color: '#b42318', borderRadius: 12, padding: '12px 16px', marginBottom: 20, fontSize: 14 }}>
@@ -213,6 +259,13 @@ function TemplateBuilder() {
           {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Template'}
         </button>
       </div>
+
+      {showImport && (
+        <PdfImportModal
+          onImport={handlePdfImport}
+          onClose={() => setShowImport(false)}
+        />
+      )}
     </div>
   )
 }

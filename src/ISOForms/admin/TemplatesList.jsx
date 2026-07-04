@@ -1,18 +1,71 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { Eye, Plus, Pencil, Trash2, X } from 'lucide-react'
 import { API_ENDPOINTS } from '../../config/api'
 import { SEED_TEMPLATES, SEED_VERSION } from '../seedTemplates'
 import { ensureSeeded, getOfflineTemplates, deleteOfflineTemplate } from '../utils/offlineStore'
+import DocumentChangeRequestPrint from '../pdf/DocumentChangeRequestPrint'
+import CARPrint from '../pdf/CARPrint'
+import GenericFormPrint from '../pdf/GenericFormPrint'
+
+function PreviewModal({ template, onClose }) {
+  const printRef = useRef(null)
+
+  const PrintComponent =
+    template?.id === 'seed-fm-001-04' || template?.name === 'Document Change Request Form'
+      ? DocumentChangeRequestPrint
+      : template?.id === 'seed-fm-002-01' || template?.name === 'Corrective Action Request Form'
+        ? CARPrint
+        : GenericFormPrint
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
+      display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+      zIndex: 9999, padding: '32px 16px', overflowY: 'auto',
+    }}>
+      <div style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 860, position: 'relative' }}>
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          padding: '18px 24px', borderBottom: '1px solid #ececf0',
+        }}>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 17, color: '#14141c' }}>{template.name}</div>
+            <div style={{ fontSize: 13, color: '#7a7a8c', marginTop: 2 }}>Form preview — blank template</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7a7a8c', display: 'flex' }}>
+            <X size={22} />
+          </button>
+        </div>
+        <div style={{ padding: 24, overflowX: 'auto' }}>
+          <PrintComponent
+            ref={printRef}
+            entry={{ id: 'preview' }}
+            template={template}
+            formValues={{}}
+            approverValues={{}}
+            employees={[]}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function TemplatesList() {
   const location = useLocation()
   const isUserSide = location.pathname.startsWith('/user')
   const base = isUserSide ? '/user/iso-forms' : '/iso-forms'
 
+  const isAdmin = !isUserSide || (() => {
+    try { return JSON.parse(localStorage.getItem('userPermissions') || '{}').iso_forms_admin === true } catch { return false }
+  })()
+
   const [templates, setTemplates] = useState([])
   const [loading, setLoading] = useState(true)
   const [offline, setOffline] = useState(false)
   const [error, setError] = useState('')
+  const [previewTemplate, setPreviewTemplate] = useState(null)
 
   const load = () => {
     fetch(API_ENDPOINTS.ISO_FORMS_TEMPLATES)
@@ -25,7 +78,6 @@ function TemplatesList() {
         setError('')
       })
       .catch(() => {
-        // No backend yet — fall back to the local demo store so the page is still usable.
         ensureSeeded(SEED_TEMPLATES, SEED_VERSION)
         setTemplates(getOfflineTemplates())
         setOffline(true)
@@ -48,6 +100,7 @@ function TemplatesList() {
     }
   }
 
+
   return (
     <div style={{ padding: 'clamp(24px, 4vw, 48px)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 16, marginBottom: 24 }}>
@@ -55,9 +108,11 @@ function TemplatesList() {
           <p className="eyebrow" style={{ margin: 0 }}>Form Templates</p>
           <h1 style={{ margin: '4px 0 0', fontSize: 26, fontWeight: 800, color: '#14141c' }}>Manage Templates</h1>
         </div>
-        <Link to={`${base}/templates/new`} style={{ textDecoration: 'none' }}>
-          <button className="primary-btn">+ New Template</button>
-        </Link>
+        {isAdmin && (
+          <Link to={`${base}/templates/new`} style={{ textDecoration: 'none' }}>
+            <button className="primary-btn">+ New Template</button>
+          </Link>
+        )}
       </div>
 
       {offline && (
@@ -112,13 +167,43 @@ function TemplatesList() {
                     <td style={{ padding: '16px 20px', color: '#595966' }}>{fieldCount} field{fieldCount === 1 ? '' : 's'}</td>
                     <td style={{ padding: '16px 20px', color: '#595966' }}>{t.created_by_name || t.created_by || '—'}</td>
                     <td style={{ padding: '16px 20px', textAlign: 'right' }}>
-                      <Link to={`${base}/new/${t.id}`} style={{ textDecoration: 'none', marginRight: 10 }}>
-                        <button type="button" className="ghost-btn small">Fill</button>
-                      </Link>
-                      <Link to={`${base}/templates/${t.id}/edit`} style={{ textDecoration: 'none', marginRight: 10 }}>
-                        <button type="button" className="ghost-btn small">Edit</button>
-                      </Link>
-                      <button type="button" className="ghost-btn small" onClick={() => handleDelete(t.id)}>Delete</button>
+                      <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+                        {/* Eye — preview blank form layout */}
+                        <button
+                          type="button"
+                          title="Preview form layout"
+                          className="ghost-btn small"
+                          onClick={() => setPreviewTemplate(t)}
+                        >
+                          <Eye size={15} />
+                        </button>
+
+                        {/* Plus — fill a new form from this template */}
+                        <Link to={`${base}/new/${t.id}`} style={{ textDecoration: 'none' }}>
+                          <button type="button" title="Fill new form" className="ghost-btn small">
+                            <Plus size={15} />
+                          </button>
+                        </Link>
+
+                        {/* Admin-only: edit template structure + delete */}
+                        {isAdmin && (
+                          <>
+                            <Link to={`${base}/templates/${t.id}/edit`} style={{ textDecoration: 'none' }}>
+                              <button type="button" title="Edit template" className="ghost-btn small">
+                                <Pencil size={15} />
+                              </button>
+                            </Link>
+                            <button
+                              type="button"
+                              title="Delete template"
+                              className="ghost-btn small"
+                              onClick={() => handleDelete(t.id)}
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 )
@@ -127,6 +212,10 @@ function TemplatesList() {
           </table>
         )}
       </article>
+
+      {previewTemplate && (
+        <PreviewModal template={previewTemplate} onClose={() => setPreviewTemplate(null)} />
+      )}
     </div>
   )
 }

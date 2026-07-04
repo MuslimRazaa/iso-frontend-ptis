@@ -6,8 +6,10 @@ import DynamicField from '../components/DynamicField'
 import { isFieldEmpty } from '../utils/fieldHelpers'
 import { getOfflineEntry, updateOfflineEntry, getOfflineTemplate } from '../utils/offlineStore'
 import DocumentChangeRequestPrint from '../pdf/DocumentChangeRequestPrint'
+import CARPrint from '../pdf/CARPrint'
 import GenericFormPrint from '../pdf/GenericFormPrint'
 import { downloadNodeAsPdf } from '../pdf/generatePdf'
+import { downloadFilledPdf } from '../pdf/fillOriginalPdf'
 import { SEED_EMPLOYEES } from '../seedTemplates'
 
 const STATUS_COLORS = {
@@ -140,10 +142,19 @@ function FormDetail() {
   const setApproverValue = (fieldId, val) => setApproverValues(prev => ({ ...prev, [fieldId]: val }))
 
   const handleDownloadPdf = async () => {
-    if (!printRef.current) return
     setDownloading(true)
+    const filename = `${(entry.template_name || template?.name || 'form').replace(/\s+/g, '-')}-${entry.id}.pdf`
     try {
-      await downloadNodeAsPdf(printRef.current, `${(entry.template_name || template?.name || 'form').replace(/\s+/g, '-')}-${entry.id}.pdf`)
+      const originalPdf = template?.originalPdf
+      if (originalPdf && template?.fields) {
+        // Download with the exact original PDF layout, values overlaid via pdf-lib
+        const allFields = template.fields
+        await downloadFilledPdf(originalPdf, allFields, formValues, approverValues, employees, filename)
+      } else {
+        // Fallback: html2canvas snapshot of the styled print template
+        if (!printRef.current) return
+        await downloadNodeAsPdf(printRef.current, filename)
+      }
     } finally {
       setDownloading(false)
     }
@@ -343,6 +354,8 @@ function FormDetail() {
       <div style={{ position: 'absolute', left: -99999, top: 0 }}>
         {template?.id === 'seed-fm-001-04' || template?.name === 'Document Change Request Form' ? (
           <DocumentChangeRequestPrint ref={printRef} entry={entry} formValues={formValues} approverValues={approverValues} employees={employees} />
+        ) : template?.id === 'seed-fm-002-01' || template?.name === 'Corrective Action Request Form' ? (
+          <CARPrint ref={printRef} entry={entry} formValues={formValues} approverValues={approverValues} employees={employees} />
         ) : (
           <GenericFormPrint ref={printRef} entry={entry} template={template} formValues={formValues} approverValues={approverValues} employees={employees} />
         )}

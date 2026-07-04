@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { Search, Calendar, X } from 'lucide-react'
 import { API_ENDPOINTS } from '../../config/api'
 import { getCurrentEmployeeId } from '../utils/currentEmployee'
 import { getOfflineEntries } from '../utils/offlineStore'
@@ -21,6 +22,18 @@ const StatusBadge = ({ status }) => {
   )
 }
 
+const inputStyle = {
+  background: '#fff',
+  border: '1px solid #e0e0e6',
+  color: '#14141c',
+  borderRadius: 16,
+  padding: '12px 16px',
+  fontSize: 14,
+  outline: 'none',
+  fontFamily: 'inherit',
+  transition: 'all 0.2s ease',
+}
+
 function FormEntriesList() {
   const location = useLocation()
   const isUserSide = location.pathname.startsWith('/user')
@@ -29,21 +42,34 @@ function FormEntriesList() {
   const searchParams = new URLSearchParams(location.search)
   const pendingMine = searchParams.get('filter') === 'pending-mine'
 
+  const isAdmin = !isUserSide || (() => {
+    try { return JSON.parse(localStorage.getItem('userPermissions') || '{}').iso_forms_admin === true } catch { return false }
+  })()
+
   const [entries, setEntries] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [offline, setOffline] = useState(false)
   const [myEmployeeId, setMyEmployeeId] = useState(null)
 
+  // Filters
+  const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState(pendingMine ? 'pending' : '')
-  const [onlyMine, setOnlyMine] = useState(pendingMine)
+  const [templateFilter, setTemplateFilter] = useState('')
+  const [createdByFilter, setCreatedByFilter] = useState('')
+  const [relatedToFilter, setRelatedToFilter] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [onlyMine, setOnlyMine] = useState(false)
+
+  const effectiveOnlyMine = pendingMine && !isAdmin ? true : onlyMine
 
   useEffect(() => { getCurrentEmployeeId().then(setMyEmployeeId) }, [])
 
   useEffect(() => {
     const params = new URLSearchParams()
     if (statusFilter) params.set('status', statusFilter)
-    if (onlyMine && myEmployeeId) params.set('relatedEmployeeId', myEmployeeId)
+    if (effectiveOnlyMine && myEmployeeId) params.set('relatedEmployeeId', myEmployeeId)
 
     fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}?${params.toString()}`)
       .then(res => (res.ok ? res.json() : Promise.reject()))
@@ -55,21 +81,57 @@ function FormEntriesList() {
         setError('')
       })
       .catch(() => {
-        // No backend yet — read submissions from the local demo store and apply the same filters client-side.
         let rows = getOfflineEntries()
         if (statusFilter) rows = rows.filter(e => (e.status || 'pending') === statusFilter)
-        if (onlyMine && myEmployeeId) rows = rows.filter(e => String(e.related_employee_id) === String(myEmployeeId))
+        if (effectiveOnlyMine && myEmployeeId) rows = rows.filter(e => String(e.related_employee_id) === String(myEmployeeId))
         setEntries(rows)
         setOffline(true)
         setError('')
       })
       .finally(() => setLoading(false))
-  }, [statusFilter, onlyMine, myEmployeeId])
+  }, [statusFilter, effectiveOnlyMine, myEmployeeId])
 
-  const rows = useMemo(() => entries, [entries])
+  // Unique option lists for filter dropdowns
+  const templateOptions = useMemo(() => [...new Set(entries.map(e => e.template_name).filter(Boolean))], [entries])
+  const createdByOptions = useMemo(() => [...new Set(entries.map(e => e.created_by_name || e.created_by).filter(Boolean))], [entries])
+  const relatedToOptions = useMemo(() => [...new Set(entries.map(e => e.related_employee_name || e.related_employee_id).filter(Boolean))], [entries])
+
+  // Client-side filtering (search + column filters)
+  const rows = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return entries.filter(e => {
+      const tName = e.template_name || ''
+      const createdBy = e.created_by_name || e.created_by || ''
+      const relatedTo = e.related_employee_name || String(e.related_employee_id || '')
+      const status = e.status || 'pending'
+      const dateStr = e.created_at ? new Date(e.created_at).toLocaleDateString() : ''
+
+      if (templateFilter && tName !== templateFilter) return false
+      if (createdByFilter && createdBy !== createdByFilter) return false
+      if (relatedToFilter && relatedTo !== relatedToFilter) return false
+      if (dateFrom && e.created_at && e.created_at < dateFrom) return false
+      if (dateTo && e.created_at && e.created_at > dateTo + 'T23:59:59') return false
+      if (q && ![tName, createdBy, relatedTo, status, dateStr].join(' ').toLowerCase().includes(q)) return false
+      return true
+    })
+  }, [entries, search, templateFilter, createdByFilter, relatedToFilter, dateFrom, dateTo])
+
+  const clearFilters = () => {
+    setSearch('')
+    setTemplateFilter('')
+    setCreatedByFilter('')
+    setRelatedToFilter('')
+    setDateFrom('')
+    setDateTo('')
+    if (!pendingMine) setStatusFilter('')
+    setOnlyMine(false)
+  }
+
+  const hasActiveFilters = search || templateFilter || createdByFilter || relatedToFilter || dateFrom || dateTo || onlyMine || (statusFilter && !pendingMine)
 
   return (
     <div style={{ padding: 'clamp(24px, 4vw, 48px)' }}>
+      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 16, marginBottom: 24 }}>
         <div>
           <p className="eyebrow" style={{ margin: 0 }}>ISO Forms</p>
@@ -84,21 +146,120 @@ function FormEntriesList() {
         )}
       </div>
 
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+      {/* Filters — JLR style */}
+      <div style={{
+        display: 'flex', gap: 12, padding: '18px 20px',
+        background: '#fff', border: '1px solid #e0e0e6', borderRadius: 16,
+        flexWrap: 'wrap', alignItems: 'center', marginBottom: 20,
+      }}>
+        {/* Search */}
+        <div style={{ flex: 1, minWidth: 220, position: 'relative' }}>
+          <span style={{
+            position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
+            color: '#aaa', pointerEvents: 'none', display: 'inline-flex',
+          }}>
+            <Search size={15} />
+          </span>
+          <input
+            type="text"
+            style={{ ...inputStyle, paddingLeft: 40, width: '100%', boxSizing: 'border-box' }}
+            placeholder="Search forms…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+
+        {/* Template / Form name */}
         <select
-          value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value)}
-          style={{ padding: '10px 14px', border: '2px solid #e0e0e6', borderRadius: 12, fontSize: 14, cursor: 'pointer' }}
+          style={{ ...inputStyle, minWidth: 160, cursor: 'pointer' }}
+          value={templateFilter}
+          onChange={e => setTemplateFilter(e.target.value)}
         >
-          <option value="">All Statuses</option>
-          <option value="pending">Pending</option>
-          <option value="approved">Approved</option>
-          <option value="rejected">Rejected</option>
+          <option value="">All Forms</option>
+          {templateOptions.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: '#595966' }}>
-          <input type="checkbox" checked={onlyMine} onChange={e => setOnlyMine(e.target.checked)} />
-          Only forms related to me
-        </label>
+
+        {/* Status */}
+        {!pendingMine && (
+          <select
+            style={{ ...inputStyle, minWidth: 140, cursor: 'pointer' }}
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+          >
+            <option value="">All Statuses</option>
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        )}
+
+        {/* Created By */}
+        <select
+          style={{ ...inputStyle, minWidth: 150, cursor: 'pointer' }}
+          value={createdByFilter}
+          onChange={e => setCreatedByFilter(e.target.value)}
+        >
+          <option value="">All Created By</option>
+          {createdByOptions.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+
+        {/* Related To */}
+        {(!pendingMine || isAdmin) && (
+          <select
+            style={{ ...inputStyle, minWidth: 150, cursor: 'pointer' }}
+            value={relatedToFilter}
+            onChange={e => setRelatedToFilter(e.target.value)}
+          >
+            <option value="">All Related To</option>
+            {relatedToOptions.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        )}
+
+        {/* Date range */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#7a7a8c', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <Calendar size={13} /> From
+          </span>
+          <input
+            type="date"
+            value={dateFrom}
+            max={dateTo || undefined}
+            style={{ ...inputStyle, padding: '10px 10px', minWidth: 0, cursor: 'pointer' }}
+            onChange={e => setDateFrom(e.target.value)}
+          />
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#7a7a8c' }}>To</span>
+          <input
+            type="date"
+            value={dateTo}
+            min={dateFrom || undefined}
+            style={{ ...inputStyle, padding: '10px 10px', minWidth: 0, cursor: 'pointer' }}
+            onChange={e => setDateTo(e.target.value)}
+          />
+        </div>
+
+        {/* Only mine toggle — non-admin, non-pending-mine view */}
+        {(!pendingMine || isAdmin) && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: '#595966', whiteSpace: 'nowrap', cursor: 'pointer' }}>
+            <input type="checkbox" checked={effectiveOnlyMine} onChange={e => setOnlyMine(e.target.checked)} />
+            Only mine
+          </label>
+        )}
+
+        {/* Clear */}
+        {hasActiveFilters && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            style={{
+              background: 'transparent', border: '1px solid #e0e0e6',
+              color: '#595966', padding: '10px 16px', borderRadius: 16,
+              fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap',
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+            }}
+          >
+            <X size={14} /> Clear
+          </button>
+        )}
       </div>
 
       {offline && (
@@ -116,7 +277,9 @@ function FormEntriesList() {
         {loading ? (
           <div style={{ padding: 40, textAlign: 'center', color: '#7a7a8c' }}>Loading forms…</div>
         ) : rows.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center', color: '#7a7a8c' }}>No forms found for this filter.</div>
+          <div style={{ padding: 40, textAlign: 'center', color: '#7a7a8c' }}>
+            {hasActiveFilters ? 'No forms match your filters. Try adjusting the search or filters.' : 'No forms found.'}
+          </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
