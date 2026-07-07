@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react'
-import { parsePdf, pdfToBase64 } from '../utils/parsePdf'
+import { parsePdf, pdfToBase64, enrichSeedFieldsWithCoords } from '../utils/parsePdf'
+import { SEED_TEMPLATES } from '../seedTemplates'
 
 const FIELD_TYPES = [
   { value: 'text',           label: 'Short Text' },
@@ -17,8 +18,12 @@ const OWNERS = [
   { value: 'approver',  label: 'Approver' },
 ]
 
-// Modal that lets admin upload a PDF, review extracted field candidates,
-// edit labels/types, then import them into TemplateBuilder.
+// Map known form codes to their seed template
+const KNOWN_FORM_MAP = {
+  'FM-001-04': SEED_TEMPLATES.find(t => t.id === 'seed-fm-001-04'),
+  'FM-002-01': SEED_TEMPLATES.find(t => t.id === 'seed-fm-002-01'),
+}
+
 function PdfImportModal({ onImport, onClose }) {
   const fileRef = useRef(null)
   const [parsing, setParsing] = useState(false)
@@ -26,7 +31,8 @@ function PdfImportModal({ onImport, onClose }) {
   const [fields, setFields] = useState(null)
   const [pdfBase64, setPdfBase64] = useState(null)
   const [pdfName, setPdfName] = useState('')
-  // which field ids the admin wants to include
+  const [detectedCode, setDetectedCode] = useState(null)
+  const [usingPreset, setUsingPreset] = useState(false)
   const [selected, setSelected] = useState(new Set())
 
   const handleFile = async (file) => {
@@ -37,21 +43,42 @@ function PdfImportModal({ onImport, onClose }) {
     setError('')
     setParsing(true)
     try {
-      const [{ fields: detected }, base64] = await Promise.all([
+      const [{ fields: detected, detectedFormCode, allItems }, base64] = await Promise.all([
         parsePdf(file),
         pdfToBase64(file),
       ])
-      setFields(detected)
+
       setPdfBase64(base64)
       setPdfName(file.name)
-      // pre-select all detected fields
-      setSelected(new Set(detected.map(f => f.id)))
+      setDetectedCode(detectedFormCode)
+
+      // If it's a known PTIS form, load pre-defined fields enriched with
+      // coordinates from the actual PDF so pdf-lib can overlay values correctly.
+      if (detectedFormCode && KNOWN_FORM_MAP[detectedFormCode]) {
+        const rawPreset = KNOWN_FORM_MAP[detectedFormCode].fields.map(f => ({ ...f }))
+        const enriched = enrichSeedFieldsWithCoords(rawPreset, allItems)
+        setFields(enriched)
+        setSelected(new Set(enriched.map(f => f.id)))
+        setUsingPreset(true)
+      } else {
+        setFields(detected)
+        setSelected(new Set(detected.map(f => f.id)))
+        setUsingPreset(false)
+      }
     } catch (e) {
       console.error('PDF parse error:', e)
       setError('Could not parse this PDF. Make sure it is a text-based (non-scanned) PDF.')
     } finally {
       setParsing(false)
     }
+  }
+
+  const switchToExtracted = () => {
+    // Re-parse was not stored; for simplicity just clear and let user re-upload
+    setFields(null)
+    setPdfBase64(null)
+    setDetectedCode(null)
+    setUsingPreset(false)
   }
 
   const updateField = (id, patch) =>
@@ -66,7 +93,7 @@ function PdfImportModal({ onImport, onClose }) {
 
   const handleImport = () => {
     const chosen = fields.filter(f => selected.has(f.id) && f.label.trim())
-    onImport(chosen, pdfBase64, pdfName)
+    onImport(chosen, pdfBase64, pdfName, detectedCode)
   }
 
   return (
@@ -131,16 +158,44 @@ function PdfImportModal({ onImport, onClose }) {
           {/* Review panel */}
           {fields && (
             <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              {/* Known form banner */}
+              {usingPreset && detectedCode && (
+                <div style={{
+                  background: '#e7f6ec', border: '1px solid #a3d9b1', borderRadius: 12,
+                  padding: '12px 16px', marginBottom: 16,
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+                }}>
+                  <div style={{ fontSize: 14, color: '#1a7f4e' }}>
+                    <strong>✓ Recognised PTIS form ({detectedCode})</strong> — loaded {fields.length} pre-defined fields with correct types and owners.
+                  </div>
+                  <button
+                    className="ghost-btn small"
+                    onClick={switchToExtracted}
+                    style={{ whiteSpace: 'nowrap' }}
+                  >
+                    Use extracted instead
+                  </button>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
                 <div>
                   <div style={{ fontWeight: 700, color: '#14141c' }}>📎 {pdfName}</div>
                   <div style={{ fontSize: 13, color: '#7a7a8c', marginTop: 2 }}>
-                    {fields.length} field{fields.length !== 1 ? 's' : ''} detected — tick the ones to include, edit labels/types as needed.
+                    {fields.length} field{fields.length !== 1 ? 's' : ''} — tick to include, edit label / type / owner as needed.
                   </div>
                 </div>
-                <button className="ghost-btn small" onClick={() => { setFields(null); setPdfBase64(null) }}>
-                  Change PDF
-                </button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    className="ghost-btn small"
+                    onClick={() => setSelected(selected.size === fields.length ? new Set() : new Set(fields.map(f => f.id)))}
+                  >
+                    {selected.size === fields.length ? 'Deselect All' : 'Select All'}
+                  </button>
+                  <button className="ghost-btn small" onClick={() => { setFields(null); setPdfBase64(null); setDetectedCode(null); setUsingPreset(false) }}>
+                    Change PDF
+                  </button>
+                </div>
               </div>
 
               {fields.length === 0 ? (

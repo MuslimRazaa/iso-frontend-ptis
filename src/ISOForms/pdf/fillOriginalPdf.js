@@ -2,10 +2,11 @@ import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
 
 // Maps a field type + value to a printable string for overlay
 const displayValue = (field, value) => {
-  if (field.type === 'checkbox') return value ? '☑' : '☐'
+  if (field.type === 'checkbox') return value ? 'Yes' : ''
   if (field.type === 'checkbox-group') {
     if (!Array.isArray(value) || !value.length) return ''
-    return value.join(', ')
+    // Show selected options with checkmark prefix
+    return value.map(v => `✓ ${v}`).join('  ')
   }
   if (field.type === 'date') {
     if (!value) return ''

@@ -12,9 +12,9 @@ function PreviewModal({ template, onClose }) {
   const printRef = useRef(null)
 
   const PrintComponent =
-    template?.id === 'seed-fm-001-04' || template?.name === 'Document Change Request Form'
+    template?.id === 'seed-fm-001-04' || template?.name === 'Document Change Request Form' || template?.formCode === 'FM-001-04'
       ? DocumentChangeRequestPrint
-      : template?.id === 'seed-fm-002-01' || template?.name === 'Corrective Action Request Form'
+      : template?.id === 'seed-fm-002-01' || template?.name === 'Corrective Action Request Form' || template?.formCode === 'FM-002-01'
         ? CARPrint
         : GenericFormPrint
 

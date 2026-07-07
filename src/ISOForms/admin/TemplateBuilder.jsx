@@ -54,6 +54,7 @@ function TemplateBuilder() {
   const [showImport, setShowImport] = useState(false)
   const [originalPdfBase64, setOriginalPdfBase64] = useState('')
   const [originalPdfName, setOriginalPdfName] = useState('')
+  const [formCode, setFormCode] = useState('')
 
   useEffect(() => {
     if (!isEdit) return
@@ -64,6 +65,7 @@ function TemplateBuilder() {
       setDescription(json.description || '')
       setOriginalPdfBase64(json.originalPdf || '')
       setOriginalPdfName(json.originalPdfName || '')
+      setFormCode(json.formCode || '')
       const parsedFields = typeof json.fields === 'string' ? JSON.parse(json.fields) : json.fields
       const normalized = Array.isArray(parsedFields)
         ? parsedFields.map(f => ({ owner: 'requester', ...f }))
@@ -78,15 +80,24 @@ function TemplateBuilder() {
     return () => { active = false }
   }, [id, isEdit])
 
-  const handlePdfImport = (importedFields, pdfBase64, pdfName) => {
-    // Drop the initial blank field if nothing else has been added yet
+  const KNOWN_FORM_NAMES = {
+    'FM-001-04': 'Document Change Request Form',
+    'FM-002-01': 'Corrective Action Request Form',
+  }
+
+  const handlePdfImport = (importedFields, pdfBase64, pdfName, detectedCode) => {
     setFields(prev => {
       const hasContent = prev.some(f => f.label.trim())
       return hasContent ? [...prev, ...importedFields] : importedFields
     })
     setOriginalPdfBase64(pdfBase64)
     setOriginalPdfName(pdfName)
-    if (!name.trim()) setName(pdfName.replace(/\.pdf$/i, '').replace(/[-_]/g, ' '))
+    // Use proper form name for recognized PTIS forms; fall back to filename
+    const properName = detectedCode && KNOWN_FORM_NAMES[detectedCode]
+      ? KNOWN_FORM_NAMES[detectedCode]
+      : pdfName.replace(/\.pdf$/i, '').replace(/[-_]/g, ' ')
+    if (!name.trim()) setName(properName)
+    if (detectedCode) setFormCode(detectedCode)
     setShowImport(false)
   }
 
@@ -116,6 +127,7 @@ function TemplateBuilder() {
       fields,
       originalPdf: originalPdfBase64 || undefined,
       originalPdfName: originalPdfName || undefined,
+      formCode: formCode || undefined,
     }
     try {
       const url = isEdit ? `${API_ENDPOINTS.ISO_FORMS_TEMPLATES}/${id}` : API_ENDPOINTS.ISO_FORMS_TEMPLATES

@@ -41,37 +41,43 @@ function DocumentChangeRequestPrint({ entry, formValues, approverValues, employe
   const closedByEmployee = employees.find(e => String(e.id) === String(approverValues.f_dcr_closed_by))
   const closedByName = closedByEmployee ? (closedByEmployee.full_name || closedByEmployee.name) : (approverValues.f_dcr_closed_by || '')
 
+  const PageHeader = () => (
+    <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 10 }}>
+      <tbody>
+        <tr>
+          <td style={{ ...label, width: '10%', whiteSpace: 'nowrap' }}>Title</td>
+          <td style={{ ...value, whiteSpace: 'nowrap' }}>Document Change Request Form</td>
+          <td style={{ ...label, width: '8%', whiteSpace: 'nowrap' }}>Code</td>
+          <td style={{ ...value, width: '12%', whiteSpace: 'nowrap' }}>FM-001-04</td>
+          <td rowSpan={2} style={{ ...cell, width: '14%', textAlign: 'center', verticalAlign: 'middle' }}>
+            <img src={ptisLogo} alt="PTIS" style={{ height: 36 }} />
+          </td>
+        </tr>
+        <tr>
+          <td style={label}>Issue</td>
+          <td style={value}>01</td>
+          <td style={label}>Issue Date</td>
+          <td style={value}>01-Jan-2018</td>
+        </tr>
+      </tbody>
+    </table>
+  )
+
   return (
     <div
       ref={ref}
       style={{
-        width: 794, padding: 28, background: '#fff', color: '#000',
+        width: 794, background: '#fff', color: '#000',
         fontFamily: 'Arial, Helvetica, sans-serif',
       }}
     >
+      {/* ── Page 1 ── */}
+      <div style={{ padding: 28 }}>
       <h2 style={{ textAlign: 'center', margin: '0 0 12px', fontSize: 18 }}>
         Premier Tubular Inspection Services (Pvt) Ltd.
       </h2>
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 10 }}>
-        <tbody>
-          <tr>
-            <td style={{ ...label, width: '10%', whiteSpace: 'nowrap' }}>Title</td>
-            <td style={{ ...value, whiteSpace: 'nowrap' }}>Document Change Request Form</td>
-            <td style={{ ...label, width: '8%', whiteSpace: 'nowrap' }}>Code</td>
-            <td style={{ ...value, width: '12%', whiteSpace: 'nowrap' }}>FM-001-04</td>
-            <td rowSpan={2} style={{ ...cell, width: '14%', textAlign: 'center', verticalAlign: 'middle' }}>
-              <img src={ptisLogo} alt="PTIS" style={{ height: 36 }} />
-            </td>
-          </tr>
-          <tr>
-            <td style={label}>Issue</td>
-            <td style={value}>01</td>
-            <td style={label}>Issue Date</td>
-            <td style={value}>01-Jan-2018</td>
-          </tr>
-        </tbody>
-      </table>
+      <PageHeader />
 
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 14 }}>
         <tbody>
@@ -166,6 +172,36 @@ function DocumentChangeRequestPrint({ entry, formValues, approverValues, employe
           </tr>
         </tbody>
       </table>
+      </div>
+
+      {/* ── Page 2 — Notes (static, no input fields) ── */}
+      <div style={{ padding: 28, pageBreakBefore: 'always', borderTop: '3px dashed #ccc', marginTop: 8 }}>
+        <h2 style={{ textAlign: 'center', margin: '0 0 12px', fontSize: 18 }}>
+          Premier Tubular Inspection Services (Pvt) Ltd.
+        </h2>
+
+        <PageHeader />
+
+        <div style={{ marginTop: 28, fontSize: 12, lineHeight: 1.8, color: '#000' }}>
+          <p style={{ fontWeight: 700, margin: '0 0 6px' }}>Note:</p>
+          <p style={{ margin: '0 0 10px' }}>
+            All fields must be filled. In case a field is required to be left blank please write one of the following in the field:
+          </p>
+          <ul style={{ margin: '0 0 18px', paddingLeft: 24 }}>
+            <li>Not Applicable</li>
+            <li>Not Available</li>
+            <li>Not Provided</li>
+          </ul>
+          <p style={{ margin: '0 0 10px' }}>
+            Priority of Change Implementation (Change Request Details) can be interpreted as follows:
+          </p>
+          <ul style={{ margin: 0, paddingLeft: 24 }}>
+            <li>Urgent — Implementation Time 24 Hours</li>
+            <li>Normal — Implementation Time 3 Days</li>
+            <li>Low — Implementation Time One Week</li>
+          </ul>
+        </div>
+      </div>
     </div>
   )
 }

@@ -352,9 +352,9 @@ function FormDetail() {
 
       {/* Off-screen — captured by html2canvas for the PDF download, never shown to the user */}
       <div style={{ position: 'absolute', left: -99999, top: 0 }}>
-        {template?.id === 'seed-fm-001-04' || template?.name === 'Document Change Request Form' ? (
+        {template?.id === 'seed-fm-001-04' || template?.name === 'Document Change Request Form' || template?.formCode === 'FM-001-04' ? (
           <DocumentChangeRequestPrint ref={printRef} entry={entry} formValues={formValues} approverValues={approverValues} employees={employees} />
-        ) : template?.id === 'seed-fm-002-01' || template?.name === 'Corrective Action Request Form' ? (
+        ) : template?.id === 'seed-fm-002-01' || template?.name === 'Corrective Action Request Form' || template?.formCode === 'FM-002-01' ? (
           <CARPrint ref={printRef} entry={entry} formValues={formValues} approverValues={approverValues} employees={employees} />
         ) : (
           <GenericFormPrint ref={printRef} entry={entry} template={template} formValues={formValues} approverValues={approverValues} employees={employees} />
