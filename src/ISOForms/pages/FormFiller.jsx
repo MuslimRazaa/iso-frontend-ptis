@@ -101,19 +101,28 @@ function FormFiller() {
     if (!relatedEmployeeId) { setError('Please select the employee this form is related to.'); return }
 
     setSubmitting(true)
+    // Names for the entry's "Created By" / "Related To" columns. The backend has
+    // no auth session, so send these explicitly (it denormalizes template_name).
+    const relatedEmployee = employees.find(emp => String(emp.id) === String(relatedEmployeeId))
+    const relatedEmployeeName = relatedEmployee?.full_name || relatedEmployee?.name || ''
+    const myEmployeeId = await getCurrentEmployeeId()
+    const createdBy = myEmployeeId || localStorage.getItem('userEmail') || ''
+    const createdByName = localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || ''
     try {
       const formData = new FormData()
       formData.append('template_id', template.id)
+      formData.append('template_name', template.name || '')
       formData.append('form_data', JSON.stringify(values))
       formData.append('related_employee_id', relatedEmployeeId)
+      formData.append('related_employee_name', relatedEmployeeName)
+      if (createdBy) formData.append('created_by', createdBy)
+      if (createdByName) formData.append('created_by_name', createdByName)
       attachments.forEach(file => { if (file) formData.append('attachments', file) })
 
       const res = await fetch(API_ENDPOINTS.ISO_FORMS_ENTRIES, { method: 'POST', body: formData })
       if (!res.ok) throw new Error('submit failed')
     } catch {
       // No backend yet — record the submission in the local demo store instead.
-      const relatedEmployee = employees.find(emp => String(emp.id) === String(relatedEmployeeId))
-      const myEmployeeId = await getCurrentEmployeeId()
       // Inline the actual file content as a data URL so "View" works without a backend.
       const storedAttachments = await Promise.all(
         attachments.filter(Boolean).map(async (f) => ({

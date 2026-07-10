@@ -1709,10 +1709,6 @@ const TestingModule = () => {
     //   setTestCompleted(false);
     //   isCompletingTestRef.current = false;
     // };
-    const resetTest = () => {
-      navigateTo('/');
-    };
-
     const resultPassed = testResult.STATUS?.toUpperCase() === 'PASS';
     const resultPageBackground = isDarkMode
       ? 'linear-gradient(135deg, #0f172a 0%, #111827 45%, #1f2937 100%)'

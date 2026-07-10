@@ -248,6 +248,9 @@ const REGION_OPTIONS = ['South Region', 'North Region']
 // Reference — fixed dropdown choices; "Others" switches to a manual text box.
 const REFERENCE_OPTIONS = ['Via Email', 'Via Phone call', 'Via Whatsapp']
 
+// QHSE compliance dropdowns (Equip C/L, V. Log, REPT) — only these three values.
+const QHSE_OPTIONS = ['Yes', 'No', 'NA']
+
 /* ─────────────────────────────────────────────────────────────
    Field → JLR department mapping (used by permission system)
 ───────────────────────────────────────────────────────────── */
@@ -1782,15 +1785,17 @@ function JobLogDescription() {
                     placeholder="e.g. 5"
                     disabled={!canEdit('qhse')}
                     onChange={e => handleModalChange('tbt', e.target.value)} /></label>
-                {[['equipCL', 'Equip C/L'], ['vLog', 'V. Log'], ['rept', 'REPT (Report)'], ['iso', 'ISO']].map(([f, l]) => (
+                {[['equipCL', 'Equip C/L'], ['vLog', 'V. Log'], ['rept', 'REPT (Report)']].map(([f, l]) => (
                   <label key={f}><span>{l}</span>
                     <select value={modalState[f]} disabled={!canEdit('qhse')}
                       onChange={e => handleModalChange(f, e.target.value)}>
                       <option value="">— Select —</option>
-                      <option value="Yes">Yes</option><option value="No">No</option>
-                      <option value="Done">Done</option><option value="Completed">Completed</option>
-                      <option value="Updated">Updated</option><option value="Pending">Pending</option>
-                      <option value="Scheduled">Scheduled</option>
+                      {QHSE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                      {/* Legacy rows may hold an older value (e.g. "Done") — keep it
+                          selectable so editing an entry never silently clears it. */}
+                      {modalState[f] && !QHSE_OPTIONS.includes(modalState[f]) && (
+                        <option value={modalState[f]}>{modalState[f]}</option>
+                      )}
                     </select>
                   </label>
                 ))}

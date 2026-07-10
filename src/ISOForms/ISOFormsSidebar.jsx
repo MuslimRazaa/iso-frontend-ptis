@@ -47,7 +47,7 @@ function ISOFormsSidebar() {
         setPendingCount(isAdminUser ? pending.length : 0)
         return
       }
-      fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}/pending-count?employeeId=${employeeId}`)
+      fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}/pending-count?employeeId=${employeeId}${isAdminUser ? '&admin=1' : ''}`)
         .then(res => (res.ok ? res.json() : Promise.reject()))
         .then(json => { if (active) setPendingCount(json?.count ?? 0) })
         .catch(() => {
