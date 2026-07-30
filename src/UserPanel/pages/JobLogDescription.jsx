@@ -5,7 +5,7 @@ import { BsBriefcase, BsBoxSeam, BsWallet2, BsLaptop, BsClipboardData, BsPencilS
 import { MdOutlineHealthAndSafety } from 'react-icons/md'
 import {
   Plus, RefreshCw, Upload, Trash2, Search, Calendar, AlertTriangle, X,
-  ClipboardList, CheckCircle2, Clock, CircleDashed, Pencil
+  ClipboardList, CheckCircle2, Clock, CircleDashed, Pencil, Download, FileSpreadsheet
 } from 'lucide-react'
 
 /* ─────────────────────────────────────────────────────────────
@@ -250,6 +250,83 @@ const REFERENCE_OPTIONS = ['Via Email', 'Via Phone call', 'Via Whatsapp']
 
 // QHSE compliance dropdowns (Equip C/L, V. Log, REPT) — only these three values.
 const QHSE_OPTIONS = ['Yes', 'No', 'NA']
+
+// ── CSV / Excel export ───────────────────────────────────────
+// Ordered [Column header, camelCase key] pairs. Headers match the backend's
+// CSV HEADER_MAP (routes/jobLog.js) so an exported file re-imports cleanly.
+// Unmapped extras (per-department remarks) are included for completeness and
+// are simply ignored by the importer.
+const EXPORT_COLUMNS = [
+  ['S#', 'sNo'],
+  ['Entry Date', 'entryDate'],
+  ['Client', 'client'],
+  ['Work Order', 'workOrder'],
+  ['Inspector Name', 'inspectorName'],
+  ['Inspector Team', 'inspectorTeam'],
+  ['Reference', 'reference'],
+  ['Location', 'location'],
+  ['Nature of Job', 'natureOfJob'],
+  ['Start Date', 'startDate'],
+  ['End Date', 'endDate'],
+  ['Vehicle Used', 'vehicleUsed'],
+  ['Days', 'days'],
+  ['Calculated Days', 'calculatedDays'],
+  ['Man Power', 'manPower'],
+  ['Man Hours', 'manHours'],
+  ['Driven KM', 'drivenKm'],
+  ['JMPs', 'jmps'],
+  ['TRA', 'tra'],
+  ['Equip C/L', 'equipCL'],
+  ['V. Log', 'vLog'],
+  ['TBT', 'tbt'],
+  ['Status', 'status'],
+  ['Completion Date', 'completionDate'],
+  ['REPT', 'rept'],
+  ['EXP', 'exp'],
+  ['ISO', 'iso'],
+  ['Accounts', 'accounts'],
+  ['IT', 'it'],
+  ['Submission Date', 'submissionDate'],
+  ['Region', 'source'],
+  ['Remark', 'remark'],
+  ['Remarks', 'remarks'],
+  ['Remark Operations', 'remarkOperations'],
+  ['Remark QHSE', 'remarkQhse'],
+  ['Remark Inventory', 'remarkInventory'],
+  ['Remark Accounts', 'remarkAccounts'],
+  ['Remark IT', 'remarkIt'],
+  ['Stock Requisition', 'stockRequisition'],
+  ['Goods Issue Note', 'goodsIssueNote'],
+  ['Consumption', 'consumption'],
+  ['Gate Pass', 'gatePass'],
+]
+
+// Wrap a value for CSV: quote when it contains a comma, quote or newline; escape
+// embedded quotes by doubling them.
+const csvCell = (v) => {
+  const s = v == null ? '' : String(v)
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
+
+// Build a CSV (with UTF-8 BOM so Excel reads it correctly) from the given rows
+// and trigger a download. Shared by the date-range export and the filtered
+// export so both produce an identical, import-compatible file.
+const downloadJlrCsv = (rows, label) => {
+  const header = EXPORT_COLUMNS.map(([h]) => csvCell(h)).join(',')
+  const lines = rows.map(row => EXPORT_COLUMNS.map(([, key]) => csvCell(row[key])).join(','))
+  const csv = '﻿' + [header, ...lines].join('\r\n')
+  const fname = `JLR_Export_${label}.csv`
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = fname
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+  return fname
+}
 
 /* ─────────────────────────────────────────────────────────────
    Field → JLR department mapping (used by permission system)
@@ -778,6 +855,35 @@ function JobLogDescription() {
   const selectClickIntent = useRef({ status: false, source: false })
   const csvInputRef = useRef(null)
 
+  /* ── CSV / Excel export (admin) ─────────────────────────── */
+  const [showExport, setShowExport] = useState(false)
+  const [exportFrom, setExportFrom] = useState('') // 'YYYY-MM-DD' (inclusive)
+  const [exportTo, setExportTo] = useState('')     // 'YYYY-MM-DD' (inclusive)
+
+  // Rows whose entry date falls in the From–To range (both inclusive; blank
+  // bound = open-ended). Rows with no entry date are excluded once a bound is
+  // set; with both bounds blank, everything is exported.
+  const exportRows = useMemo(() => {
+    return entries.filter(e => {
+      if (!exportFrom && !exportTo) return true
+      if (!e.entryDate) return false
+      if (exportFrom && e.entryDate < exportFrom) return false
+      if (exportTo && e.entryDate > exportTo) return false
+      return true
+    })
+  }, [entries, exportFrom, exportTo])
+
+  // Date-range export (from the modal, used when no table filters are active).
+  const handleExport = () => {
+    if (exportRows.length === 0) return
+    const label = (exportFrom || exportTo)
+      ? `${exportFrom || 'start'}_to_${exportTo || 'end'}`
+      : 'All'
+    const fname = downloadJlrCsv(exportRows, label)
+    setShowExport(false)
+    setImportMsg(`Exported ${exportRows.length} entr${exportRows.length === 1 ? 'y' : 'ies'} → ${fname}`)
+  }
+
   /* ── Fetch all entries from API ─────────────────────────── */
   const fetchEntries = useCallback(async () => {
     try {
@@ -951,6 +1057,24 @@ function JobLogDescription() {
     })
     return sorted
   }, [entries, searchTerm, statusFilter, sourceFilter, sortBy, dateFrom, dateTo])
+
+  // Any active table filter/search? (sort order isn't a filter.) When true, the
+  // Export button switches to "Export by Filter" and exports exactly the rows
+  // the user is currently looking at, bypassing the date-range modal.
+  const hasActiveFilters =
+    searchTerm.trim() !== '' || statusFilter !== 'all' || sourceFilter !== 'all' ||
+    dateFrom !== '' || dateTo !== ''
+
+  const handleExportClick = () => {
+    if (hasActiveFilters) {
+      if (filteredEntries.length === 0) return
+      const fname = downloadJlrCsv(filteredEntries, 'Filtered')
+      setImportMsg(`Exported ${filteredEntries.length} filtered entr${filteredEntries.length === 1 ? 'y' : 'ies'} → ${fname}`)
+    } else {
+      // No filters → the from/to date-range modal (default behaviour).
+      setExportFrom(''); setExportTo(''); setShowExport(true)
+    }
+  }
 
   const totalEntries = filteredEntries.length
   const totalPages = Math.max(1, Math.ceil(totalEntries / PAGE_SIZE))
@@ -1218,6 +1342,18 @@ function JobLogDescription() {
               style={{ display: 'flex', alignItems: 'center', gap: 8 }}
             >
               <Upload size={16} /> Import CSV
+            </button>
+          )}
+          {(isAdminContext || jlrPerms?.full) && (
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={handleExportClick}
+              disabled={loading || entries.length === 0}
+              title={hasActiveFilters ? 'Export the currently filtered/searched rows' : 'Export by date range'}
+              style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+            >
+              <Download size={16} /> {hasActiveFilters ? 'Export by Filter' : 'Export'}
             </button>
           )}
           {entries.length > 0 && (isAdminContext || jlrPerms?.full) && (
@@ -1923,6 +2059,70 @@ function JobLogDescription() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Export to CSV / Excel — pick month & year, exports from all entries */}
+      {showExport && (
+        <div className="modal-overlay" style={{ zIndex: 2100 }} onMouseDown={e => { if (e.target === e.currentTarget) setShowExport(false) }}>
+          <div className="modal-content" style={{ maxWidth: 500 }}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 42, height: 42, borderRadius: 12,
+                  background: '#fdf2f3', border: '1px solid #ffd1d8', color: '#d7263d',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}><FileSpreadsheet size={22} /></div>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: 20 }}>Export Data</h2>
+                  <p style={{ margin: 0, fontSize: 13, color: '#7a7a8c' }}>Pick a From–To date range, or export everything.</p>
+                </div>
+              </div>
+              <button className="close-modal-btn" onClick={() => setShowExport(false)} style={{ display: 'inline-flex', alignItems: 'center' }}><X size={18} /></button>
+            </div>
+            <div className="modal-form">
+              {/* Single date-range calendar: From → To (by entry date) */}
+              <div className="form-row">
+                <label><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Calendar size={14} /> From</span>
+                  <input type="date" value={exportFrom} max={exportTo || undefined}
+                    onChange={e => setExportFrom(e.target.value)} />
+                </label>
+                <label><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Calendar size={14} /> To</span>
+                  <input type="date" value={exportTo} min={exportFrom || undefined}
+                    onChange={e => setExportTo(e.target.value)} />
+                </label>
+              </div>
+              <p style={{ margin: '0 0 2px', fontSize: 12.5, color: '#9a9aaa' }}>
+                Dono khaali chhoro to poora data export hoga. {(exportFrom || exportTo) && (
+                  <button type="button" onClick={() => { setExportFrom(''); setExportTo('') }}
+                    style={{ background: 'none', border: 'none', color: '#d7263d', cursor: 'pointer', fontWeight: 600, padding: 0, fontSize: 12.5 }}>
+                    Clear dates
+                  </button>
+                )}
+              </p>
+
+              <div style={{
+                marginTop: 4, padding: '12px 16px', borderRadius: 12,
+                background: exportRows.length ? 'linear-gradient(135deg,#e8fff3,#d4f8e3)' : '#f4f4f7',
+                border: `1px solid ${exportRows.length ? '#c3ecd4' : '#e0e0e6'}`,
+                color: exportRows.length ? '#1d814c' : '#7a7a8c',
+                fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8,
+              }}>
+                <ClipboardList size={16} />
+                {exportRows.length > 0
+                  ? `${exportRows.length} entr${exportRows.length === 1 ? 'y' : 'ies'} will be exported`
+                  : 'No entries fall in this date range'}
+              </div>
+
+              <div className="modal-actions">
+                <button type="button" className="ghost-btn" onClick={() => setShowExport(false)}>Cancel</button>
+                <button type="button" className="primary-btn" onClick={handleExport} disabled={exportRows.length === 0}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <Download size={16} /> Export CSV
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
