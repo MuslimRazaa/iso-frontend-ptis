@@ -113,7 +113,7 @@ function UserLmsHome() {
   const fmtDate = (s) => s ? new Date(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : '—'
 
   return (
-    <div style={{ padding: '32px', maxWidth: 1100 }}>
+    <div style={{ padding: '32px', width: '100%' }}>
       {/* Welcome */}
       <div style={{ marginBottom: 28 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>

@@ -368,15 +368,15 @@ function AddCourse() {
         </label>
 
         <label>
-          <span>Primary PPT / Course Material</span>
+          <span>Course Material (PDF)</span>
           <div className="upload-box">
-            <input 
-              type="file" 
+            <input
+              type="file"
               name="primary_ppt"
-              accept=".ppt,.pptx,.pdf"
+              accept="application/pdf,.pdf"
               onChange={handleFileChange}
             />
-            <p>Upload presentation or course materials (PPT, PPTX, PDF)</p>
+            <p>Upload the course material as a PDF file</p>
           </div>
         </label>
 

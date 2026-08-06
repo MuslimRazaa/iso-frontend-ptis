@@ -531,8 +531,8 @@ const Testing = () => {
 
   const handleCloseResult = () => {
     setShowResultPopup(false);
-    // Navigate back to course detail page to show test result badge
-    navigate(`/user/course/${courseId}`);
+    // Test done → the course is now locked / in History; return to the LMS.
+    navigate('/user/learning-management-system/my-courses');
   };
 
   console.log('Testing Component Render State:', {
@@ -654,7 +654,7 @@ const Testing = () => {
             </button>
 
             <button
-              onClick={() => navigate('/user/my-courses')}
+              onClick={() => navigate('/user/learning-management-system/my-courses')}
               style={{
                 padding: '12px 32px',
                 background: 'transparent',
@@ -734,7 +734,7 @@ const Testing = () => {
             {error}
           </p>
           <button
-            onClick={() => navigate('/user/my-courses')}
+            onClick={() => navigate('/user/learning-management-system/my-courses')}
             style={{
               padding: '12px 32px',
               background: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
@@ -1572,7 +1572,7 @@ const Testing = () => {
           </p>
         </div>
         <button
-          onClick={() => navigate('/user/my-courses')}
+          onClick={() => navigate('/user/learning-management-system/my-courses')}
           style={{
             padding: '12px 32px',
             background: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
