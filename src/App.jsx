@@ -73,7 +73,6 @@ import CourseHistory from './UserPanel/pages/CourseHistory'
 import AllLmsCourses from './UserPanel/pages/AllLmsCourses'
 import TaskAllocations from './UserPanel/pages/TaskAllocations'
 import CourseDetailUser from './UserPanel/pages/CourseDetailUser'
-import LmsTest from './UserPanel/pages/Testing'
 
 // User LMS standalone layout
 import UserLmsLayout from './UserLMS/UserLmsLayout'
@@ -151,13 +150,10 @@ function App() {
             {/* Admin — Testing Module (standalone, integrated from ptis-lms) */}
             <Route path="/testing" element={<TestingModulePage />} />
 
-            {/* User — Testing Module (same module, host auth decides role) */}
+            {/* User — Testing Module (same module, host auth decides role).
+                When opened from a course (from=course) it also records to the
+                LMS test_results and returns to the LMS afterwards. */}
             <Route path="/user/testing" element={<TestingModulePage />} />
-
-            {/* LMS course test — records to test_results and returns to the LMS
-                (drives history / course-lock / progress). Distinct from the
-                standalone standards Testing module above. */}
-            <Route path="/user/lms-test" element={<LmsTest />} />
 
             {/* Admin — Job Log Description (standalone module) */}
             <Route path="/job-log/*" element={<JLRLayout />}>

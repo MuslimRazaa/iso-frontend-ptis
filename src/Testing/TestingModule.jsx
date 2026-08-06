@@ -470,6 +470,11 @@ const TestingModule = () => {
     ? (searchParams.get('standard') || '').trim()
     : '';
   const isStandardLocked = Boolean(lockedStandardName);
+  // Launched from an LMS course "Start Test" — we mirror the result into the LMS
+  // (test_results) and send the user back to the LMS afterwards.
+  const fromCourse = searchParams.get('from') === 'course';
+  const lmsCourseId = searchParams.get('courseId');
+  const lmsStandardId = searchParams.get('standardId');
 
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth : 1200
@@ -1015,6 +1020,31 @@ const TestingModule = () => {
     console.log('  Answers object:', answersToUse);
 
     setTestResult(result);
+
+    // LMS integration: when this test was launched from a course, mirror the
+    // result into the LMS test_results so History, course-lock, test grey-out
+    // and course progress all pick it up. Runs alongside the legacy save below.
+    if (fromCourse && lmsCourseId && lmsStandardId) {
+      try {
+        await fetch(`${API_BASE_URL}/api/test-results/submit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_email: localStorage.getItem('userEmail'),
+            course_id: parseInt(lmsCourseId),
+            standard_id: parseInt(lmsStandardId),
+            total_questions: totalQuestions,
+            correct_answers: right,
+            score_percentage: parseFloat(percentage.toFixed(2)),
+            passed: status === 'Pass',
+            test_duration_seconds: 0,
+            answers_data: answersToUse,
+          }),
+        });
+      } catch (lmsErr) {
+        console.error('LMS test_results submit failed:', lmsErr);
+      }
+    }
 
     console.log('Saving Result:', result);
     const saveSuccess = await saveResult(result);
@@ -1977,7 +2007,7 @@ const TestingModule = () => {
             </div>
 
             <div style={{ textAlign: 'center' }}>
-             <a href="/"><button
+             <a href={fromCourse ? '/user/learning-management-system/my-courses' : '/'}><button
                 className="login-btn"
                 style={{
                   width: 'auto',
@@ -1988,8 +2018,8 @@ const TestingModule = () => {
                 }}
               >
                 <Home size={22} />
-                Back to Login
-              </button></a> 
+                {fromCourse ? 'Back to Courses' : 'Back to Login'}
+              </button></a>
             </div>
           </div>
         </div>

@@ -773,7 +773,7 @@ const CourseDetailUser = () => {
       // Marks a course-initiated test: standard is fixed, user can't change it.
       from: 'course',
     });
-    return `/user/lms-test?${params.toString()}`;
+    return `/user/testing?${params.toString()}`;
   };
 
   return (

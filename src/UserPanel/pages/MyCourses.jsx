@@ -198,7 +198,7 @@ const MyCourses = () => {
       standard: t.standardName || '',
       from: 'course',
     });
-    navigate(`/user/lms-test?${params.toString()}`);
+    navigate(`/user/testing?${params.toString()}`);
   };
 
   const handleRequest = async (course) => {
