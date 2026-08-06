@@ -12,7 +12,19 @@ function AddCourse() {
   const [message, setMessage] = useState({ type: '', text: '' })
   const [standards, setStandards] = useState([])
   const [categories, setCategories] = useState([])
-  
+
+  // Standard selection mode: 'single' → one standard → one test (normal case);
+  // 'multiple' → 2+ standards, each becomes its own post-course test.
+  const [standardMode, setStandardMode] = useState('single')
+  const [selectedStandardIds, setSelectedStandardIds] = useState([])
+
+  const toggleStandard = (id) => {
+    const sid = String(id)
+    setSelectedStandardIds(prev =>
+      prev.includes(sid) ? prev.filter(x => x !== sid) : [...prev, sid]
+    )
+  }
+
   const [formData, setFormData] = useState({
     course_title: '',
     course_thumbnail: null,
@@ -94,10 +106,25 @@ function AddCourse() {
     setMessage({ type: '', text: '' })
 
     try {
+      // Standard(s) validation depends on the selected mode.
+      const standardIds = standardMode === 'multiple'
+        ? selectedStandardIds
+        : (formData.standard_id ? [formData.standard_id] : [])
+
       // Validate required fields
-      if (!formData.course_title || !formData.course_thumbnail || !formData.credit_hours || 
-          !formData.course_category || !formData.standard_id || !formData.course_description) {
+      if (!formData.course_title || !formData.course_thumbnail || !formData.credit_hours ||
+          !formData.course_category || !formData.course_description) {
         setMessage({ type: 'error', text: 'Please fill all required fields' })
+        setLoading(false)
+        return
+      }
+      if (standardMode === 'single' && standardIds.length === 0) {
+        setMessage({ type: 'error', text: 'Please select a standard' })
+        setLoading(false)
+        return
+      }
+      if (standardMode === 'multiple' && standardIds.length < 2) {
+        setMessage({ type: 'error', text: 'Select at least 2 standards for a multi-standard course' })
         setLoading(false)
         return
       }
@@ -108,7 +135,10 @@ function AddCourse() {
       data.append('course_thumbnail', formData.course_thumbnail)
       data.append('credit_hours', formData.credit_hours)
       data.append('course_category', formData.course_category)
-      data.append('standard_id', formData.standard_id)
+      // Primary standard (legacy NOT NULL column) = first selected; full set goes
+      // as standard_ids so the backend can create one test per standard.
+      data.append('standard_id', standardIds[0])
+      data.append('standard_ids', JSON.stringify(standardIds))
       data.append('course_description', formData.course_description)
       data.append('is_published', formData.is_published)
       data.append('negative_marking', formData.negative_marking ? 0.25 : 0.00)
@@ -257,19 +287,61 @@ function AddCourse() {
 
         <label>
           <span>Standards *</span>
-          <select 
-            name="standard_id"
-            value={formData.standard_id}
-            onChange={handleInputChange}
-            required
-          >
-            <option value="">Select standard</option>
-            {standards.map((standard) => (
-              <option key={standard.id} value={standard.id}>
-                {standard.standard_name} ({standard.short_name})
-              </option>
-            ))}
-          </select>
+          {/* Mode selector — single standard (one test) vs multiple (a test each) */}
+          <div style={{ display: 'flex', gap: 20, margin: '4px 0 10px' }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, margin: 0, cursor: 'pointer', fontWeight: 500 }}>
+              <input type="radio" name="standardMode" checked={standardMode === 'single'}
+                onChange={() => setStandardMode('single')} />
+              Single standard
+            </label>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, margin: 0, cursor: 'pointer', fontWeight: 500 }}>
+              <input type="radio" name="standardMode" checked={standardMode === 'multiple'}
+                onChange={() => setStandardMode('multiple')} />
+              Multiple standards (a test for each)
+            </label>
+          </div>
+
+          {standardMode === 'single' ? (
+            <select
+              name="standard_id"
+              value={formData.standard_id}
+              onChange={handleInputChange}
+            >
+              <option value="">Select standard</option>
+              {standards.map((standard) => (
+                <option key={standard.id} value={standard.id}>
+                  {standard.standard_name} ({standard.short_name})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div style={{
+              border: '1px solid #e0e0e6', borderRadius: 10, padding: 10,
+              maxHeight: 220, overflowY: 'auto', display: 'grid', gap: 4,
+            }}>
+              {standards.length === 0 && (
+                <span style={{ fontSize: 13, color: '#9a9aaa' }}>No standards available.</span>
+              )}
+              {standards.map((standard) => {
+                const checked = selectedStandardIds.includes(String(standard.id))
+                return (
+                  <label key={standard.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 8, margin: 0, cursor: 'pointer',
+                    padding: '7px 10px', borderRadius: 8, fontWeight: 500,
+                    background: checked ? '#fdf2f3' : 'transparent',
+                    border: `1px solid ${checked ? '#ffd1d8' : 'transparent'}`,
+                  }}>
+                    <input type="checkbox" checked={checked}
+                      onChange={() => toggleStandard(standard.id)} />
+                    {standard.standard_name} ({standard.short_name})
+                  </label>
+                )
+              })}
+              <span style={{ fontSize: 12.5, color: '#7a7a8c', marginTop: 4 }}>
+                Selected: {selectedStandardIds.length} — user will take {selectedStandardIds.length || 0} test(s) after the course.
+              </span>
+            </div>
+          )}
         </label>
 
         <label>

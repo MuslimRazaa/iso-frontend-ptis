@@ -135,7 +135,28 @@ const CourseDetailUser = () => {
         });
 
         const mappedTests = [];
-        if (course.general_standard_id) {
+
+        // Preferred path: one test per linked standard (multi-standard courses
+        // get N tests; single-standard get 1). The backend always populates
+        // course.standards — synthesizing from legacy columns for old courses.
+        if (Array.isArray(course.standards) && course.standards.length > 0) {
+          course.standards.forEach((std) => {
+            const result = resultsByStandardId[std.standard_id] || null;
+            const type = (std.standard_type || 'simple').toLowerCase();
+            const suffix = type === 'general' ? ' (General)' : type === 'specific' ? ' (Specific)' : '';
+            mappedTests.push({
+              standardId: std.standard_id,
+              standardName: std.standard_name || '',
+              standardType: type,
+              label: `${std.standard_name || course.title}${suffix}`,
+              result,
+              hasResult: Boolean(result),
+              hasPassed: Boolean(result?.passed)
+            });
+          });
+        }
+
+        if (!mappedTests.length && course.general_standard_id) {
           const result = resultsByStandardId[course.general_standard_id] || null;
           mappedTests.push({
             standardId: course.general_standard_id,
@@ -148,7 +169,7 @@ const CourseDetailUser = () => {
           });
         }
 
-        if (course.specific_standard_id) {
+        if (!mappedTests.length && course.specific_standard_id) {
           const result = resultsByStandardId[course.specific_standard_id] || null;
           mappedTests.push({
             standardId: course.specific_standard_id,
@@ -283,6 +304,9 @@ const CourseDetailUser = () => {
           specific_standard_id: data.specific_standard_id,
           general_standard_name: data.general_standard_name,
           specific_standard_name: data.specific_standard_name,
+          // Unified multi-standard list (one test per standard). Backend fills
+          // this for every course (synthesized from legacy columns when needed).
+          standards: Array.isArray(data.standards) ? data.standards : [],
           is_published: data.is_published,
         };
 
@@ -541,47 +565,23 @@ const CourseDetailUser = () => {
   // Calculate progress percentage based on admin's Credit Hours & Duration
   const calculateProgress = () => {
     if (!course) return 0;
-    
-    // Total time spent by user (convert seconds to hours)
-    const totalTimeSpentSeconds = totalTimeSpentRef.current;
-    const totalTimeSpentHours = totalTimeSpentSeconds / 3600;
-    
-    // Calculate expected total hours based on admin settings
-    let expectedTotalHours = 0;
-    
-    if (course.creditHours && course.creditHours > 0) {
-      // Method 1: Use Credit Hours (1 credit hour = 15 total study hours - industry standard)
-      expectedTotalHours = course.creditHours * 15;
-      console.log(`📊 Progress Calculation: Using Credit Hours`);
-      console.log(`   Credit Hours: ${course.creditHours} credits`);
-      console.log(`   Expected Total: ${expectedTotalHours} hours`);
-    } else if (course.durationWeeks && course.durationWeeks > 0) {
-      // Method 2: Use Duration in Weeks (1 week = 10 study hours - standard estimate)
-      expectedTotalHours = course.durationWeeks * 10;
-      console.log(`📊 Progress Calculation: Using Duration Weeks`);
-      console.log(`   Duration: ${course.durationWeeks} weeks`);
-      console.log(`   Expected Total: ${expectedTotalHours} hours`);
-    } else if (course.videos && course.videos.length > 0) {
-      // Method 3: Fallback to video-based estimate (assume 5 min per video + materials)
-      expectedTotalHours = (course.videos.length * 5) / 60; // 5 minutes per video in hours
-      expectedTotalHours += 1; // Add 1 hour for materials/revision
-      console.log(`📊 Progress Calculation: Using Video Count Fallback`);
-      console.log(`   Videos: ${course.videos.length}`);
-      console.log(`   Expected Total: ${expectedTotalHours.toFixed(2)} hours`);
-    } else {
-      // Method 4: Ultimate fallback - minimum 1 hour course
-      expectedTotalHours = 1;
-      console.log(`📊 Progress Calculation: Using Minimum Fallback (1 hour)`);
-    }
-    
-    // Calculate progress percentage
-    const progressPercentage = (totalTimeSpentHours / expectedTotalHours) * 100;
-    
-    // Cap at 100%
-    const finalProgress = Math.min(Math.floor(progressPercentage), 100);
-    
-    console.log(`📈 Progress: ${totalTimeSpentHours.toFixed(2)} hours / ${expectedTotalHours} hours = ${finalProgress}%`);
-    
+
+    const spentSeconds = totalTimeSpentRef.current || 0;
+
+    // Content-based target: time enough to watch all videos (~6 min each) plus
+    // read the study material (~10 min if a PPT/PDF exists). This replaces the
+    // old credit-hours model (1 credit = 15 study hours), which kept progress
+    // at ~0% for short training courses no matter how long the learner studied.
+    const videoCount = course.videos?.length || 0;
+    const hasMaterial = Boolean(course.pdf_path || (course.resources && course.resources.length > 0));
+    let expectedMinutes = videoCount * 6 + (hasMaterial ? 10 : 0);
+    expectedMinutes = Math.max(expectedMinutes, 10); // floor so tiny courses aren't instant 100%
+
+    const progressPercentage = (spentSeconds / (expectedMinutes * 60)) * 100;
+    const finalProgress = Math.min(Math.round(progressPercentage), 100);
+
+    console.log(`📈 Progress: ${(spentSeconds / 60).toFixed(1)} min / ${expectedMinutes} min target = ${finalProgress}% (${videoCount} videos${hasMaterial ? ' + material' : ''})`);
+
     return finalProgress;
   };
 

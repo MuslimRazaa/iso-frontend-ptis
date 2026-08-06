@@ -6,31 +6,13 @@ const BASE = '/user/learning-management-system'
 
 const tiles = [
   {
-    id: 'tasks',
-    title: 'My Tasks',
-    desc: 'View your allocated training tasks and deadlines.',
-    icon: '📋',
-    path: `${BASE}/my-tasks`,
-    accent: '#2f74bf',
-    bg: '#eef3ff',
-  },
-  {
-    id: 'browse',
-    title: 'Browse Courses',
-    desc: 'Explore all published courses available to you.',
-    icon: '📚',
-    path: `${BASE}/all-courses`,
-    accent: '#1d814c',
-    bg: '#f0fff8',
-  },
-  {
     id: 'mycourses',
     title: 'My Courses',
-    desc: 'Continue your enrolled and in-progress courses.',
+    desc: 'Start a course, take its test, track your progress — all in one place.',
     icon: '🎓',
     path: `${BASE}/my-courses`,
-    accent: '#c87e1c',
-    bg: '#fff8ef',
+    accent: '#d7263d',
+    bg: '#fff5f6',
   },
   {
     id: 'certs',

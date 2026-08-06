@@ -69,6 +69,7 @@ import UserDashboard from './UserPanel/pages/UserDashboard'
 import MyCourses from './UserPanel/pages/MyCourses'
 import UserCertificates from './UserPanel/pages/UserCertificates'
 import JobLogDescription from './UserPanel/pages/JobLogDescription'
+import CourseHistory from './UserPanel/pages/CourseHistory'
 import AllLmsCourses from './UserPanel/pages/AllLmsCourses'
 import TaskAllocations from './UserPanel/pages/TaskAllocations'
 import CourseDetailUser from './UserPanel/pages/CourseDetailUser'
@@ -192,9 +193,11 @@ function App() {
             {/* User — LMS (user-specific layout, no admin pages) */}
             <Route path="/user/learning-management-system/*" element={<UserLmsLayout />}>
               <Route index                      element={<UserLmsHome />} />
-              <Route path="my-tasks"            element={<TaskAllocations />} />
-              <Route path="all-courses"         element={<AllLmsCourses />} />
+              {/* My Tasks & Browse merged into the single My Courses page */}
+              <Route path="my-tasks"            element={<Navigate to="/user/learning-management-system/my-courses" replace />} />
+              <Route path="all-courses"         element={<Navigate to="/user/learning-management-system/my-courses" replace />} />
               <Route path="my-courses"          element={<MyCourses />} />
+              <Route path="history"             element={<CourseHistory />} />
               <Route path="certificates"        element={<UserCertificates />} />
               <Route path="course/:courseId"    element={<CourseDetailUser />} />
             </Route>

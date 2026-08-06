@@ -7,9 +7,8 @@ const DASHBOARD = '/user/dashboard'
 
 const iconPaths = {
   home:     'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',
-  tasks:    'M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 0 2-2h2a2 2 0 0 0 2 2m-6 9 2 2 4-4',
-  browse:   'M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z',
   mycourse: 'M6 5h12a2 2 0 0 1 2 2v13l-6-3.2L9 20 3 17.3V7a2 2 0 0 1 2-2z',
+  history:  'M13 3a9 9 0 0 0-9 9H1l4 4 4-4H6a7 7 0 1 1 7 7 6.97 6.97 0 0 1-4.9-2L6.7 17.4A9 9 0 1 0 13 3zm-1 5v5l4.25 2.52.75-1.23-3.5-2.08V8H12z',
   back:     'M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z',
 }
 
@@ -22,10 +21,9 @@ const SidebarIcon = ({ id }) => (
 )
 
 const navItems = [
-  { id: 'home',     label: 'Overview',       path: BASE,                   end: true  },
-  { id: 'tasks',    label: 'My Tasks',        path: `${BASE}/my-tasks`,    end: false },
-  { id: 'browse',   label: 'Browse Courses',  path: `${BASE}/all-courses`, end: false },
-  { id: 'mycourse', label: 'My Courses',      path: `${BASE}/my-courses`,  end: false },
+  { id: 'home',     label: 'Dashboard',  path: BASE,                  end: true  },
+  { id: 'mycourse', label: 'Courses',    path: `${BASE}/my-courses`,  end: false },
+  { id: 'history',  label: 'History',    path: `${BASE}/history`,     end: false },
 ]
 
 function UserLmsSidebar() {

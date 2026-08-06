@@ -860,6 +860,12 @@ function JobLogDescription() {
   const [exportFrom, setExportFrom] = useState('') // 'YYYY-MM-DD' (inclusive)
   const [exportTo, setExportTo] = useState('')     // 'YYYY-MM-DD' (inclusive)
 
+  /* ── Delete-All guarded flow ─────────────────────────────── */
+  const [deleteStep, setDeleteStep] = useState(null) // null|'confirm1'|'password'|'confirm2'|'countdown'
+  const [deletePassword, setDeletePassword] = useState('')
+  const [deleteError, setDeleteError] = useState('')
+  const [deleteCountdown, setDeleteCountdown] = useState(5)
+
   // Rows whose entry date falls in the From–To range (both inclusive; blank
   // bound = open-ended). Rows with no entry date are excluded once a bound is
   // set; with both bounds blank, everything is exported.
@@ -1213,8 +1219,22 @@ function JobLogDescription() {
     }
   }
   /* ── Delete ALL entries ─────────────────────────────────── */
-  const handleDeleteAll = async () => {
-    if (!window.confirm(`Are you sure you want to DELETE ALL ${entries.length} entries?\n\nThis cannot be undone.`)) return
+  // Multi-step "Delete All" guard:
+  //   confirm1 → password → confirm2 → 5s undo countdown → actual delete.
+  // Opening the flow just sets the first step; each modal button advances it.
+  const handleDeleteAll = () => {
+    setDeletePassword(''); setDeleteError(''); setDeleteStep('confirm1')
+  }
+  const closeDelete = () => setDeleteStep(null)
+
+  const verifyDeletePassword = () => {
+    const stored = localStorage.getItem('adminPassword') || 'admin123'
+    if (deletePassword === stored) { setDeleteError(''); setDeleteStep('confirm2') }
+    else setDeleteError('Incorrect admin password. Please try again.')
+  }
+
+  // The real deletion — only reached if the undo window elapses without an undo.
+  const performDeleteAll = async () => {
     try {
       setLoading(true); setError(null)
       const res = await fetch(`${API_ENDPOINTS.JOB_LOG}/clear-all`, { method: 'DELETE' })
@@ -1229,6 +1249,17 @@ function JobLogDescription() {
       setLoading(false)
     }
   }
+
+  // 5-second undo countdown. Entering the 'countdown' step arms a 5s timer;
+  // leaving the step (Undo, or unmount) clears it so nothing gets deleted.
+  useEffect(() => {
+    if (deleteStep !== 'countdown') return
+    setDeleteCountdown(5)
+    const tick = setInterval(() => setDeleteCountdown(c => (c > 0 ? c - 1 : 0)), 1000)
+    const done = setTimeout(() => { setDeleteStep(null); performDeleteAll() }, 5000)
+    return () => { clearInterval(tick); clearTimeout(done) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deleteStep])
 
   const rv = v => v || '—'
 
@@ -2122,6 +2153,122 @@ function JobLogDescription() {
                   <Download size={16} /> Export CSV
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ DELETE-ALL GUARDED FLOW ═══════════════════════════════
+          confirm → admin password → confirm → 5s undo countdown → delete */}
+      {deleteStep && (
+        <div className="modal-overlay" style={{ zIndex: 2200 }}
+          onMouseDown={e => { if (e.target === e.currentTarget && deleteStep !== 'countdown') closeDelete() }}>
+          <div className="modal-content" style={{ maxWidth: 460 }}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 42, height: 42, borderRadius: 12,
+                  background: '#fdf2f3', border: '1px solid #ffd1d8', color: '#d7263d',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>{deleteStep === 'countdown' ? <Clock size={22} /> : <AlertTriangle size={22} />}</div>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: 20 }}>
+                    {deleteStep === 'confirm1' && 'Delete All Entries?'}
+                    {deleteStep === 'password' && 'Admin Password Required'}
+                    {deleteStep === 'confirm2' && 'Final Confirmation'}
+                    {deleteStep === 'countdown' && 'Deleting All Data…'}
+                  </h2>
+                  <p style={{ margin: 0, fontSize: 13, color: '#7a7a8c' }}>
+                    {deleteStep === 'countdown' ? 'You can still undo.' : `${entries.length} entries in the Job Log`}
+                  </p>
+                </div>
+              </div>
+              {deleteStep !== 'countdown' && (
+                <button className="close-modal-btn" onClick={closeDelete} style={{ display: 'inline-flex', alignItems: 'center' }}><X size={18} /></button>
+              )}
+            </div>
+
+            <div className="modal-form">
+              {/* Step 1 — first confirmation */}
+              {deleteStep === 'confirm1' && (
+                <>
+                  <p style={{ margin: '4px 0 0', fontSize: 14, color: '#3a3a44', lineHeight: 1.6 }}>
+                    Are you sure you want to delete <strong>ALL {entries.length}</strong> entries?
+                    This wipes the entire Job Log.
+                  </p>
+                  <div className="modal-actions">
+                    <button type="button" className="ghost-btn" onClick={closeDelete}>Cancel</button>
+                    <button type="button" className="primary-btn" onClick={() => { setDeleteError(''); setDeleteStep('password') }}>
+                      Continue
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {/* Step 2 — admin password */}
+              {deleteStep === 'password' && (
+                <>
+                  <label><span>Enter Admin Password</span>
+                    <input type="password" autoFocus value={deletePassword}
+                      placeholder="Admin password"
+                      onChange={e => { setDeletePassword(e.target.value); setDeleteError('') }}
+                      onKeyDown={e => { if (e.key === 'Enter') verifyDeletePassword() }} />
+                  </label>
+                  {deleteError && (
+                    <p style={{ margin: '2px 0 0', fontSize: 13, color: '#d7263d', fontWeight: 600 }}>{deleteError}</p>
+                  )}
+                  <div className="modal-actions">
+                    <button type="button" className="ghost-btn" onClick={closeDelete}>Cancel</button>
+                    <button type="button" className="primary-btn" onClick={verifyDeletePassword} disabled={!deletePassword}>
+                      Verify
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {/* Step 3 — final confirmation */}
+              {deleteStep === 'confirm2' && (
+                <>
+                  <p style={{ margin: '4px 0 0', fontSize: 14, color: '#3a3a44', lineHeight: 1.6 }}>
+                    Password verified. Do you really want to <strong>delete all {entries.length} entries</strong>?
+                    After you confirm, you'll get a 5-second window to undo.
+                  </p>
+                  <div className="modal-actions">
+                    <button type="button" className="ghost-btn" onClick={closeDelete}>No, keep data</button>
+                    <button type="button" onClick={() => setDeleteStep('countdown')}
+                      style={{
+                        background: '#d7263d', color: '#fff', border: 'none',
+                        padding: '10px 18px', borderRadius: 16, fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                        display: 'inline-flex', alignItems: 'center', gap: 8,
+                      }}>
+                      <Trash2 size={15} /> Yes, delete all
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {/* Step 4 — 5s undo countdown (only an Undo button) */}
+              {deleteStep === 'countdown' && (
+                <div style={{ textAlign: 'center', padding: '8px 0 4px' }}>
+                  <div style={{
+                    width: 88, height: 88, margin: '4px auto 14px', borderRadius: '50%',
+                    border: '4px solid #ffd1d8', color: '#d7263d',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 38, fontWeight: 800,
+                  }}>{deleteCountdown}</div>
+                  <p style={{ margin: '0 0 18px', fontSize: 14, color: '#3a3a44' }}>
+                    Deleting all data in <strong>{deleteCountdown}s</strong>… press Undo to cancel.
+                  </p>
+                  <button type="button" onClick={closeDelete}
+                    style={{
+                      background: '#1d814c', color: '#fff', border: 'none',
+                      padding: '12px 28px', borderRadius: 16, fontSize: 15, fontWeight: 700, cursor: 'pointer',
+                      display: 'inline-flex', alignItems: 'center', gap: 8,
+                    }}>
+                    <RefreshCw size={16} /> Undo
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
