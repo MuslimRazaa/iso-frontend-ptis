@@ -47,6 +47,8 @@ function UserLmsHome() {
           t.employee_name.toLowerCase().trim() === userFullName.toLowerCase().trim()
         )
 
+        const titleById = {}
+        const deadlineById = {}
         const enriched = await Promise.all(myTasks.map(async (task) => {
           let detail = {}
           try {
@@ -54,7 +56,9 @@ function UserLmsHome() {
             if (r.ok) detail = await r.json()
           } catch { /* ignore */ }
           const cp = progressList.find(p => p.course_id === task.course_id)
-          const st = computeCourseTests(detail, results, task.deadline)
+          const st = computeCourseTests(detail, results, task.deadline, task.created_at)
+          titleById[task.course_id] = detail.course_title || task.course_title || 'Course'
+          deadlineById[task.course_id] = task.deadline
           return {
             title: detail.course_title || task.course_title || 'Course',
             progress: cp?.progress_percentage || task.progress || 0,
@@ -87,11 +91,20 @@ function UserLmsHome() {
           ? Math.round(enriched.reduce((s, e) => s + (Number(e.progress) || 0), 0) / enriched.length)
           : 0)
 
-        const history = enriched
-          .filter(e => e.status.allDone)
-          .map(e => ({ title: e.title, passed: e.status.passedAll, overdue: e.status.overdue, date: e.status.lastSubmittedAt }))
-          .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
+        // Recent history from test_results (persists across re-assignment).
+        const history = (Array.isArray(results) ? results : [])
+          .slice()
+          .sort((a, b) => new Date(b.submitted_at || 0) - new Date(a.submitted_at || 0))
           .slice(0, 5)
+          .map(r => {
+            const deadline = deadlineById[r.course_id]
+            return {
+              title: titleById[r.course_id] || `Course #${r.course_id}`,
+              passed: !!r.passed,
+              overdue: deadline && r.submitted_at ? new Date(r.submitted_at) > new Date(deadline) : false,
+              date: r.submitted_at,
+            }
+          })
         setHistoryRows(history)
       } catch (e) {
         console.error('Dashboard error:', e)

@@ -6,9 +6,17 @@
 // Rule (per product decision): a course is "finished" once EVERY required test
 // has a result (pass or fail). Finished courses move to History; once any test
 // is attempted the course content is locked (no going back, no retake).
-export function computeCourseTests(courseDetail, allResults, deadline) {
+// `assignedSince` (optional): only count test results submitted on/after this
+// timestamp (the current task's created_at). This makes a re-assignment start
+// fresh — results from a previous assignment don't mark the new one as done —
+// while those old results still live on in History.
+export function computeCourseTests(courseDetail, allResults, deadline, assignedSince) {
   const courseId = courseDetail?.id;
-  const results = (allResults || []).filter(r => Number(r.course_id) === Number(courseId));
+  let results = (allResults || []).filter(r => Number(r.course_id) === Number(courseId));
+  if (assignedSince) {
+    const since = new Date(assignedSince);
+    if (!isNaN(since)) results = results.filter(r => r.submitted_at && new Date(r.submitted_at) >= since);
+  }
 
   // Latest result per standard.
   const byStd = {};

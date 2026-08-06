@@ -77,7 +77,8 @@ const MyCourses = () => {
           const dRes = await fetch(`${API_ENDPOINTS.COURSES}/${courseId}`);
           if (dRes.ok) detail = await dRes.json();
         } catch { /* fall back to list row */ }
-        const testStatus = computeCourseTests(detail, testResults, task.deadline);
+        // Gate on this assignment's start — a re-assigned course starts fresh.
+        const testStatus = computeCourseTests(detail, testResults, task.deadline, task.created_at);
 
         return {
           ...task,
