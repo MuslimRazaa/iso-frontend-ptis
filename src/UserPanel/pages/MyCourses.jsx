@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api';
 import { computeCourseTests } from '../utils/courseTests';
+import { Icon, C } from '../../UserLMS/lmsUI';
 
 const BASE = '/user/learning-management-system';
 
@@ -117,9 +118,9 @@ const MyCourses = () => {
   };
   const statusColor = (c) => {
     const l = statusLabel(c);
-    if (l === 'Completed') return '#1d814c';
-    if (l === 'In Progress') return '#c87e1c';
-    return '#7a7a8c';
+    if (l === 'Completed') return C.passed;
+    if (l === 'In Progress') return C.inProgress;
+    return C.notStarted;
   };
 
   // Start / continue the course (enroll on first start), then open it.
@@ -250,8 +251,8 @@ const MyCourses = () => {
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', flexDirection: 'column', gap: 16 }}>
-      <div style={{ width: 36, height: 36, border: '3px solid #f0e0e3', borderTopColor: '#d7263d', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-      <p style={{ color: '#7a7a8c', fontSize: 14 }}>Loading your courses…</p>
+      <div style={{ width: 36, height: 36, border: `3px solid ${C.line}`, borderTopColor: C.brand, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+      <p style={{ color: C.muted, fontSize: 14 }}>Loading your courses…</p>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
@@ -261,20 +262,21 @@ const MyCourses = () => {
       {toast && (
         <div style={{
           position: 'fixed', bottom: 32, left: '50%', transform: 'translateX(-50%)',
-          background: '#fff', border: '1px solid #c3ecd4', color: '#1d814c',
-          padding: '14px 28px', borderRadius: 12, zIndex: 9999, fontSize: 14,
-          fontWeight: 600, boxShadow: '0 8px 32px rgba(0,0,0,0.12)', maxWidth: 440, textAlign: 'center',
-        }}>✅ {toast}</div>
+          background: C.surface, border: `1px solid ${C.passed}44`, color: C.passed,
+          padding: '14px 24px', borderRadius: 12, zIndex: 9999, fontSize: 14,
+          fontWeight: 600, boxShadow: '0 8px 32px rgba(15,23,42,0.14)', maxWidth: 440, textAlign: 'center',
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}><Icon name="check" size={18} /> {toast}</div>
       )}
 
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-          <span style={{ width: 4, height: 20, borderRadius: 4, background: '#d7263d', flexShrink: 0 }} />
-          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: '#d7263d' }}>My Learning</span>
+          <span style={{ width: 4, height: 20, borderRadius: 4, background: C.brand, flexShrink: 0 }} />
+          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.16em', color: C.brand }}>My Learning</span>
         </div>
-        <h1 style={{ fontSize: 26, fontWeight: 800, color: '#1f1f27', margin: '0 0 6px' }}>My Courses</h1>
-        <p style={{ fontSize: 14, color: '#7a7a8c', margin: 0 }}>Start a course, then take its test — everything in one place.</p>
+        <h1 style={{ fontSize: 26, fontWeight: 800, color: C.ink, margin: '0 0 6px' }}>My Courses</h1>
+        <p style={{ fontSize: 14, color: C.muted, margin: 0 }}>Start a course, then take its test — everything in one place.</p>
       </div>
 
       {/* Filter tabs */}
@@ -283,9 +285,9 @@ const MyCourses = () => {
           {filters.map(f => (
             <button key={f.key} onClick={() => setFilter(f.key)} style={{
               padding: '8px 18px', borderRadius: 10,
-              border: filter === f.key ? '1px solid #d7263d' : '1px solid #e0e0e6',
-              background: filter === f.key ? '#fff0f2' : '#fff',
-              color: filter === f.key ? '#d7263d' : '#595966',
+              border: filter === f.key ? `1px solid ${C.brand}` : `1px solid ${C.border}`,
+              background: filter === f.key ? C.brandTint : C.surface,
+              color: filter === f.key ? C.brand : C.body,
               fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.18s',
             }}>
               {f.label} <span style={{ opacity: 0.6, marginLeft: 4 }}>({f.count})</span>
@@ -296,13 +298,13 @@ const MyCourses = () => {
 
       {/* Assigned / started courses */}
       {assignedCourses.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '56px 20px', background: '#fafafa', borderRadius: 16, border: '2px dashed #e0e0e6', marginBottom: 40 }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>📚</div>
-          <h3 style={{ color: '#1f1f27', marginBottom: 6 }}>No courses assigned yet</h3>
-          <p style={{ color: '#7a7a8c', fontSize: 14, margin: 0 }}>Browse the courses below and request access.</p>
+        <div style={{ textAlign: 'center', padding: '56px 20px', background: C.surface, borderRadius: 16, border: `2px dashed ${C.border}`, marginBottom: 40 }}>
+          <div style={{ display: 'inline-flex', color: C.muted, marginBottom: 14 }}><Icon name="bookOpen" size={44} /></div>
+          <h3 style={{ color: C.ink, marginBottom: 6 }}>No courses assigned yet</h3>
+          <p style={{ color: C.muted, fontSize: 14, margin: 0 }}>Browse the courses below and request access.</p>
         </div>
       ) : filteredAssigned.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '40px 20px', color: '#7a7a8c', fontSize: 14 }}>No courses in this category.</div>
+        <div style={{ textAlign: 'center', padding: '40px 20px', color: C.muted, fontSize: 14 }}>No courses in this category.</div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px,1fr))', gap: 20, marginBottom: 44 }}>
           {filteredAssigned.map(course => {
@@ -311,42 +313,41 @@ const MyCourses = () => {
             const started = course.isStarted;
             return (
               <div key={course.id} style={{
-                background: '#fff', border: '1px solid #e8e8ee', borderRadius: 18, overflow: 'hidden',
-                display: 'flex', flexDirection: 'column',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.04)', transition: 'all 0.22s ease',
+                background: C.surface, border: `1px solid ${C.border}`, borderRadius: 18, overflow: 'hidden',
+                display: 'flex', flexDirection: 'column', transition: 'all 0.22s ease',
               }}
-                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 14px 34px rgba(0,0,0,0.12)'; e.currentTarget.style.borderColor = '#d7263d44'; }}
-                onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'; e.currentTarget.style.borderColor = '#e8e8ee'; }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 14px 30px rgba(15,23,42,0.10)'; e.currentTarget.style.borderColor = C.muted; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = C.border; }}
               >
                 {/* Big centered banner image */}
-                <div style={{ position: 'relative', height: 168, background: 'linear-gradient(135deg,#f5f5f9,#e9e9f2)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                <div style={{ position: 'relative', height: 168, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                   {course.thumbnail
                     ? <img src={course.thumbnail} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onError={e => { e.currentTarget.style.display = 'none'; }} />
-                    : <span style={{ fontSize: 56 }}>📚</span>}
-                  <span style={{ position: 'absolute', top: 12, right: 12, fontSize: 11, fontWeight: 700, padding: '5px 12px', borderRadius: 999, background: '#fff', color: clr, border: `1px solid ${clr}55`, boxShadow: '0 2px 10px rgba(0,0,0,0.14)' }}>{label}</span>
+                    : <span style={{ color: C.muted }}><Icon name="bookOpen" size={52} /></span>}
+                  <span style={{ position: 'absolute', top: 12, right: 12, fontSize: 11, fontWeight: 700, padding: '5px 12px', borderRadius: 999, background: C.surface, color: clr, border: `1px solid ${clr}55`, boxShadow: '0 2px 8px rgba(15,23,42,0.10)' }}>{label}</span>
                 </div>
 
                 {/* Content */}
                 <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div>
-                  <p style={{ fontSize: 11, color: '#b0b0c0', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', margin: '0 0 4px' }}>{course.category}</p>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1f1f27', lineHeight: 1.35, margin: 0 }}>{course.course_title}</h3>
+                  <p style={{ fontSize: 11, color: C.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', margin: '0 0 4px' }}>{course.category}</p>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: C.ink, lineHeight: 1.35, margin: 0 }}>{course.course_title}</h3>
                 </div>
 
                 {/* Meta */}
-                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 12, color: '#7a7a8c' }}>📚 {course.creditHours}h</span>
-                  {course.deadline && <span style={{ fontSize: 12, color: '#7a7a8c' }}>📅 {new Date(course.deadline).toLocaleDateString()}</span>}
-                  {started && <span style={{ fontSize: 12, color: '#7a7a8c' }}>🎥 {fmt(course.videoSeconds)}</span>}
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', color: C.muted }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12 }}><Icon name="book" size={14} /> {course.creditHours}h</span>
+                  {course.deadline && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12 }}><Icon name="calendar" size={14} /> {new Date(course.deadline).toLocaleDateString()}</span>}
+                  {started && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12 }}><Icon name="video" size={14} /> {fmt(course.videoSeconds)}</span>}
                 </div>
 
                 {/* Progress */}
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <span style={{ fontSize: 11, color: '#b0b0c0' }}>Progress</span>
+                    <span style={{ fontSize: 11, color: C.muted }}>Progress</span>
                     <span style={{ fontSize: 11, fontWeight: 700, color: clr }}>{course.localProgress}%</span>
                   </div>
-                  <div style={{ height: 6, background: '#f0f0f5', borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{ height: 6, background: C.line, borderRadius: 3, overflow: 'hidden' }}>
                     <div style={{ height: '100%', width: `${course.localProgress}%`, background: clr, borderRadius: 3, transition: 'width 0.4s ease' }} />
                   </div>
                 </div>
@@ -356,24 +357,26 @@ const MyCourses = () => {
                   <button onClick={() => openCourse(course)} disabled={course.locked} title={course.locked ? 'Locked — test started' : ''} style={{
                     flex: 1, padding: '10px', borderRadius: 9, border: 'none',
                     cursor: course.locked ? 'not-allowed' : 'pointer',
-                    background: course.locked ? '#f6f6f8' : '#d7263d',
-                    color: course.locked ? '#b0b0c0' : '#fff', fontSize: 13, fontWeight: 700, transition: 'all 0.18s',
+                    background: course.locked ? C.bg : C.brand,
+                    color: course.locked ? C.muted : '#fff', fontSize: 13, fontWeight: 700, transition: 'all 0.18s',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                   }}
-                    onMouseEnter={e => { if (!course.locked) e.currentTarget.style.background = '#b81e30'; }}
-                    onMouseLeave={e => { if (!course.locked) e.currentTarget.style.background = '#d7263d'; }}
+                    onMouseEnter={e => { if (!course.locked) e.currentTarget.style.background = '#991b1b'; }}
+                    onMouseLeave={e => { if (!course.locked) e.currentTarget.style.background = C.brand; }}
                   >
-                    {course.locked ? '🔒 Locked' : started ? 'Continue' : 'Start Course'}
+                    {course.locked ? <><Icon name="lock" size={15} /> Locked</> : started ? <><Icon name="play" size={14} /> Continue</> : <><Icon name="play" size={14} /> Start Course</>}
                   </button>
                   <button onClick={() => openTest(course)} disabled={!started} title={started ? 'Take the test' : 'Start the course first'} style={{
                     flex: 1, padding: '10px', borderRadius: 9, cursor: started ? 'pointer' : 'not-allowed',
-                    border: `1px solid ${started ? '#d7263d' : '#e0e0e6'}`,
-                    background: started ? '#fff5f6' : '#f6f6f8',
-                    color: started ? '#d7263d' : '#b0b0c0', fontSize: 13, fontWeight: 700, transition: 'all 0.18s',
+                    border: `1px solid ${started ? C.brand : C.border}`,
+                    background: started ? C.brandTint : C.bg,
+                    color: started ? C.brand : C.muted, fontSize: 13, fontWeight: 700, transition: 'all 0.18s',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                   }}
-                    onMouseEnter={e => { if (started) e.currentTarget.style.background = '#ffe8ea'; }}
-                    onMouseLeave={e => { if (started) e.currentTarget.style.background = '#fff5f6'; }}
+                    onMouseEnter={e => { if (started) e.currentTarget.style.background = '#fde4e4'; }}
+                    onMouseLeave={e => { if (started) e.currentTarget.style.background = C.brandTint; }}
                   >
-                    {started ? 'Start Test' : '🔒 Test'}
+                    {started ? <><Icon name="test" size={15} /> Start Test</> : <><Icon name="lock" size={15} /> Test</>}
                   </button>
                 </div>
                 </div>
@@ -385,21 +388,21 @@ const MyCourses = () => {
 
       {/* ── Browse more courses ─────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '8px 0 20px' }}>
-        <h2 style={{ fontSize: 18, fontWeight: 800, color: '#1f1f27', margin: 0 }}>Browse more courses</h2>
-        <div style={{ flex: 1, height: 1, background: '#ececf0' }} />
+        <h2 style={{ fontSize: 18, fontWeight: 800, color: C.ink, margin: 0 }}>Browse more courses</h2>
+        <div style={{ flex: 1, height: 1, background: C.border }} />
       </div>
 
       {browseCourses.length > 4 && (
         <div style={{ marginBottom: 22, position: 'relative', maxWidth: 420 }}>
-          <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 15, color: '#b0b0c0', pointerEvents: 'none' }}>🔍</span>
+          <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: C.muted, pointerEvents: 'none', display: 'flex' }}><Icon name="search" size={16} /></span>
           <input type="text" placeholder="Search courses…" value={search} onChange={e => setSearch(e.target.value)}
-            style={{ width: '100%', padding: '11px 16px 11px 40px', background: '#fff', border: '1px solid #e0e0e6', borderRadius: 10, color: '#1f1f27', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+            style={{ width: '100%', padding: '11px 16px 11px 40px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, color: C.ink, fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
         </div>
       )}
 
       {filteredBrowse.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '40px 20px', color: '#7a7a8c', fontSize: 14 }}>
-          {browseCourses.length === 0 ? 'You are enrolled in all available courses. 🎉' : 'No courses match your search.'}
+        <div style={{ textAlign: 'center', padding: '40px 20px', color: C.muted, fontSize: 14 }}>
+          {browseCourses.length === 0 ? 'You are enrolled in all available courses.' : 'No courses match your search.'}
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px,1fr))', gap: 20 }}>
@@ -407,40 +410,40 @@ const MyCourses = () => {
             const pending = pendingRequests.has(course.id);
             return (
               <div key={course.id} style={{
-                background: '#fff', border: `1px solid ${pending ? '#ffe4c4' : '#e8e8ee'}`, borderRadius: 18, overflow: 'hidden',
-                display: 'flex', flexDirection: 'column', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', transition: 'all 0.22s ease',
+                background: C.surface, border: `1px solid ${pending ? `${C.overdue}55` : C.border}`, borderRadius: 18, overflow: 'hidden',
+                display: 'flex', flexDirection: 'column', transition: 'all 0.22s ease',
               }}
-                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 14px 30px rgba(0,0,0,0.1)'; }}
-                onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'; }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 14px 30px rgba(15,23,42,0.10)'; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = 'none'; }}
               >
                 {/* Big centered banner image */}
-                <div style={{ position: 'relative', height: 168, background: 'linear-gradient(135deg,#f5f5f9,#e9e9f2)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                <div style={{ position: 'relative', height: 168, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                   {course.course_thumbnail
                     ? <img src={thumbUrl(course.course_thumbnail)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onError={e => { e.currentTarget.style.display = 'none'; }} />
-                    : <span style={{ fontSize: 56 }}>📚</span>}
-                  {pending && <span style={{ position: 'absolute', top: 12, right: 12, fontSize: 11, fontWeight: 700, padding: '5px 12px', borderRadius: 999, background: '#fff', color: '#c87e1c', border: '1px solid #c87e1c55', boxShadow: '0 2px 10px rgba(0,0,0,0.14)' }}>Requested</span>}
+                    : <span style={{ color: C.muted }}><Icon name="bookOpen" size={52} /></span>}
+                  {pending && <span style={{ position: 'absolute', top: 12, right: 12, fontSize: 11, fontWeight: 700, padding: '5px 12px', borderRadius: 999, background: C.surface, color: C.overdue, border: `1px solid ${C.overdue}55`, boxShadow: '0 2px 8px rgba(15,23,42,0.10)' }}>Requested</span>}
                 </div>
 
                 {/* Content */}
                 <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 12, flex: 1 }}>
                 <div>
-                  <p style={{ fontSize: 11, color: '#b0b0c0', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', margin: '0 0 4px' }}>{course.course_category || 'General'}</p>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1f1f27', lineHeight: 1.35, margin: 0 }}>{course.course_title}</h3>
+                  <p style={{ fontSize: 11, color: C.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', margin: '0 0 4px' }}>{course.course_category || 'General'}</p>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: C.ink, lineHeight: 1.35, margin: 0 }}>{course.course_title}</h3>
                 </div>
                 {course.course_description && (
-                  <p style={{ fontSize: 13, color: '#7a7a8c', lineHeight: 1.5, margin: 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{course.course_description}</p>
+                  <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.5, margin: 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{course.course_description}</p>
                 )}
-                <div style={{ display: 'flex', gap: 14 }}>
-                  {course.credit_hours ? <span style={{ fontSize: 12, color: '#7a7a8c' }}>📚 {course.credit_hours}h</span> : null}
-                  {course.standard_name && <span style={{ fontSize: 12, color: '#7a7a8c' }}>📋 {course.standard_name}</span>}
+                <div style={{ display: 'flex', gap: 14, color: C.muted }}>
+                  {course.credit_hours ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12 }}><Icon name="book" size={14} /> {course.credit_hours}h</span> : null}
+                  {course.standard_name && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12 }}><Icon name="test" size={14} /> {course.standard_name}</span>}
                 </div>
                 <div style={{ marginTop: 'auto', paddingTop: 4 }}>
                   {pending ? (
-                    <button disabled style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #ffe4c4', background: '#fff8ef', color: '#c87e1c', fontSize: 13, fontWeight: 700, cursor: 'not-allowed' }}>⏳ Request Pending</button>
+                    <button disabled style={{ width: '100%', padding: '10px', borderRadius: 8, border: `1px solid ${C.overdue}44`, background: `${C.overdue}12`, color: C.overdue, fontSize: 13, fontWeight: 700, cursor: 'not-allowed', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}><Icon name="clock" size={15} /> Request Pending</button>
                   ) : (
-                    <button onClick={() => handleRequest(course)} style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #ffd1d8', background: '#fff5f6', color: '#d7263d', fontSize: 13, fontWeight: 700, cursor: 'pointer', transition: 'all 0.18s' }}
-                      onMouseEnter={e => e.currentTarget.style.background = '#ffe8ea'}
-                      onMouseLeave={e => e.currentTarget.style.background = '#fff5f6'}
+                    <button onClick={() => handleRequest(course)} style={{ width: '100%', padding: '10px', borderRadius: 8, border: `1px solid ${C.brand}44`, background: C.brandTint, color: C.brand, fontSize: 13, fontWeight: 700, cursor: 'pointer', transition: 'all 0.18s' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#fde4e4'}
+                      onMouseLeave={e => e.currentTarget.style.background = C.brandTint}
                     >Request Access</button>
                   )}
                 </div>
@@ -479,23 +482,23 @@ const MyCourses = () => {
                       // A test that's been taken (pass OR fail) is greyed out —
                       // no retake. Only untaken tests get a Start button.
                       const done = t.hasResult;
-                      const bg = t.hasPassed ? '#e8fff3' : done ? '#f6f6f8' : '#fafafb';
-                      const bd = t.hasPassed ? '#c3ecd4' : done ? '#e6e6ec' : '#ececf0';
+                      const bg = t.hasPassed ? `${C.passed}0f` : done ? C.bg : C.surface;
+                      const bd = t.hasPassed ? `${C.passed}44` : done ? C.border : C.border;
                       return (
                       <div key={t.standardId} style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
                         padding: '12px 14px', borderRadius: 12, background: bg, border: `1px solid ${bd}`,
-                        opacity: done && !t.hasPassed ? 0.75 : 1,
+                        opacity: done && !t.hasPassed ? 0.8 : 1,
                       }}>
                         <div>
-                          <div style={{ fontWeight: 700, color: '#1f1f27', fontSize: 14 }}>{t.label}</div>
-                          <div style={{ fontSize: 12.5, color: t.hasPassed ? '#1d814c' : done ? '#d7263d' : '#7a7a8c', marginTop: 2 }}>
+                          <div style={{ fontWeight: 700, color: C.ink, fontSize: 14 }}>{t.label}</div>
+                          <div style={{ fontSize: 12.5, color: t.hasPassed ? C.passed : done ? C.failed : C.muted, marginTop: 2 }}>
                             {t.hasPassed ? `Passed${t.score != null ? ` · ${t.score}%` : ''}` : done ? `Failed${t.score != null ? ` · ${t.score}%` : ''}` : 'Not attempted yet'}
                           </div>
                         </div>
                         {done ? (
-                          <span style={{ padding: '7px 14px', borderRadius: 999, background: t.hasPassed ? '#d4f8e3' : '#ececef', color: t.hasPassed ? '#1d814c' : '#8a8a95', fontWeight: 700, fontSize: 12.5 }}>
-                            {t.hasPassed ? '✓ Done' : 'Done'}
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 14px', borderRadius: 999, background: t.hasPassed ? `${C.passed}1a` : C.line, color: t.hasPassed ? C.passed : C.muted, fontWeight: 700, fontSize: 12.5 }}>
+                            {t.hasPassed && <Icon name="check" size={14} />} Done
                           </span>
                         ) : (
                           <button className="primary-btn" onClick={() => launchTest(t)} style={{ minWidth: 130 }}>

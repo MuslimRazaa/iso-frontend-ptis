@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api';
+import { Icon, C } from '../../UserLMS/lmsUI';
 
 // My History — a persistent log of every test the user has taken. Because it's
 // built from test_results (which are never deleted), removing/re-assigning a
@@ -56,61 +57,61 @@ const CourseHistory = () => {
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', flexDirection: 'column', gap: 16 }}>
-      <div style={{ width: 36, height: 36, border: '3px solid #f0e0e3', borderTopColor: '#d7263d', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-      <p style={{ color: '#7a7a8c', fontSize: 14 }}>Loading your history…</p>
+      <div style={{ width: 36, height: 36, border: `3px solid ${C.line}`, borderTopColor: C.brand, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+      <p style={{ color: C.muted, fontSize: 14 }}>Loading your history…</p>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 
   const Badge = ({ text, color }) => (
-    <span style={{ display: 'inline-block', padding: '4px 12px', borderRadius: 999, fontSize: 12, fontWeight: 700, background: `${color}15`, color, border: `1px solid ${color}44` }}>{text}</span>
+    <span style={{ display: 'inline-block', padding: '4px 12px', borderRadius: 999, fontSize: 12, fontWeight: 700, background: `${color}14`, color, border: `1px solid ${color}33` }}>{text}</span>
   );
 
   return (
     <div style={{ padding: 32, minHeight: '100%' }}>
       <div style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-          <span style={{ width: 4, height: 20, borderRadius: 4, background: '#d7263d', flexShrink: 0 }} />
-          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: '#d7263d' }}>My Learning</span>
+          <span style={{ width: 4, height: 20, borderRadius: 4, background: C.brand, flexShrink: 0 }} />
+          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.16em', color: C.brand }}>My Learning</span>
         </div>
-        <h1 style={{ fontSize: 26, fontWeight: 800, color: '#1f1f27', margin: '0 0 6px' }}>My History</h1>
-        <p style={{ fontSize: 14, color: '#7a7a8c', margin: 0 }}>Every test you've taken — kept even if a course is re-assigned.</p>
+        <h1 style={{ fontSize: 26, fontWeight: 800, color: C.ink, margin: '0 0 6px' }}>My History</h1>
+        <p style={{ fontSize: 14, color: C.muted, margin: 0 }}>Every test you've taken — kept even if a course is re-assigned.</p>
       </div>
 
       {rows.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '70px 20px', background: '#fafafa', borderRadius: 16, border: '2px dashed #e0e0e6' }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>🗂️</div>
-          <h3 style={{ color: '#1f1f27', marginBottom: 6 }}>No finished tests yet</h3>
-          <p style={{ color: '#7a7a8c', fontSize: 14, margin: 0 }}>Complete a course's test and it will appear here.</p>
+        <div style={{ textAlign: 'center', padding: '70px 20px', background: C.surface, borderRadius: 16, border: `2px dashed ${C.border}` }}>
+          <div style={{ display: 'inline-flex', color: C.muted, marginBottom: 14 }}><Icon name="folder" size={44} /></div>
+          <h3 style={{ color: C.ink, marginBottom: 6 }}>No finished tests yet</h3>
+          <p style={{ color: C.muted, fontSize: 14, margin: 0 }}>Complete a course's test and it will appear here.</p>
         </div>
       ) : (
-        <div style={{ background: '#fff', border: '1px solid #ececf0', borderRadius: 16, overflow: 'hidden' }}>
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, overflow: 'hidden' }}>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ background: '#fafafb' }}>
+                <tr style={{ background: C.bg }}>
                   {['Course', 'Result', 'Status', 'Score', 'Taken On'].map((h, i) => (
-                    <th key={h} style={{ textAlign: i > 0 ? 'center' : 'left', padding: '14px 20px', fontSize: 12, color: '#7a7a8c', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{h}</th>
+                    <th key={h} style={{ textAlign: i > 0 ? 'center' : 'left', padding: '14px 20px', fontSize: 12, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {rows.map(r => (
-                  <tr key={r.id} style={{ borderTop: '1px solid #ececf0' }}>
+                  <tr key={r.id} style={{ borderTop: `1px solid ${C.line}` }}>
                     <td style={{ padding: '16px 20px' }}>
-                      <div style={{ fontWeight: 700, color: '#1f1f27' }}>{r.title}</div>
-                      <div style={{ fontSize: 12, color: '#b0b0c0', textTransform: 'uppercase', letterSpacing: '0.6px', marginTop: 2 }}>{r.category}</div>
+                      <div style={{ fontWeight: 700, color: C.ink }}>{r.title}</div>
+                      <div style={{ fontSize: 12, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.6px', marginTop: 2 }}>{r.category}</div>
                     </td>
                     <td style={{ padding: '16px 20px', textAlign: 'center' }}>
-                      <Badge text={r.passed ? 'Pass' : 'Fail'} color={r.passed ? '#1d814c' : '#d7263d'} />
+                      <Badge text={r.passed ? 'Pass' : 'Fail'} color={r.passed ? C.passed : C.failed} />
                     </td>
                     <td style={{ padding: '16px 20px', textAlign: 'center' }}>
-                      <Badge text={r.overdue ? 'Overdue' : 'Completed'} color={r.overdue ? '#e08a1e' : '#1d814c'} />
+                      <Badge text={r.overdue ? 'Overdue' : 'Completed'} color={r.overdue ? C.overdue : C.passed} />
                     </td>
-                    <td style={{ padding: '16px 20px', textAlign: 'center', color: '#595966', fontWeight: 600 }}>
+                    <td style={{ padding: '16px 20px', textAlign: 'center', color: C.body, fontWeight: 600 }}>
                       {r.score != null ? `${Math.round(Number(r.score))}%` : '—'}
                     </td>
-                    <td style={{ padding: '16px 20px', textAlign: 'center', color: '#595966', whiteSpace: 'nowrap' }}>{fmtDate(r.date)}</td>
+                    <td style={{ padding: '16px 20px', textAlign: 'center', color: C.body, whiteSpace: 'nowrap' }}>{fmtDate(r.date)}</td>
                   </tr>
                 ))}
               </tbody>

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api';
 import PdfViewer from '../../components/PdfViewer';
+import { Icon } from '../../UserLMS/lmsUI';
 
 const CourseDetailUser = () => {
   const { courseId } = useParams();
@@ -40,6 +41,13 @@ const CourseDetailUser = () => {
   const videoWatchTimeRef = useRef(0);
   const pptViewTimeRef = useRef(0);
   const totalTimeSpentRef = useRef(0);
+
+  // Turn a multi-line admin text field (outcomes / syllabus) into a clean list.
+  const splitLines = (value) => (value || '')
+    .toString()
+    .split(/\r?\n/)
+    .map(s => s.replace(/^\s*[-•*]\s*/, '').trim())
+    .filter(Boolean);
 
   const normalizeBaseName = (value) => {
     return (value || '')
@@ -281,13 +289,17 @@ const CourseDetailUser = () => {
           rating: 4.5,
           totalRatings: 0,
           prerequisites: data.prerequisites || 'None',
-          learningOutcomes: [
-            'Complete the course objectives',
-            'Master the core concepts',
-            'Apply learned skills in real scenarios',
-            'Earn course completion certificate',
-          ],
-          syllabus: [],
+          // Admin-entered "What you'll learn" (one per line). Falls back to a
+          // generic list only when the course was created without outcomes.
+          learningOutcomes: splitLines(data.learning_outcomes).length > 0
+            ? splitLines(data.learning_outcomes)
+            : [
+                'Complete the course objectives',
+                'Master the core concepts',
+                'Apply learned skills in real scenarios',
+              ],
+          // Admin-entered syllabus (one topic per line).
+          syllabus: splitLines(data.syllabus),
           videos: videos,
           pdf_path: data.pdf_path || null,
           resources: data.primary_ppt ? [
@@ -1446,23 +1458,16 @@ const CourseDetailUser = () => {
                 <div className="syllabus-tab">
                   <h3>Course Curriculum</h3>
                   {course.syllabus && course.syllabus.length > 0 ? (
-                    <div className="syllabus-list">
-                      {course.syllabus.map((item, index) => (
-                        <div className="syllabus-item" key={index}>
-                          <div className="syllabus-header">
-                            <span className="week-badge">Week {item.week}</span>
-                            <h4>{item.title}</h4>
-                          </div>
-                          <ul className="topics-list">
-                            {item.topics.map((topic, i) => (
-                              <li key={i}>{topic}</li>
-                            ))}
-                          </ul>
-                        </div>
+                    <ol className="syllabus-topics">
+                      {course.syllabus.map((topic, index) => (
+                        <li key={index}>
+                          <span className="syllabus-topic-no">{index + 1}</span>
+                          <span className="syllabus-topic-text">{topic}</span>
+                        </li>
                       ))}
-                    </div>
+                    </ol>
                   ) : (
-                    <div style={{ padding: '2rem', textAlign: 'center', color: 'rgba(255, 255, 255, 0.6)' }}>
+                    <div className="tab-empty">
                       <p>Course curriculum will be available soon.</p>
                     </div>
                   )}
@@ -1471,73 +1476,52 @@ const CourseDetailUser = () => {
 
               {activeTab === 'resources' && (
                 <div className="resources-tab">
-                  {course.pdf_path ? (
-                    <>
-                      <PdfViewer pdfUrl={course.pdf_path} />
-                      <div style={{ marginTop: '20px', padding: '20px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
-                        <h3 style={{ marginBottom: '15px' }}>Additional Resources</h3>
-                        {course.resources && course.resources.length > 0 ? (
-                          <ul className="resources-list">
-                            {course.resources.map((resource, index) => (
-                              <li key={index}>
-                                <div className="resource-info">
-                                  <span className="resource-icon">📄</span>
-                                  <div>
-                                    <strong>{resource.name}</strong>
-                                    <span>{resource.size}</span>
-                                  </div>
-                                </div>
-                                {resource.url ? (
-                                  <button
-                                    className="resource-open-btn"
-                                    onClick={() => handlePPTviewer(resource.url)}
-                                  >
-                                    Open PPT
-                                  </button>
-                                ) : (
-                                  <span className="resource-open-btn disabled">No Link</span>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
+                  {(() => {
+                    // Course material is now a PDF (course.pdf_path). Legacy courses
+                    // may still only have a PPT under course.resources[].
+                    const materialUrl = course.pdf_path
+                      ? `${API_BASE_URL}${course.pdf_path}`
+                      : (course.resources && course.resources[0] && course.resources[0].url) || null;
+                    const isPdf = Boolean(course.pdf_path);
+
+                    if (!materialUrl) {
+                      return (
+                        <div className="tab-empty">
+                          <div className="tab-empty-icon"><Icon name="folder" size={40} /></div>
+                          <p>No course material has been added yet.</p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="material-card">
+                        <div className="material-head">
+                          <div className="material-head-left">
+                            <span className="material-icon"><Icon name="book" size={22} /></span>
+                            <div>
+                              <strong>Course Material</strong>
+                              <span>{isPdf ? 'PDF document' : 'Presentation'} · view only</span>
+                            </div>
+                          </div>
+                          <button
+                            className="resource-open-btn"
+                            onClick={() => handlePPTviewer(materialUrl)}
+                          >
+                            Open fullscreen
+                          </button>
+                        </div>
+                        {isPdf ? (
+                          <div className="material-viewer">
+                            <PdfViewer pdfUrl={course.pdf_path} />
+                          </div>
                         ) : (
-                          <p style={{ color: 'rgba(255, 255, 255, 0.6)' }}>No additional resources available.</p>
+                          <p className="material-note">
+                            Click “Open fullscreen” to view the presentation.
+                          </p>
                         )}
                       </div>
-                    </>
-                  ) : (
-                    <>
-                      <h3>Downloadable Resources</h3>
-                      {course.resources && course.resources.length > 0 ? (
-                        <ul className="resources-list">
-                          {course.resources.map((resource, index) => (
-                            <li key={index}>
-                              <div className="resource-info">
-                                <div>
-                                  <strong>{resource.name}</strong>
-                                  <span>{resource.size}</span>
-                                </div>
-                              </div>
-                              {resource.url ? (
-                                <button
-                                  className="resource-open-btn"
-                                  onClick={() => handlePPTviewer(resource.url)}
-                                >
-                                  Open in Browser
-                                </button>
-                              ) : (
-                                <span className="resource-open-btn disabled">No Link</span>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <div style={{ padding: '2rem', textAlign: 'center', color: 'rgba(255, 255, 255, 0.6)' }}>
-                          <p>No downloadable resources available yet.</p>
-                        </div>
-                      )}
-                    </>
-                  )}
+                    );
+                  })()}
                 </div>
               )}
             </div>
@@ -1560,7 +1544,7 @@ const CourseDetailUser = () => {
                   {course.videos?.length || 0} video lectures
                 </li>
                 <li>
-                  {course.resources?.length || 0} downloadable resources
+                  {(course.pdf_path ? 1 : 0) + (course.resources?.length || 0)} course material{((course.pdf_path ? 1 : 0) + (course.resources?.length || 0)) === 1 ? '' : 's'}
                 </li>
                 <li>
                   Access on mobile and desktop

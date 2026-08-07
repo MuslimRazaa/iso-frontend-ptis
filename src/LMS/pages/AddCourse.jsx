@@ -34,6 +34,8 @@ function AddCourse() {
     course_category: '',
     standard_id: '',
     prerequisites: '',
+    learning_outcomes: '',
+    syllabus: '',
     course_description: '',
     primary_ppt: null,
     course_videos: [],
@@ -147,6 +149,8 @@ function AddCourse() {
       if (formData.duration_weeks) data.append('duration_weeks', formData.duration_weeks)
       if (formData.course_owner) data.append('course_owner', formData.course_owner)
       if (formData.prerequisites) data.append('prerequisites', formData.prerequisites)
+      if (formData.learning_outcomes) data.append('learning_outcomes', formData.learning_outcomes)
+      if (formData.syllabus) data.append('syllabus', formData.syllabus)
       if (formData.primary_ppt) data.append('primary_ppt', formData.primary_ppt)
 
       // Add course videos
@@ -356,8 +360,32 @@ function AddCourse() {
         </label>
 
         <label>
+          <span>What You'll Learn (Learning Outcomes)</span>
+          <textarea
+            name="learning_outcomes"
+            rows="4"
+            placeholder="One outcome per line, e.g.&#10;Understand the ISO 9001 requirements&#10;Perform an internal audit&#10;Prepare corrective actions"
+            value={formData.learning_outcomes}
+            onChange={handleInputChange}
+          ></textarea>
+          <small style={{ color: '#7a7a8c', fontSize: 12 }}>One point per line — shown on the course Overview tab.</small>
+        </label>
+
+        <label>
+          <span>Course Syllabus</span>
+          <textarea
+            name="syllabus"
+            rows="5"
+            placeholder="One topic per line, e.g.&#10;Introduction & scope&#10;Key clauses and terminology&#10;Documentation requirements&#10;Audit & review"
+            value={formData.syllabus}
+            onChange={handleInputChange}
+          ></textarea>
+          <small style={{ color: '#7a7a8c', fontSize: 12 }}>One topic per line — shown on the course Syllabus tab.</small>
+        </label>
+
+        <label>
           <span>Course Description *</span>
-          <textarea 
+          <textarea
             name="course_description"
             rows="5" 
             placeholder="Describe objectives, learning outcomes, and key topics covered"
