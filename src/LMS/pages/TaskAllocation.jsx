@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react'
-import { Video, FileText, Trash2, Inbox, Info } from 'lucide-react'
+import { Video, FileText, Trash2, Inbox, Info, RotateCcw } from 'lucide-react'
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api'
 
 function TaskAllocation() {
   const [tasks, setTasks] = useState([])
   const [employees, setEmployees] = useState([])
   const [courses, setCourses] = useState([])
+  const [standardById, setStandardById] = useState({})
+  const [resultsByEmail, setResultsByEmail] = useState({})
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [activeTab, setActiveTab] = useState('allocations') // 'allocations' | 'requests'
@@ -24,25 +26,81 @@ function TaskAllocation() {
   const fetchAllData = async () => {
     try {
       setLoading(true)
-      const [tasksRes, employeesRes, coursesRes] = await Promise.all([
+      const [tasksRes, employeesRes, coursesRes, standardsRes] = await Promise.all([
         fetch(API_ENDPOINTS.TASK_ALLOCATIONS),
         fetch(API_ENDPOINTS.EMPLOYEES),
         fetch(API_ENDPOINTS.COURSES),
+        fetch(API_ENDPOINTS.STANDARDS).catch(() => null),
       ])
 
       const tasksData = await tasksRes.json()
       const employeesData = await employeesRes.json()
       const coursesData = await coursesRes.json()
+      const standardsData = standardsRes?.ok ? await standardsRes.json() : []
+
+      // Map standard id → name so per-test rows can be labelled.
+      const stdMap = {}
+      ;(Array.isArray(standardsData) ? standardsData : []).forEach(s => { stdMap[s.id] = s })
+
+      // Fetch each employee's test results once (keyed by email) so we can show
+      // real per-course status + pass/fail/score, not the stale task columns.
+      const emails = [...new Set((Array.isArray(tasksData) ? tasksData : []).map(t => t.employee_email).filter(Boolean))]
+      const entries = await Promise.all(emails.map(async (email) => {
+        try {
+          const r = await fetch(`${API_BASE_URL}/api/test-results/user/${encodeURIComponent(email)}`)
+          const j = r.ok ? await r.json() : { data: [] }
+          return [email, Array.isArray(j.data) ? j.data : []]
+        } catch { return [email, []] }
+      }))
+      const resMap = {}
+      entries.forEach(([email, rows]) => { resMap[email] = rows })
 
       setTasks(tasksData)
       setEmployees(employeesData)
       setCourses(coursesData)
+      setStandardById(stdMap)
+      setResultsByEmail(resMap)
     } catch (error) {
       console.error('Error fetching data:', error)
       alert('Failed to load data. Please try again.')
     } finally {
       setLoading(false)
     }
+  }
+
+  // Real per-task status/progress from course_progress + test_results, scoped to
+  // this assignment (results after ta.created_at) so a re-assign reads fresh.
+  const computeTaskStatus = (task) => {
+    const results = (resultsByEmail[task.employee_email] || []).filter(r =>
+      Number(r.course_id) === Number(task.course_id) &&
+      r.submitted_at && new Date(r.submitted_at) >= new Date(task.created_at)
+    )
+    // Latest result per standard.
+    const byStd = {}
+    results.forEach(r => {
+      const prev = byStd[r.standard_id]
+      if (!prev || new Date(r.submitted_at) > new Date(prev.submitted_at)) byStd[r.standard_id] = r
+    })
+    const tests = Object.values(byStd).map(r => ({
+      standardId: r.standard_id,
+      name: standardById[r.standard_id]?.standard_name || `Standard #${r.standard_id}`,
+      passed: !!r.passed,
+      score: r.score_percentage,
+    }))
+    const requiredCount = Number(task.linked_standards_count) > 0
+      ? Number(task.linked_standards_count)
+      : ((task.general_standard_id && task.specific_standard_id) ? 2 : 1)
+    const doneCount = tests.length
+    const allDone = requiredCount > 0 && doneCount >= requiredCount
+    const passedAll = allDone && tests.every(t => t.passed)
+    const progress = task.live_progress != null ? Number(task.live_progress) : (task.progress || 0)
+    const overdue = !allDone && task.deadline && new Date() > new Date(task.deadline)
+    let label, color
+    if (allDone) { label = passedAll ? 'Completed · Passed' : 'Completed · Failed'; color = passedAll ? '#16a34a' : '#dc2626' }
+    else if (overdue) { label = 'Overdue'; color = '#d97706' }
+    else if (doneCount > 0 || progress > 0) { label = 'In Progress'; color = '#2563eb' }
+    else { label = 'Not Started'; color = '#64748b' }
+    return { label, color, progress, tests, requiredCount, doneCount, allDone, passedAll }
   }
 
   const fetchCourseRequests = async () => {
@@ -138,6 +196,29 @@ function TaskAllocation() {
       console.error('Error approving request:', error)
       alert('Failed to approve. Please assign manually.')
     }
+  }
+
+  // Reassign the same course to the same employee. We remove the old assignment
+  // first — its DELETE resets the user's course progress so the course truly
+  // restarts from scratch — then open the assign modal prefilled to create a
+  // fresh task. The user's History (test_results) is kept regardless.
+  const handleReassign = async (task) => {
+    if (!window.confirm(`Reassign "${task.course_title}" to ${task.employee_name}? The course will restart from scratch (their past result stays in History).`)) return
+    try {
+      await fetch(`${API_ENDPOINTS.TASK_ALLOCATIONS}/${task.id}`, { method: 'DELETE' })
+    } catch (e) {
+      console.error('Failed to clear old assignment:', e)
+    }
+    const emp = employees.find(
+      (e) => e.full_name?.toLowerCase().trim() === task.employee_name?.toLowerCase().trim()
+    )
+    setFormData({
+      employee_id: emp ? String(emp.id) : '',
+      course_id: task.course_id ? String(task.course_id) : '',
+      deadline: '',
+    })
+    await fetchAllData()
+    setShowModal(true)
   }
 
   const handleDelete = async (id) => {
@@ -248,8 +329,7 @@ function TaskAllocation() {
                 <th>Assigned</th>
                 <th>Deadline</th>
                 <th>Progress</th>
-                <th>Hours</th>
-                <th>Time Tracked</th>
+                <th>Tests (Result)</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -257,25 +337,15 @@ function TaskAllocation() {
             <tbody>
               {tasks.length === 0 ? (
                 <tr>
-                  <td colSpan="9" style={{ textAlign: 'center', padding: '40px' }}>
+                  <td colSpan="8" style={{ textAlign: 'center', padding: '40px' }}>
                     No task allocations found. Create one to get started.
                   </td>
                 </tr>
               ) : (
                 tasks.map((task) => {
-                  // Try to get local time tracking data for this employee+course
-                  const progressKey = `progress_${task.employee_email || ''}_${task.course_id || ''}`
-                  const localData = (() => {
-                    try {
-                      return JSON.parse(localStorage.getItem(progressKey) || 'null')
-                    } catch { return null }
-                  })()
-                  const trackedSeconds = localData
-                    ? (localData.videoSeconds || 0) + (localData.pptSeconds || 0)
-                    : 0
-
+                  const st = computeTaskStatus(task)
                   return (
-                    <tr key={task.id} className={task.status === 'Overdue' ? 'overdue-row' : ''}>
+                    <tr key={task.id} className={st.label === 'Overdue' ? 'overdue-row' : ''}>
                       <td>
                         <strong>{task.employee_name}</strong>
                       </td>
@@ -285,38 +355,52 @@ function TaskAllocation() {
                       <td>
                         <div className="progress-cell">
                           <div className="mini-progress-bar">
-                            <div
-                              className="mini-progress-fill"
-                              style={{ width: `${task.progress}%` }}
-                            />
+                            <div className="mini-progress-fill" style={{ width: `${st.progress}%` }} />
                           </div>
-                          <span>{task.progress}%</span>
+                          <span>{st.progress}%</span>
                         </div>
                       </td>
                       <td>
-                        {task.completed_hours} / {task.total_hours}
-                      </td>
-                      <td>
-                        <div style={{ fontSize: '13px' }}>
-                          {trackedSeconds > 0 ? (
-                            <>
-                              <div><Video size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} /> {formatHours(localData?.videoSeconds || 0)}</div>
-                              <div style={{ color: '#888', marginTop: '2px' }}>
-                                <FileText size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} /> {formatHours(localData?.pptSeconds || 0)}
+                        {st.tests.length === 0 ? (
+                          <span style={{ color: '#94a3b8', fontSize: 13 }}>{st.doneCount} / {st.requiredCount} taken</span>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            {st.tests.map((t) => (
+                              <div key={t.standardId} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                                <span style={{ color: '#334155' }}>{t.name}</span>
+                                <span style={{
+                                  padding: '2px 8px', borderRadius: 999, fontWeight: 700, fontSize: 11,
+                                  background: t.passed ? '#dcfce7' : '#fee2e2',
+                                  color: t.passed ? '#16a34a' : '#dc2626',
+                                }}>
+                                  {t.passed ? 'Pass' : 'Fail'}{t.score != null ? ` · ${Math.round(Number(t.score))}%` : ''}
+                                </span>
                               </div>
-                            </>
-                          ) : (
-                            <span style={{ color: '#555' }}>Not started</span>
-                          )}
-                        </div>
+                            ))}
+                            {st.doneCount < st.requiredCount && (
+                              <span style={{ color: '#94a3b8', fontSize: 12 }}>{st.doneCount} / {st.requiredCount} tests taken</span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td>
-                        <span className={`status-badge ${getStatusColor(task.status)}`}>
-                          {task.status}
+                        <span style={{
+                          display: 'inline-block', padding: '4px 12px', borderRadius: 999,
+                          fontSize: 12, fontWeight: 700,
+                          background: `${st.color}18`, color: st.color, border: `1px solid ${st.color}44`,
+                        }}>
+                          {st.label}
                         </span>
                       </td>
                       <td>
                         <div className="action-buttons">
+                          <button
+                            className="action-btn"
+                            onClick={() => handleReassign(task)}
+                            title="Reassign this course (fresh start)"
+                          >
+                            <RotateCcw size={16} />
+                          </button>
                           <button
                             className="action-btn delete"
                             onClick={() => handleDelete(task.id)}

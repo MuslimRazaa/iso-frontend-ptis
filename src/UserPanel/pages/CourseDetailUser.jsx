@@ -1027,7 +1027,7 @@ const CourseDetailUser = () => {
                 cursor: isEnrolled ? 'not-allowed' : 'pointer'
               }}
             >
-              {enrollmentLoading ? 'Starting...' : isEnrolled ? 'Course Started ✓' : 'Start Learning'}
+              {enrollmentLoading ? 'Starting...' : isEnrolled ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="check" size={16} /> Course Started</span> : 'Start Learning'}
             </button>
             <button className="ghost-btn large" onClick={() => navigate('/user/learning-management-system/my-courses')}>
               View All My Courses
@@ -1057,7 +1057,7 @@ const CourseDetailUser = () => {
                     Select test to start first
                   </div>
                   <div style={{ fontSize: '0.8rem', opacity: 0.9 }}>
-                    Course complete tab hoga jab tamam required tests pass ho jaayen.
+                    The course is complete once all required tests are passed.
                   </div>
                 </div>
 
@@ -1123,9 +1123,10 @@ const CourseDetailUser = () => {
                 borderRadius: '10px',
                 color: '#a7f3d0',
                 fontWeight: '700',
-                textAlign: 'center'
+                textAlign: 'center',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
               }}>
-                ✅ All required tests completed
+                <Icon name="check" size={16} /> All required tests completed
               </div>
             )}
             
@@ -1139,8 +1140,8 @@ const CourseDetailUser = () => {
                 borderRadius: '10px',
                 textAlign: 'center'
               }}>
-                <div style={{ fontSize: '0.9rem', color: '#fbbf24', marginBottom: '0.5rem' }}>
-                  📚 Complete course to unlock test
+                <div style={{ fontSize: '0.9rem', color: '#fbbf24', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  <Icon name="book" size={16} /> Complete course to unlock test
                 </div>
                 <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.7)' }}>
                   {testUnlockInfo.reason}
@@ -1435,7 +1436,7 @@ const CourseDetailUser = () => {
                     <ul className="outcomes-list">
                       {course.learningOutcomes.map((outcome, index) => (
                         <li key={index}>
-                          <span className="check-icon">✓</span>
+                          <span className="check-icon"><Icon name="check" size={14} /></span>
                           {outcome}
                         </li>
                       ))}
@@ -1581,22 +1582,19 @@ const CourseDetailUser = () => {
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 padding: '12px 20px', borderBottom: '1px solid #e8e8ee', flexShrink: 0 }}>
-                <span style={{ fontWeight: 700, color: '#1f1f27', fontSize: 15 }}>📄 Course Presentation</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 700, color: '#1f1f27', fontSize: 15 }}><Icon name="book" size={17} /> Course Presentation</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: '#9a9aaa' }}>🔒 View only</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: '#9a9aaa' }}><Icon name="lock" size={13} /> View only</span>
                   <button className="close-btn" onClick={handleClosePPTModal}>✕</button>
                 </span>
               </div>
 
               {isPdf ? (
-                /* Browsers render PDF natively — works on local and live */
-                <iframe
-                  src={`${url}#toolbar=0&navpanes=0`}
-                  frameBorder="0"
-                  width="100%"
-                  style={{ flex: 1, minHeight: 500, border: 'none' }}
-                  title="PPT Viewer"
-                />
+                /* Fullscreen view-only canvas render (react-pdf) — all pages, fit
+                   to width, no browser toolbar (no download / print / new tab). */
+                <div style={{ flex: 1, minHeight: 0, overflow: 'auto', background: '#f4f5f7' }}>
+                  <PdfViewer pdfUrl={url} variant="fullscreen" />
+                </div>
               ) : isLocalUrl ? (
                 /* PPT/PPTX on a non-public server cannot be previewed inline */
                 <div style={{
@@ -1604,14 +1602,14 @@ const CourseDetailUser = () => {
                   alignItems: 'center', justifyContent: 'center', textAlign: 'center',
                   padding: '40px', gap: 16, background: '#faf9fb'
                 }}>
-                  <div style={{ fontSize: 46 }}>📊</div>
+                  <div style={{ color: '#9a9aaa', marginBottom: 4 }}><Icon name="book" size={44} /></div>
                   <h3 style={{ margin: 0, color: '#1f1f27', fontSize: 18 }}>
-                    Presentation preview live server par available hai
+                    Presentation preview is available on the live server
                   </h3>
                   <p style={{ margin: 0, color: '#6b6b78', maxWidth: 460, fontSize: 14, lineHeight: 1.6 }}>
-                    PPT ko inline dikhane ke liye online viewer ko ek public URL chahiye.
-                    Local/development server (localhost) us viewer se reachable nahi hota —
-                    live site par presentation isi modal me khulegi.
+                    Showing this presentation inline needs a public URL for the online viewer.
+                    A local/development server (localhost) isn't reachable by that viewer —
+                    on the live site the presentation opens right here in this modal.
                   </p>
                 </div>
               ) : (

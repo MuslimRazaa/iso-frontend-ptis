@@ -9,6 +9,23 @@ const BASE = '/user/learning-management-system';
 // course_thumbnail is stored as "/uploads/…"; build a clean URL (no double slash).
 const thumbUrl = (path) => path ? `${API_BASE_URL}/${String(path).replace(/^\/+/, '')}` : null;
 
+// Has the user started (armed) a test for this course's CURRENT assignment? The
+// Testing module drops a marker `ptis_active_test_<courseId>_<standardId>_<sinceMs>`
+// the moment a course test begins. If one exists, the course content locks even
+// before a result is recorded. Scoped by assignment so a re-assign is a clean slate.
+const courseHasActiveTest = (courseId, createdAt) => {
+  const sinceMs = createdAt ? new Date(createdAt).getTime() : 0;
+  const prefix = `ptis_active_test_${courseId}_`;
+  const suffix = `_${sinceMs}`;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(prefix) && k.endsWith(suffix)) return true;
+    }
+  } catch { /* ignore */ }
+  return false;
+};
+
 // Unified "My Courses" — one place for everything:
 //   • Top: courses assigned to / started by the user (Start Course + Start Test).
 //   • Bottom: "Browse more" — every other published course (request access).
@@ -41,6 +58,51 @@ const MyCourses = () => {
     setPendingRequests(new Set(reqs.map(r => r.courseId)));
   };
 
+  // Turn abandoned course-test markers into recorded FAILs. The Testing module
+  // arms a marker when a course test starts; if the user leaves/refreshes without
+  // finishing, no result gets recorded there (to avoid client races). My Courses
+  // is the single authority: on load, any armed marker without a matching result
+  // becomes a fail (score 0) here — awaited — and pushed into `results` so the
+  // course completes and moves to History/Browse in the same render.
+  const reconcileAbandonedTests = async (results) => {
+    const keys = [];
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('ptis_active_test_')) keys.push(k);
+      }
+    } catch { return; }
+    for (const key of keys) {
+      const parts = key.slice('ptis_active_test_'.length).split('_');
+      if (parts.length < 3) { localStorage.removeItem(key); continue; }
+      const sinceMs = Number(parts.pop());
+      const standardId = Number(parts.pop());
+      const courseId = Number(parts.join('_'));
+      if (!courseId || !standardId) { localStorage.removeItem(key); continue; }
+      const has = results.some(r =>
+        Number(r.course_id) === courseId &&
+        Number(r.standard_id) === standardId &&
+        (!sinceMs || (r.submitted_at && new Date(r.submitted_at).getTime() >= sinceMs))
+      );
+      if (has) { localStorage.removeItem(key); continue; }
+      try {
+        await fetch(`${API_BASE_URL}/api/test-results/submit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_email: userEmail, course_id: courseId, standard_id: standardId,
+            total_questions: 0, correct_answers: 0, score_percentage: 0,
+            passed: false, test_duration_seconds: 0, answers_data: {},
+          }),
+        });
+        results.push({ course_id: courseId, standard_id: standardId, passed: 0, score_percentage: 0, submitted_at: new Date().toISOString() });
+        localStorage.removeItem(key);
+      } catch {
+        /* leave the marker so we retry on the next load */
+      }
+    }
+  };
+
   const fetchData = async () => {
     try {
       const [tasksRes, coursesRes, progressRes, resultsRes] = await Promise.all([
@@ -54,11 +116,23 @@ const MyCourses = () => {
       const progressList = progressRes?.ok ? (await progressRes.json()).data || [] : [];
       const testResults = resultsRes?.ok ? ((await resultsRes.json()).data || []) : [];
 
+      // Record any abandoned test attempts as fails before deciding what's done.
+      await reconcileAbandonedTests(testResults);
+
       const myTasks = allTasks.filter(t =>
         t.employee_name && userFullName &&
         t.employee_name.toLowerCase().trim() === userFullName.toLowerCase().trim()
       );
-      const assignedTitles = new Set(myTasks.map(t => t.course_title?.toLowerCase()));
+
+      // A pending request is "fulfilled" once a task exists for that course — clear
+      // those from localStorage so a finished (re-appeared) course can be requested
+      // again instead of being stuck on "Request Pending".
+      const assignedCourseIds = new Set(myTasks.map(t => t.course_id));
+      const reqKey = `courseRequests_${userEmail}`;
+      const storedReqs = JSON.parse(localStorage.getItem(reqKey) || '[]');
+      const prunedReqs = storedReqs.filter(r => !assignedCourseIds.has(r.courseId));
+      if (prunedReqs.length !== storedReqs.length) localStorage.setItem(reqKey, JSON.stringify(prunedReqs));
+      setPendingRequests(new Set(prunedReqs.map(r => r.courseId)));
 
       // Assigned / started courses. Each course's test status decides whether it
       // stays here or has moved to History (all tests done), and whether its
@@ -93,15 +167,24 @@ const MyCourses = () => {
           isStarted: !!apiProgress,
           localProgress: apiProgress?.progress_percentage || task.progress || 0,
           allDone: testStatus.allDone,       // every test taken → belongs in History
-          locked: testStatus.anyStarted,     // a test started → course content locked
+          // A test has a result OR one is mid-attempt (marker) → content locked.
+          locked: testStatus.anyStarted || courseHasActiveTest(courseId, task.created_at),
         };
       }));
-      // Finished courses live in History, not here.
-      setAssignedCourses(enriched.filter(c => !c.allDone));
+      // Finished courses leave My Courses (they live in History now).
+      const active = enriched.filter(c => !c.allDone);
+      setAssignedCourses(active);
 
-      // Browse-more = published courses NOT already assigned to the user.
-      const published = allCourses.filter(c => c.is_published === true || c.is_published === 1);
-      setBrowseCourses(published.filter(c => !assignedTitles.has(c.course_title?.toLowerCase())));
+      // Browse-more = every course the user can request that they aren't ACTIVELY
+      // doing. That's all published courses PLUS any course they just finished
+      // (so a completed course reappears here to request again — even if it isn't
+      // published), minus the ones still active in My Courses.
+      const activeTitles = new Set(active.map(c => c.course_title?.toLowerCase()));
+      const finishedCourseIds = new Set(enriched.filter(c => c.allDone).map(c => c.courseId));
+      const browsePool = allCourses.filter(c =>
+        c.is_published === true || c.is_published === 1 || finishedCourseIds.has(c.id)
+      );
+      setBrowseCourses(browsePool.filter(c => !activeTitles.has(c.course_title?.toLowerCase())));
     } catch (e) {
       console.error('Error fetching courses:', e);
     } finally {
@@ -127,7 +210,7 @@ const MyCourses = () => {
   const openCourse = async (course) => {
     if (!course.courseId) { showToast('Course details not available. Contact your administrator.'); return; }
     // Once a test has been started the course content is locked — no going back.
-    if (course.locked) { showToast('Test start ho chuka hai — ab course content locked hai. Baqi test complete karein.'); return; }
+    if (course.locked) { showToast('A test has already been started — the course content is now locked. Complete the remaining test(s).'); return; }
     if (!course.isStarted) {
       try {
         await fetch(API_ENDPOINTS.COURSE_PROGRESS, {
@@ -155,7 +238,10 @@ const MyCourses = () => {
       const courseData = courseRes.ok ? await courseRes.json() : {};
       const resultsJson = resultsRes?.ok ? await resultsRes.json() : { data: [] };
       const results = Array.isArray(resultsJson.data) ? resultsJson.data : [];
-      setTestList(buildTests(course.courseId, courseData, results));
+      // Scope to THIS assignment (same boundary the card uses) so the chooser and
+      // the card agree on what's done — otherwise a result from a previous
+      // assignment greys out a test the card still considers pending (deadlock).
+      setTestList(buildTests(course.courseId, courseData, results, course.created_at));
     } catch (e) {
       console.error('Error loading tests:', e);
       setTestList([]);
@@ -165,8 +251,14 @@ const MyCourses = () => {
   };
 
   // Build one test entry per linked standard, with the user's latest result.
-  const buildTests = (courseId, courseData, results) => {
-    const courseResults = results.filter(r => Number(r.course_id) === Number(courseId));
+  // `assignedSince` (task.created_at) scopes results to the current assignment so
+  // a re-assigned course starts fresh and stays consistent with the card.
+  const buildTests = (courseId, courseData, results, assignedSince) => {
+    const sinceMs = assignedSince ? new Date(assignedSince).getTime() : 0;
+    const courseResults = results.filter(r =>
+      Number(r.course_id) === Number(courseId) &&
+      (!sinceMs || (r.submitted_at && new Date(r.submitted_at).getTime() >= sinceMs))
+    );
     const byStd = {};
     courseResults.forEach(r => { if (!byStd[r.standard_id]) byStd[r.standard_id] = r; });
 
@@ -199,6 +291,8 @@ const MyCourses = () => {
       standardType: String(t.standardType || ''),
       standard: t.standardName || '',
       from: 'course',
+      // Scope the attempt to this assignment so a re-assign starts fresh.
+      assignedSince: testModal.course?.created_at || '',
     });
     navigate(`/user/testing?${params.toString()}`);
   };
@@ -474,7 +568,7 @@ const MyCourses = () => {
                 <>
                   {testList.length > 1 && (
                     <p style={{ margin: '0 0 14px', fontSize: 13, color: '#595966' }}>
-                      Is course me <strong>{testList.length} tests</strong> hain — jo pehle dena ho choose karein.
+                      This course has <strong>{testList.length} tests</strong> — choose which one to take first.
                     </p>
                   )}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

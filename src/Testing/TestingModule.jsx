@@ -3,6 +3,7 @@ import {
   LogIn,
   User,
   Clock,
+  Lock,
   FileText,
   CheckCircle,
   XCircle,
@@ -295,8 +296,8 @@ const HomePage = React.memo(({
               <label className="form-label">
                 Test Standard
                 {isStandardLocked && (
-                  <span style={{ marginLeft: 8, fontSize: '0.78em', color: '#9ad0ff', fontWeight: 600 }}>
-                    🔒 Selected from your course
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginLeft: 8, fontSize: '0.78em', color: '#9ad0ff', fontWeight: 600 }}>
+                    <Lock size={12} /> Selected from your course
                   </span>
                 )}
               </label>
@@ -475,6 +476,29 @@ const TestingModule = () => {
   const fromCourse = searchParams.get('from') === 'course';
   const lmsCourseId = searchParams.get('courseId');
   const lmsStandardId = searchParams.get('standardId');
+  // Current assignment boundary (task.created_at) — scopes the attempt marker &
+  // the "already attempted" check so a re-assigned course starts fresh.
+  const lmsAssignedSince = searchParams.get('assignedSince') || '';
+  const lmsAssignedSinceMs = lmsAssignedSince ? new Date(lmsAssignedSince).getTime() : 0;
+
+  // ── Course-test integrity ────────────────────────────────────────────────
+  // A course test may be taken ONCE. The moment it starts we drop a local marker.
+  // If the user then leaves / refreshes / closes the window, they're sent back to
+  // the course and can't re-open the test; My Courses turns that abandoned marker
+  // into a recorded FAIL (it is the single authority for abandon-fails, which
+  // avoids client-side races/duplicates). The marker is scoped to this assignment
+  // so a re-assignment (new created_at) is a clean slate.
+  const courseTestMarkerKey = `ptis_active_test_${lmsCourseId}_${lmsStandardId}_${lmsAssignedSinceMs}`;
+  const readCourseMarker = () => {
+    try { return localStorage.getItem(courseTestMarkerKey); } catch { return null; }
+  };
+  const armCourseTest = () => {
+    try { localStorage.setItem(courseTestMarkerKey, JSON.stringify({ startedAt: Date.now() })); } catch { /* ignore */ }
+  };
+  const clearCourseMarker = () => {
+    try { localStorage.removeItem(courseTestMarkerKey); } catch { /* ignore */ }
+  };
+  const goToCourses = () => { window.location.replace('/user/learning-management-system/my-courses'); };
 
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth : 1200
@@ -869,6 +893,8 @@ const TestingModule = () => {
     isCompletingTestRef.current = false;
     setSelectedAnswer(null);
     setError('');
+    // Arm the integrity marker: from now on, leaving/refreshing = auto-fail.
+    if (fromCourse && lmsCourseId && lmsStandardId) armCourseTest();
   };
 
   const handleAnswerSelect = (answer) => {
@@ -961,6 +987,9 @@ const TestingModule = () => {
     isCompletingTestRef.current = true;
     setTestStarted(false);
     setTestCompleted(true);
+    // Finished normally — disarm the integrity marker so leaving the result
+    // screen isn't mistaken for an abandoned attempt.
+    clearCourseMarker();
 
     // Use provided answers or fall back to state
     const answersToUse = finalAnswers || answers;
@@ -1438,6 +1467,37 @@ const TestingModule = () => {
       handleStandardSelect(match.Standard_List);
     }
   }, [isStandardLocked, lockedStandardName, dataLoaded, standards]);
+
+  // Course-test integrity guard — runs once when arriving from a course.
+  //   1) Already attempted in THIS assignment → no retake, back to the course.
+  //   2) A live marker means a started test was left/refreshed → back to the
+  //      course (which records the abandoned attempt as a fail and reconciles).
+  //   3) Otherwise it's a fresh open; the attempt arms when the user actually
+  //      starts the test (handleStartTest).
+  const courseGuardRan = useRef(false);
+  useEffect(() => {
+    if (!fromCourse || !lmsCourseId || !lmsStandardId) return;
+    if (courseGuardRan.current) return;
+    courseGuardRan.current = true;
+    (async () => {
+      try {
+        const email = localStorage.getItem('userEmail') || '';
+        const res = await fetch(`${API_BASE_URL}/api/test-results/user/${encodeURIComponent(email)}`);
+        const json = res.ok ? await res.json() : { data: [] };
+        const rows = Array.isArray(json.data) ? json.data : [];
+        const already = rows.some((r) =>
+          parseInt(r.course_id) === parseInt(lmsCourseId) &&
+          parseInt(r.standard_id) === parseInt(lmsStandardId) &&
+          (!lmsAssignedSinceMs || (r.submitted_at && new Date(r.submitted_at).getTime() >= lmsAssignedSinceMs))
+        );
+        if (already) { clearCourseMarker(); goToCourses(); return; }
+      } catch { /* network issue — fall through to marker check */ }
+      // Started once and left → don't allow re-open. Marker stays so My Courses
+      // records the fail on arrival.
+      if (readCourseMarker()) goToCourses();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromCourse, lmsCourseId, lmsStandardId, lmsAssignedSinceMs]);
 
   // Styles
   const commonStyles = {

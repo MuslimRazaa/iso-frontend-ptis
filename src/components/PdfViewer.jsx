@@ -1,131 +1,51 @@
-import React, { useState } from 'react';
+import React from 'react';
 import API_BASE_URL from '../config/api';
-import { Document, Page, pdfjs } from 'react-pdf';
+import { Icon } from '../UserLMS/lmsUI';
 
-// Set worker path for pdfjs
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
+// View-only PDF viewer using the browser's built-in PDF renderer via an <iframe>.
+// `#toolbar=0&navpanes=0` hides the native toolbar (download / print / rotate)
+// and the side thumbnail pane, so it reads as view-only and never opens a new
+// tab. This is far more reliable than a canvas renderer (no pdf.js worker /
+// version pitfalls) and always displays on localhost and live.
+//
+// variant: 'inline' → compact reader inside the Resources tab (fixed height).
+//          'fullscreen' → fills the modal.
+const PdfViewer = ({ pdfUrl, variant = 'inline' }) => {
+  const isFull = variant === 'fullscreen';
+  const fullPdfUrl = pdfUrl.startsWith('http') ? pdfUrl : `${API_BASE_URL}${pdfUrl}`;
+  // FitH = fit page width; toolbar/navpanes/scrollbar tuned for clean view-only.
+  const src = `${fullPdfUrl}#toolbar=0&navpanes=0&statusbar=0&view=FitH`;
 
-const PdfViewer = ({ pdfUrl }) => {
-  const [numPages, setNumPages] = useState(null);
-  const [pageNumber, setPageNumber] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const frame = (
+    <iframe
+      src={src}
+      title="Course material"
+      onContextMenu={(e) => e.preventDefault()}
+      style={{
+        width: '100%',
+        height: isFull ? '100%' : '78vh',
+        minHeight: isFull ? 0 : 480,
+        border: 'none',
+        display: 'block',
+        background: '#f4f5f7',
+      }}
+    />
+  );
 
-  // Build full URL for local files
-  const fullPdfUrl = pdfUrl.startsWith('http') 
-    ? pdfUrl 
-    : `${API_BASE_URL}${pdfUrl}`;
-
-  const onDocumentLoadSuccess = ({ numPages }) => {
-    setNumPages(numPages);
-    setLoading(false);
-    setError(null);
-  };
-
-  const onDocumentLoadError = (error) => {
-    console.error('Error loading PDF:', error);
-    setError('Failed to load PDF. Please try again.');
-    setLoading(false);
-  };
-
-  const goToPrevPage = () => {
-    setPageNumber(prev => Math.max(prev - 1, 1));
-  };
-
-  const goToNextPage = () => {
-    setPageNumber(prev => Math.min(prev + 1, numPages || 1));
-  };
-
-  const goToPage = (page) => {
-    const pageNum = parseInt(page);
-    if (pageNum >= 1 && pageNum <= numPages) {
-      setPageNumber(pageNum);
-    }
-  };
+  if (isFull) {
+    return <div className="pdf-viewer-fullscreen-frame">{frame}</div>;
+  }
 
   return (
     <div className="pdf-viewer-container">
       <div className="pdf-viewer-header">
         <h3>Course Presentation</h3>
-        {!loading && !error && (
-          <div className="pdf-controls">
-            <button 
-              onClick={goToPrevPage} 
-              disabled={pageNumber <= 1}
-              className="pdf-nav-btn"
-            >
-              Previous
-            </button>
-            
-            <div className="pdf-page-info">
-              <input
-                type="number"
-                min="1"
-                max={numPages || 1}
-                value={pageNumber}
-                onChange={(e) => goToPage(e.target.value)}
-                className="pdf-page-input"
-              />
-              <span>of {numPages}</span>
-            </div>
-            
-            <button 
-              onClick={goToNextPage} 
-              disabled={pageNumber >= numPages}
-              className="pdf-nav-btn"
-            >
-              Next
-            </button>
-            
-            <a 
-              href={fullPdfUrl} 
-              download 
-              className="pdf-download-btn"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Download PDF
-            </a>
-          </div>
-        )}
+        {/* View-only material — no download / print / new-tab. */}
+        <span className="pdf-viewonly-tag" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+          <Icon name="lock" size={13} /> View only
+        </span>
       </div>
-
-      <div className="pdf-viewer-content">
-        {loading && (
-          <div className="pdf-loading">
-            <div className="spinner"></div>
-            <p>Loading PDF...</p>
-          </div>
-        )}
-
-        {error && (
-          <div className="pdf-error">
-            <p>{error}</p>
-            <a href={fullPdfUrl} target="_blank" rel="noopener noreferrer">
-              Open PDF in new tab
-            </a>
-          </div>
-        )}
-
-        <Document
-          file={fullPdfUrl}
-          onLoadSuccess={onDocumentLoadSuccess}
-          onLoadError={onDocumentLoadError}
-          loading=""
-          options={{
-            cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjs.version}/cmaps/`,
-            cMapPacked: true,
-          }}
-        >
-          <Page 
-            pageNumber={pageNumber} 
-            renderTextLayer={false}
-            renderAnnotationLayer={false}
-            className="pdf-page"
-            width={Math.min(window.innerWidth * 0.8, 1000)}
-          />
-        </Document>
-      </div>
+      {frame}
     </div>
   );
 };
