@@ -1,5 +1,9 @@
 import React, { useState } from 'react'
-import logoVideo from '/logoLoader.mp4'
+// Imported from src/assets so Vite fingerprints it (logoLoader-<hash>.mp4). A
+// hashed filename means updating the video busts the browser/CDN cache — no more
+// stale "old loader" on live. (Do NOT move back to /public: public keeps the
+// static name and caches indefinitely.)
+import logoVideo from '../assets/logoLoader.mp4'
 
 function VideoLoader({ onLoadingComplete }) {
   const [videoEnded, setVideoEnded] = useState(false)
