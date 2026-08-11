@@ -1,30 +1,12 @@
 import * as pdfjsLib from 'pdfjs-dist'
-import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+// Vite's `?worker&inline` suffix bundles the worker as a base64 data URL
+// directly inside the built JS — no separate .mjs file is ever fetched over
+// the network, so it can't be broken by a host serving the wrong (or no)
+// Content-Type for .mjs files, and there's no manual blob/Worker plumbing
+// that can silently hang.
+import PdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?worker&inline'
 
-// The worker is an ES module (.mjs) and browsers strictly require the
-// Content-Type header to be a JS MIME type before they'll execute it as a
-// module. Some Apache/cPanel hosts don't map .mjs in their mime.types and
-// there's no server access to fix that — so instead of pointing pdf.js at
-// the URL directly (which depends on the server sending the right header),
-// we fetch the worker source ourselves and hand it to the Worker as a Blob
-// with an explicit MIME type. Blob URLs aren't subject to server headers at
-// all, so this works regardless of how the host serves .mjs files.
-let workerReadyPromise = null
-function ensureWorkerReady() {
-  if (!workerReadyPromise) {
-    workerReadyPromise = fetch(workerSrc)
-      .then(res => res.text())
-      .then(code => {
-        const blobUrl = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }))
-        pdfjsLib.GlobalWorkerOptions.workerPort = new Worker(blobUrl, { type: 'module' })
-      })
-      .catch(err => {
-        console.warn('Falling back to direct worker URL (blob workaround failed):', err)
-        pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
-      })
-  }
-  return workerReadyPromise
-}
+pdfjsLib.GlobalWorkerOptions.workerPort = new PdfWorker()
 
 // ── Type guesser ─────────────────────────────────────────────────────────────
 const guessType = (label) => {
@@ -116,7 +98,6 @@ const KNOWN_FORMS = [
  *   detectedFormCode — e.g. "FM-002-01" if a known PTIS form was recognised, else null
  */
 export async function parsePdf(file) {
-  await ensureWorkerReady()
   const arrayBuffer = await file.arrayBuffer()
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
   const pages = []
