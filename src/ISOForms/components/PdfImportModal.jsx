@@ -44,14 +44,17 @@ function PdfImportModal({ onImport, onClose }) {
     setError('')
     setParsing(true)
     try {
-      const [{ fields: detected, detectedFormCode, allItems }, base64] = await Promise.all([
+      const [{ fields: detected, detectedFormCode, detectedAnyCode, allItems }, base64] = await Promise.all([
         parsePdf(file),
         pdfToBase64(file),
       ])
 
       setPdfBase64(base64)
       setPdfName(file.name)
-      setDetectedCode(detectedFormCode)
+      // Prefer the recognized-form code (drives preset fields below); for any
+      // other PTIS form, still capture its own "FM-###-##" code so the
+      // generic layout can show a proper header instead of a blank Code.
+      setDetectedCode(detectedFormCode || detectedAnyCode)
 
       // If it's a known PTIS form, load pre-defined fields enriched with
       // coordinates from the actual PDF so pdf-lib can overlay values correctly.

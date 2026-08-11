@@ -186,12 +186,19 @@ export async function parsePdf(file) {
     return true
   })
 
-  // Check if this is a known PTIS form
+  // Check if this is a known PTIS form (has hand-built fields + print layout)
   const fullText = allItems.map(i => i.text).join(' ')
   const matched = KNOWN_FORMS.find(f => f.pattern.test(fullText))
   const detectedFormCode = matched ? matched.code : null
 
-  return { pages, fields: deduped, detectedFormCode, allItems }
+  // Even for forms we don't have bespoke handling for, PTIS's own form
+  // codes all follow "FM-###-##" — capture that generically so the generic
+  // print layout can still show a proper Title/Code header instead of
+  // leaving the Code blank.
+  const anyCodeMatch = fullText.match(/FM-\d{3}-\d{2}/i)
+  const detectedAnyCode = anyCodeMatch ? anyCodeMatch[0].toUpperCase() : null
+
+  return { pages, fields: deduped, detectedFormCode, detectedAnyCode, allItems }
 }
 
 // ── Coordinate enrichment for pre-defined seed fields ─────────────────────────
