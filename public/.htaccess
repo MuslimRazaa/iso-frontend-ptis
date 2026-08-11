@@ -1,4 +1,10 @@
 Options -MultiViews
+
+# .mjs isn't in older Apache's default mime.types, so it's served with no
+# Content-Type at all — browsers then refuse to load it as a JS module
+# (breaks the PDF.js worker used by ISO Forms' "Import from PDF").
+AddType text/javascript .mjs
+
 RewriteEngine On
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule ^ index.html [QSA,L]
