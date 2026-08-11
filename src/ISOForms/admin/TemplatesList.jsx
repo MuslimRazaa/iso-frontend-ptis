@@ -6,6 +6,7 @@ import { SEED_TEMPLATES, SEED_VERSION } from '../seedTemplates'
 import { ensureSeeded, getOfflineTemplates, deleteOfflineTemplate } from '../utils/offlineStore'
 import DocumentChangeRequestPrint from '../pdf/DocumentChangeRequestPrint'
 import CARPrint from '../pdf/CARPrint'
+import RequisitionFormPrint from '../pdf/RequisitionFormPrint'
 import GenericFormPrint from '../pdf/GenericFormPrint'
 
 function PreviewModal({ template, onClose }) {
@@ -16,7 +17,9 @@ function PreviewModal({ template, onClose }) {
       ? DocumentChangeRequestPrint
       : template?.id === 'seed-fm-002-01' || template?.name === 'Corrective Action Request Form' || template?.formCode === 'FM-002-01'
         ? CARPrint
-        : GenericFormPrint
+        : template?.id === 'seed-fm-014-09' || template?.name === 'Requisition Form' || template?.formCode === 'FM-014-09'
+          ? RequisitionFormPrint
+          : GenericFormPrint
 
   return (
     <div style={{

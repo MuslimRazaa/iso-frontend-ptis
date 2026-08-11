@@ -1,7 +1,24 @@
 // Bump whenever the shape of SEED_TEMPLATES below changes, so ensureSeeded()
 // replaces a stale copy already sitting in a browser's localStorage instead
 // of leaving it untouched forever.
-export const SEED_VERSION = 4
+export const SEED_VERSION = 5
+
+// Requisition Form (FM-014-09) has an 8-row item grid on paper. This app's
+// field system has no "repeating row/table" type, so each row is modeled as
+// its own fixed set of fields (f_req_item{n}_*) — same pattern CAR already
+// uses for its 3 fixed follow-ups (f_car_fu{n}_*).
+const REQUISITION_ITEM_ROWS = 8
+const requisitionItemFields = () => Array.from({ length: REQUISITION_ITEM_ROWS }, (_, i) => {
+  const n = i + 1
+  return [
+    { id: `f_req_item${n}_desc`,        label: `Item ${n} — Description`,               type: 'text',   required: false, owner: 'requester', options: '' },
+    { id: `f_req_item${n}_spec`,        label: `Item ${n} — Specification`,             type: 'text',   required: false, owner: 'requester', options: '' },
+    { id: `f_req_item${n}_qty_request`, label: `Item ${n} — Quantity Request`,          type: 'number', required: false, owner: 'requester', options: '' },
+    { id: `f_req_item${n}_qty_issued`,  label: `Item ${n} — Quantity Issued`,           type: 'number', required: false, owner: 'approver',  options: '' },
+    { id: `f_req_item${n}_date_issued`, label: `Item ${n} — Date Issued`,               type: 'date',   required: false, owner: 'approver',  options: '' },
+    { id: `f_req_item${n}_remarks`,     label: `Item ${n} — Any Other Remarks`,         type: 'text',   required: false, owner: 'approver',  options: '' },
+  ]
+}).flat()
 
 // Real PTIS form (FM-001-04), modeled as a template so the module has
 // something to click through before the backend exists.
@@ -75,6 +92,33 @@ export const SEED_TEMPLATES = [
       { id: 'f_car_fu3_verified_by', label: 'Third Follow-up Verified By',        type: 'employee',       required: false, owner: 'approver', options: '' },
       { id: 'f_car_fu3_date',        label: 'Third Follow-up Signature/Date',     type: 'date',           required: false, owner: 'approver', options: '' },
       { id: 'f_car_new_car_no',      label: 'New CAR No.',                        type: 'text',           required: false, owner: 'approver', options: '' },
+    ],
+  },
+
+  // ── Requisition Form (FM-014-09) ──────────────────────────────────────────
+  {
+    id: 'seed-fm-014-09',
+    name: 'Requisition Form',
+    description: 'FM-014-09 — request items (repair/purchase/replace/stock/return), store issues against it.',
+    created_by_name: 'Seeded demo template',
+    fields: [
+      { id: 'f_req_requestor_name',   label: 'Name of Requestor',            type: 'employee',       required: true,  owner: 'requester', options: '' },
+      { id: 'f_req_request_date',     label: 'Date of Request',              type: 'date',           required: true,  owner: 'requester', options: '' },
+      { id: 'f_req_department',       label: 'Department of Requestor',      type: 'text',           required: true,  owner: 'requester', options: '' },
+      { id: 'f_req_priority',         label: 'Priority Level',               type: 'dropdown',       required: true,  owner: 'requester', options: 'Urgent (Within same day), Normal (Within Few days)' },
+      { id: 'f_req_against',          label: 'Request Against',              type: 'checkbox-group', required: true,  owner: 'requester', options: 'Repair & Maintenance, Purchase, Replace, Stock, Return' },
+      { id: 'f_req_justification',    label: 'Justification for Request',    type: 'textarea',       required: true,  owner: 'requester', options: '' },
+
+      ...requisitionItemFields(),
+
+      { id: 'f_req_estimated_amount', label: 'Estimated Amount (Rs)',        type: 'number',         required: false, owner: 'requester', options: '' },
+
+      { id: 'f_req_recommended_by',   label: 'Recommended By',               type: 'employee',       required: false, owner: 'approver', options: '' },
+      { id: 'f_req_recommended_remarks', label: 'If any Remarks',            type: 'text',           required: false, owner: 'approver', options: '' },
+      { id: 'f_req_recommended_date', label: 'Recommendation Date',          type: 'date',           required: false, owner: 'approver', options: '' },
+      { id: 'f_req_approved_by',      label: 'Approved By',                  type: 'employee',       required: false, owner: 'approver', options: '' },
+      { id: 'f_req_approved_dept',    label: 'Approving Department',         type: 'text',           required: false, owner: 'approver', options: '' },
+      { id: 'f_req_approved_date',    label: 'Approval Date',                type: 'date',           required: false, owner: 'approver', options: '' },
     ],
   },
 ]

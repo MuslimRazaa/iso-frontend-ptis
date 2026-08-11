@@ -22,6 +22,7 @@ const OWNERS = [
 const KNOWN_FORM_MAP = {
   'FM-001-04': SEED_TEMPLATES.find(t => t.id === 'seed-fm-001-04'),
   'FM-002-01': SEED_TEMPLATES.find(t => t.id === 'seed-fm-002-01'),
+  'FM-014-09': SEED_TEMPLATES.find(t => t.id === 'seed-fm-014-09'),
 }
 
 function PdfImportModal({ onImport, onClose }) {

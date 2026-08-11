@@ -7,6 +7,7 @@ import { isFieldEmpty } from '../utils/fieldHelpers'
 import { getOfflineEntry, updateOfflineEntry, getOfflineTemplate } from '../utils/offlineStore'
 import DocumentChangeRequestPrint from '../pdf/DocumentChangeRequestPrint'
 import CARPrint from '../pdf/CARPrint'
+import RequisitionFormPrint from '../pdf/RequisitionFormPrint'
 import GenericFormPrint from '../pdf/GenericFormPrint'
 import { downloadNodeAsPdf } from '../pdf/generatePdf'
 import { downloadFilledPdf } from '../pdf/fillOriginalPdf'
@@ -141,6 +142,14 @@ function FormDetail() {
 
   const setApproverValue = (fieldId, val) => setApproverValues(prev => ({ ...prev, [fieldId]: val }))
 
+  // Requisition Form's item grid is a fixed set of individual fields (no
+  // native "table" field type exists), so pdf-lib's coordinate overlay can't
+  // lay it out as a real table on the original PDF — the hand-built print
+  // layout (RequisitionFormPrint) always renders it properly, so always use
+  // the snapshot route for this form instead of the raw-PDF overlay.
+  const isRequisitionForm =
+    template?.id === 'seed-fm-014-09' || template?.name === 'Requisition Form' || template?.formCode === 'FM-014-09'
+
   const handleDownloadPdf = async () => {
     setDownloading(true)
     setError('')
@@ -148,7 +157,7 @@ function FormDetail() {
     try {
       const originalPdf = template?.originalPdf
       let usedOriginal = false
-      if (originalPdf && template?.fields) {
+      if (originalPdf && template?.fields && !isRequisitionForm) {
         // Download with the exact original PDF layout, values overlaid via pdf-lib
         try {
           const allFields = template.fields
@@ -369,6 +378,8 @@ function FormDetail() {
           <DocumentChangeRequestPrint ref={printRef} entry={entry} formValues={formValues} approverValues={approverValues} employees={employees} />
         ) : template?.id === 'seed-fm-002-01' || template?.name === 'Corrective Action Request Form' || template?.formCode === 'FM-002-01' ? (
           <CARPrint ref={printRef} entry={entry} formValues={formValues} approverValues={approverValues} employees={employees} />
+        ) : isRequisitionForm ? (
+          <RequisitionFormPrint ref={printRef} entry={entry} formValues={formValues} approverValues={approverValues} employees={employees} />
         ) : (
           <GenericFormPrint ref={printRef} entry={entry} template={template} formValues={formValues} approverValues={approverValues} employees={employees} />
         )}
