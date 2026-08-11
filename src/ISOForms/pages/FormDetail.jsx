@@ -143,18 +143,31 @@ function FormDetail() {
 
   const handleDownloadPdf = async () => {
     setDownloading(true)
+    setError('')
     const filename = `${(entry.template_name || template?.name || 'form').replace(/\s+/g, '-')}-${entry.id}.pdf`
     try {
       const originalPdf = template?.originalPdf
+      let usedOriginal = false
       if (originalPdf && template?.fields) {
         // Download with the exact original PDF layout, values overlaid via pdf-lib
-        const allFields = template.fields
-        await downloadFilledPdf(originalPdf, allFields, formValues, approverValues, employees, filename)
-      } else {
+        try {
+          const allFields = template.fields
+          await downloadFilledPdf(originalPdf, allFields, formValues, approverValues, employees, filename)
+          usedOriginal = true
+        } catch (pdfLibErr) {
+          // Attached PDF is missing/corrupt (e.g. cleared or re-saved incorrectly during
+          // a template edit) — fall through to the html2canvas snapshot instead of failing silently.
+          console.error('Original-PDF overlay failed, falling back to snapshot layout:', pdfLibErr)
+        }
+      }
+      if (!usedOriginal) {
         // Fallback: html2canvas snapshot of the styled print template
-        if (!printRef.current) return
+        if (!printRef.current) throw new Error('Nothing to render for this form yet.')
         await downloadNodeAsPdf(printRef.current, filename)
       }
+    } catch (err) {
+      console.error('Download PDF failed:', err)
+      setError('Could not generate the PDF. Please try again, or re-attach the template PDF if this keeps happening.')
     } finally {
       setDownloading(false)
     }

@@ -168,7 +168,16 @@ function TemplateBuilder() {
       {originalPdfName && (
         <div style={{ background: '#e7f6ec', border: '1px solid #a8d5b5', color: '#1a7f4e', borderRadius: 12, padding: '10px 16px', marginBottom: 16, fontSize: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span>📎 PDF attached: <strong>{originalPdfName}</strong> — filled forms will download in this exact layout</span>
-          <button type="button" onClick={() => { setOriginalPdfBase64(''); setOriginalPdfName('') }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1a7f4e', fontSize: 18, lineHeight: 1 }}>×</button>
+          <button
+            type="button"
+            title="Remove attached PDF (submitted forms will fall back to a plain layout on download)"
+            onClick={() => {
+              if (!window.confirm('Remove the attached PDF? Filled forms will no longer download in the original layout — they will fall back to a plain print layout instead.')) return
+              setOriginalPdfBase64('')
+              setOriginalPdfName('')
+            }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1a7f4e', fontSize: 18, lineHeight: 1 }}
+          >×</button>
         </div>
       )}
 

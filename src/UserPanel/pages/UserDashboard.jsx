@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { API_ENDPOINTS } from '../../config/api';
+import { getCurrentEmployeeId } from '../../ISOForms/utils/currentEmployee';
 
 const UserDashboard = () => {
     const [userPermissions, setUserPermissions] = useState({});
@@ -12,6 +13,7 @@ const UserDashboard = () => {
     const [loadingStats, setLoadingStats] = useState(false);
     const [courses, setCourses] = useState([]);
     const [loadingCourses, setLoadingCourses] = useState(true);
+    const [isoPendingCount, setIsoPendingCount] = useState(0);
 
     const userEmail = localStorage.getItem('userEmail') || 'user@ptis.com';
     const userName = userEmail.split('@')[0].replace(/\./g, ' ').split(' ').map(word =>
@@ -23,7 +25,24 @@ const UserDashboard = () => {
         // Fetch user permissions from backend
         fetchUserPermissions();
         fetchCourses();
+        fetchIsoPendingCount();
     }, []);
+
+    // Forms routed to this employee that are still awaiting their decision —
+    // powers the red badge on the ISO Forms card (same count as the ISO Forms
+    // sidebar's "Pending Approvals" link).
+    const fetchIsoPendingCount = async () => {
+        try {
+            const employeeId = await getCurrentEmployeeId();
+            if (!employeeId) return;
+            const res = await fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}/pending-count?employeeId=${employeeId}`);
+            if (!res.ok) return;
+            const json = await res.json();
+            setIsoPendingCount(json?.count ?? 0);
+        } catch (error) {
+            console.error('Error fetching ISO Forms pending count:', error);
+        }
+    };
 
     const fetchUserPermissions = async () => {
         try {
@@ -107,11 +126,14 @@ const UserDashboard = () => {
             title: "ISO Forms",
             link: "/user/iso-forms",
             description: "Quick access to QA/QC controlled documentation.",
-            status: "attention",
-            statusLabel: "Review",
-            metric: "3 forms awaiting sign-off",
+            status: isoPendingCount > 0 ? "attention" : "online",
+            statusLabel: isoPendingCount > 0 ? "Review" : "Live",
+            metric: isoPendingCount > 0
+                ? `${isoPendingCount} form${isoPendingCount === 1 ? '' : 's'} awaiting sign-off`
+                : "No forms awaiting sign-off",
             permission: userPermissions.iso_forms,
-            icon: "iso"
+            icon: "iso",
+            badge: isoPendingCount > 0 ? isoPendingCount : null
         },
         {
             id: "bid-cv-library",
@@ -251,7 +273,22 @@ const UserDashboard = () => {
                                     aria-label={`Open ${tile.title} dashboard`}
                                 >
                                     <div className="module-top-row">
-                                        <div className="module-icon">{renderTileIcon(tile.icon)}</div>
+                                        <div className="module-icon" style={{ position: 'relative' }}>
+                                            {renderTileIcon(tile.icon)}
+                                            {tile.badge > 0 && (
+                                                <span
+                                                    aria-label={`${tile.badge} pending`}
+                                                    style={{
+                                                        position: 'absolute', top: -6, right: -6,
+                                                        minWidth: 18, height: 18, borderRadius: 9,
+                                                        background: '#d7263d', color: '#fff',
+                                                        fontSize: 11, fontWeight: 700, lineHeight: '18px',
+                                                        textAlign: 'center', padding: '0 5px',
+                                                        boxShadow: '0 0 0 2px #fff',
+                                                    }}
+                                                >{tile.badge}</span>
+                                            )}
+                                        </div>
                                         <span className={`module-status ${tile.status}`}>
                                             {tile.statusLabel}
                                         </span>
