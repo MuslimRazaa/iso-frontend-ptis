@@ -2852,7 +2852,164 @@ const TestingModule = () => {
         const [certificateGoToPage, setCertificateGoToPage] = useState('');
         const [certTypes, setCertTypes] = useState({}); // key: stable certificate row id, value: 'New' or 'Recertification'
         const [previousCertNumbers, setPreviousCertNumbers] = useState({}); // key: stable certificate row id, value: manual previous certificate no
+        const [certExtras, setCertExtras] = useState({}); // key: stable certificate row id, value: { near_vision, color_vision, training_hours, education, photo }
+        const [certModal, setCertModal] = useState(null); // { rowKey, result, selectedCertType, previousCertNo } while the Vision/Photo modal is open
+        const [certGenerating, setCertGenerating] = useState(false);
         const certificateItemsPerPage = 25;
+
+        const handleGenerateCertificateSubmit = async () => {
+          if (!certModal) return;
+          const { rowKey, result, selectedCertType, previousCertNo, isGeneralSpecific } = certModal;
+
+          try {
+            const trimmedPreviousCertNo = String(previousCertNo || '').trim();
+            if (selectedCertType === 'Recertification' && !trimmedPreviousCertNo) {
+              showToast('Please enter Previous Certificate No. for Re-Certification.', 'error');
+              return;
+            }
+
+            // Vision Examination is only applicable to General/Specific tests.
+            if (isGeneralSpecific) {
+              const extrasCheck = certExtras[rowKey] || {};
+              const requiredVisionFields = [
+                { key: 'near_vision', label: 'Near Vision' },
+                { key: 'color_vision', label: 'Color Vision' },
+                { key: 'training_hours', label: 'Training Hours' },
+                { key: 'education', label: 'Education' }
+              ];
+              const missingVisionField = requiredVisionFields.find(
+                (field) => !String(extrasCheck[field.key] || '').trim()
+              );
+              if (missingVisionField) {
+                showToast(`Please enter ${missingVisionField.label}.`, 'error');
+                return;
+              }
+            }
+
+            setCertGenerating(true);
+
+            let certData;
+
+            // Check if this is a combined PT/MPT certificate
+            if (result.IS_COMBINED && result.GENERAL_DATA && result.SPECIFIC_DATA) {
+              // Combined certificate with 2 or 3 rows
+              certData = {
+                emp_id: norm(result.ID),
+                emp_name: norm(result.NAME),
+                test_date: norm(result.DATE),
+                status: norm(result.STATUS),
+                standard: norm(result.STANDARD),
+                is_combined: true,
+                general_data: {
+                  standard: norm(result.GENERAL_DATA.STANDARD),
+                  percentage: toPctNumber(result.GENERAL_DATA.PERCENTAGE).toFixed(2),
+                  passing_criteria: norm(result.GENERAL_DATA.PASSING_CRITERIA)
+                },
+                specific_data: {
+                  standard: norm(result.SPECIFIC_DATA.STANDARD),
+                  percentage: toPctNumber(result.SPECIFIC_DATA.PERCENTAGE).toFixed(2),
+                  passing_criteria: norm(result.SPECIFIC_DATA.PASSING_CRITERIA)
+                },
+                certification_type: selectedCertType
+              };
+
+              // Add practical data if available
+              if (result.PRACTICAL_DATA) {
+                certData.practical_data = {
+                  standard: norm(result.PRACTICAL_DATA.STANDARD),
+                  percentage: toPctNumber(result.PRACTICAL_DATA.PERCENTAGE).toFixed(2),
+                  passing_criteria: norm(result.PRACTICAL_DATA.PASSING_CRITERIA)
+                };
+              }
+            } else {
+              // Regular single certificate
+              certData = {
+                emp_id: norm(result.ID),
+                emp_name: norm(result.NAME),
+                test_date: norm(result.DATE),
+                status: norm(result.STATUS),
+                standard: norm(result.STANDARD),
+                percentage: toPctNumber(result.PERCENTAGE).toFixed(2),
+                passing_criteria: norm(result.PASSING_CRITERIA),
+                certification_type: selectedCertType
+              };
+
+              // Single standard that requires a practical: send the
+              // practical result too so the backend issues a 2-row
+              // certificate. The backend re-checks the standard's
+              // practical checklist before honoring this.
+              if (result.IS_SINGLE_WITH_PRACTICAL && result.PRACTICAL_DATA) {
+                certData.is_single_with_practical = true;
+                certData.practical_data = {
+                  standard: norm(result.PRACTICAL_DATA.STANDARD),
+                  percentage: toPctNumber(result.PRACTICAL_DATA.PERCENTAGE).toFixed(2),
+                  passing_criteria: norm(result.PRACTICAL_DATA.PASSING_CRITERIA)
+                };
+              }
+            }
+
+            if (selectedCertType === 'Recertification') {
+              certData.previous_certificate_no = trimmedPreviousCertNo;
+            }
+
+            // Vision Examination values + photo are manually entered per
+            // certificate, kept in certExtras keyed by row. Vision Examination
+            // only applies to General/Specific tests.
+            const extras = certExtras[rowKey] || {};
+
+            const formData = new FormData();
+            Object.entries(certData).forEach(([key, value]) => {
+              if (value === undefined || value === null) return;
+              formData.append(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
+            });
+            if (isGeneralSpecific) {
+              const visionData = {
+                near_vision: extras.near_vision || '',
+                color_vision: extras.color_vision || '',
+                training_hours: extras.training_hours || '',
+                education: extras.education || ''
+              };
+              formData.append('vision_data', JSON.stringify(visionData));
+            }
+            if (extras.photo) {
+              formData.append('photo', extras.photo);
+            }
+
+            // Call backend API to generate certificate
+            const response = await fetch(`${API_BASE_URL}/api/certificates/legacy/generate`, {
+              method: 'POST',
+              body: formData
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.details || errorData.detail || errorData.error || 'Failed to generate certificate');
+            }
+
+            // Get the PDF blob
+            const blob = await response.blob();
+
+            // Create download link
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${norm(result.STANDARD)}_Certificate_${norm(result.ID)}_${norm(result.NAME)}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+
+            // Cleanup
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+            showToast(`Certificate generated successfully for ${norm(result.NAME)}!`, 'success');
+            setCertModal(null);
+          } catch (error) {
+            console.error('Certificate generation error:', error);
+            showToast(`Failed to generate certificate: ${error.message}`, 'error');
+          } finally {
+            setCertGenerating(false);
+          }
+        };
 
       const filteredResults = useMemo(() => {
         let passed = results.filter(r => isPass(r.STATUS));
@@ -3328,112 +3485,14 @@ const TestingModule = () => {
                         </td>
                         <td style={{ padding: '16px 20px', textAlign: 'center' }}>
                           <button
-                            onClick={async () => {
-                              try {
-                                const trimmedPreviousCertNo = String(previousCertNo || '').trim();
-                                if (selectedCertType === 'Recertification' && !trimmedPreviousCertNo) {
-                                  showToast('Please enter Previous Certificate No. for Re-Certification.', 'error');
-                                  return;
-                                }
-
-                                let certData;
-                                
-                                // Check if this is a combined PT/MPT certificate
-                                if (result.IS_COMBINED && result.GENERAL_DATA && result.SPECIFIC_DATA) {
-                                  // Combined certificate with 2 or 3 rows
-                                  certData = {
-                                    emp_id: norm(result.ID),
-                                    emp_name: norm(result.NAME),
-                                    test_date: norm(result.DATE),
-                                    status: norm(result.STATUS),
-                                    standard: norm(result.STANDARD),
-                                    is_combined: true,
-                                    general_data: {
-                                      standard: norm(result.GENERAL_DATA.STANDARD),
-                                      percentage: toPctNumber(result.GENERAL_DATA.PERCENTAGE).toFixed(2),
-                                      passing_criteria: norm(result.GENERAL_DATA.PASSING_CRITERIA)
-                                    },
-                                    specific_data: {
-                                      standard: norm(result.SPECIFIC_DATA.STANDARD),
-                                      percentage: toPctNumber(result.SPECIFIC_DATA.PERCENTAGE).toFixed(2),
-                                      passing_criteria: norm(result.SPECIFIC_DATA.PASSING_CRITERIA)
-                                    },
-                                    certification_type: selectedCertType
-                                  };
-                                  
-                                  // Add practical data if available
-                                  if (result.PRACTICAL_DATA) {
-                                    certData.practical_data = {
-                                      standard: norm(result.PRACTICAL_DATA.STANDARD),
-                                      percentage: toPctNumber(result.PRACTICAL_DATA.PERCENTAGE).toFixed(2),
-                                      passing_criteria: norm(result.PRACTICAL_DATA.PASSING_CRITERIA)
-                                    };
-                                  }
-                                } else {
-                                  // Regular single certificate
-                                  certData = {
-                                    emp_id: norm(result.ID),
-                                    emp_name: norm(result.NAME),
-                                    test_date: norm(result.DATE),
-                                    status: norm(result.STATUS),
-                                    standard: norm(result.STANDARD),
-                                    percentage: toPctNumber(result.PERCENTAGE).toFixed(2),
-                                    passing_criteria: norm(result.PASSING_CRITERIA),
-                                    certification_type: selectedCertType
-                                  };
-
-                                  // Single standard that requires a practical: send the
-                                  // practical result too so the backend issues a 2-row
-                                  // certificate. The backend re-checks the standard's
-                                  // practical checklist before honoring this.
-                                  if (result.IS_SINGLE_WITH_PRACTICAL && result.PRACTICAL_DATA) {
-                                    certData.is_single_with_practical = true;
-                                    certData.practical_data = {
-                                      standard: norm(result.PRACTICAL_DATA.STANDARD),
-                                      percentage: toPctNumber(result.PRACTICAL_DATA.PERCENTAGE).toFixed(2),
-                                      passing_criteria: norm(result.PRACTICAL_DATA.PASSING_CRITERIA)
-                                    };
-                                  }
-                                }
-
-                                if (selectedCertType === 'Recertification') {
-                                  certData.previous_certificate_no = trimmedPreviousCertNo;
-                                }
-
-                                // Call backend API to generate certificate
-                                const response = await fetch(`${API_BASE_URL}/api/certificates/legacy/generate`, {
-                                  method: 'POST',
-                                  headers: {
-                                    'Content-Type': 'application/json',
-                                  },
-                                  body: JSON.stringify(certData)
-                                });
-
-                                if (!response.ok) {
-                                  const errorData = await response.json();
-                                  throw new Error(errorData.detail || 'Failed to generate certificate');
-                                }
-
-                                // Get the PDF blob
-                                const blob = await response.blob();
-                                
-                                // Create download link
-                                const url = window.URL.createObjectURL(blob);
-                                const a = document.createElement('a');
-                                a.href = url;
-                                a.download = `${norm(result.STANDARD)}_Certificate_${norm(result.ID)}_${norm(result.NAME)}.pdf`;
-                                document.body.appendChild(a);
-                                a.click();
-                                
-                                // Cleanup
-                                window.URL.revokeObjectURL(url);
-                                document.body.removeChild(a);
-                                
-                                showToast(`Certificate generated successfully for ${norm(result.NAME)}!`, 'success');
-                              } catch (error) {
-                                console.error('Certificate generation error:', error);
-                                showToast(`Failed to generate certificate: ${error.message}`, 'error');
+                            onClick={() => {
+                              const trimmedPreviousCertNo = String(previousCertNo || '').trim();
+                              if (selectedCertType === 'Recertification' && !trimmedPreviousCertNo) {
+                                showToast('Please enter Previous Certificate No. for Re-Certification.', 'error');
+                                return;
                               }
+                              const isGeneralSpecific = !!(result.IS_COMBINED && result.GENERAL_DATA && result.SPECIFIC_DATA);
+                              setCertModal({ rowKey, result, selectedCertType, previousCertNo: trimmedPreviousCertNo, isGeneralSpecific });
                             }}
                             style={{
                               padding: '10px 16px',
@@ -3586,6 +3645,167 @@ const TestingModule = () => {
               </div>
             )}
           </article>
+
+          {/* Vision Examination + Photo modal (opens before certificate generation) */}
+          {certModal && (
+            <div style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(26, 26, 46, 0.85)',
+              backdropFilter: 'blur(4px)',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              zIndex: 1000,
+              padding: '20px'
+            }}>
+              <div style={{
+                backgroundColor: theme.bg.card,
+                padding: isMobile ? '22px 16px' : '35px',
+                borderRadius: '28px',
+                width: '100%',
+                maxWidth: isMobile ? '100%' : '520px',
+                maxHeight: '90vh',
+                overflowY: 'auto',
+                boxShadow: `0 20px 60px ${isDarkMode ? 'rgba(0,0,0,0.5)' : 'rgba(0, 0, 0, 0.3)'}`,
+                animation: 'fadeIn 0.2s ease'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '25px',
+                  borderBottom: '3px solid #16a085',
+                  paddingBottom: '15px'
+                }}>
+                  <h3 style={{ margin: 0, color: theme.text.primary, fontSize: '1.4em', fontWeight: '600' }}>
+                    Certificate Details — {norm(certModal.result.NAME)}
+                  </h3>
+                  <button
+                    type="button"
+                    className="close-modal-btn"
+                    onClick={() => setCertModal(null)}
+                    style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {certModal.isGeneralSpecific && (
+                  <>
+                    <p style={{ color: colors.textMuted, fontSize: '0.9em', marginTop: 0, marginBottom: '20px' }}>
+                      Vision Examination values are not part of the test results — enter them manually. All fields are required.
+                    </p>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
+                      {[
+                        { key: 'near_vision', label: 'Near Vision' },
+                        { key: 'color_vision', label: 'Color Vision' },
+                        { key: 'training_hours', label: 'Training Hours' },
+                        { key: 'education', label: 'Education' }
+                      ].map(field => (
+                        <div key={field.key}>
+                          <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: colors.text, fontSize: '0.95em' }}>
+                            {field.label} <span style={{ color: '#d7263d' }}>*</span>
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={(certExtras[certModal.rowKey] || {})[field.key] || ''}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setCertExtras(prev => ({
+                                ...prev,
+                                [certModal.rowKey]: { ...(prev[certModal.rowKey] || {}), [field.key]: value }
+                              }));
+                            }}
+                            style={{
+                              width: '100%',
+                              padding: '10px 12px',
+                              border: `2px solid ${colors.inputBorder}`,
+                              borderRadius: '8px',
+                              fontSize: '14px',
+                              outline: 'none',
+                              boxSizing: 'border-box',
+                              backgroundColor: theme.bg.input,
+                              color: colors.text
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                <div style={{ marginBottom: '25px' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: colors.text, fontSize: '0.95em' }}>
+                    Passport-Size Photo (optional)
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+                      setCertExtras(prev => ({
+                        ...prev,
+                        [certModal.rowKey]: { ...(prev[certModal.rowKey] || {}), photo: file }
+                      }));
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      border: `2px solid ${colors.inputBorder}`,
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      backgroundColor: theme.bg.input,
+                      color: colors.text
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setCertModal(null)}
+                    disabled={certGenerating}
+                    style={{
+                      padding: '10px 20px',
+                      backgroundColor: 'transparent',
+                      color: colors.text,
+                      border: `2px solid ${colors.border}`,
+                      borderRadius: '28px',
+                      cursor: certGenerating ? 'not-allowed' : 'pointer',
+                      fontSize: '14px',
+                      fontWeight: '600'
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleGenerateCertificateSubmit}
+                    disabled={certGenerating}
+                    style={{
+                      padding: '10px 20px',
+                      backgroundColor: '#16a085',
+                      color: 'white',
+                      border: '2px solid #16a085',
+                      borderRadius: '28px',
+                      cursor: certGenerating ? 'not-allowed' : 'pointer',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      opacity: certGenerating ? 0.7 : 1
+                    }}
+                  >
+                    {certGenerating ? 'Generating...' : 'Generate Certificate'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       );
     };
@@ -4988,9 +5208,27 @@ const TestingModule = () => {
                           <select
                             value={resultFormData.standard}
                             disabled={resultEditMode}
-                            onChange={(e) => {
+                            onChange={async (e) => {
+                              const newStandard = e.target.value;
                               setIsResultPercentageManuallyEdited(false);
-                              setResultFormData({ ...resultFormData, standard: e.target.value });
+                              setResultFormData(prev => ({ ...prev, standard: newStandard }));
+
+                              // Auto-fill Total Questions + Passing Criteria from the
+                              // selected standard's config - still editable afterwards.
+                              if (!newStandard) return;
+                              try {
+                                const info = await fetchData(`/info?standard=${encodeURIComponent(newStandard)}`);
+                                if (info && !Array.isArray(info)) {
+                                  setResultFormData(prev => ({
+                                    ...prev,
+                                    standard: newStandard,
+                                    totalQuestions: info.Total_Questions != null ? String(info.Total_Questions) : prev.totalQuestions,
+                                    passingCriteria: info.Passing_Criteria != null ? String(info.Passing_Criteria).replace('%', '') : prev.passingCriteria
+                                  }));
+                                }
+                              } catch (err) {
+                                console.warn('Failed to auto-fill standard info:', err);
+                              }
                             }}
                             required
                             style={{
