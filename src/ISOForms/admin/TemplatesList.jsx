@@ -1,25 +1,44 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Eye, Plus, Pencil, Trash2, X } from 'lucide-react'
 import { API_ENDPOINTS } from '../../config/api'
 import { SEED_TEMPLATES, SEED_VERSION } from '../seedTemplates'
 import { ensureSeeded, getOfflineTemplates, deleteOfflineTemplate } from '../utils/offlineStore'
-import DocumentChangeRequestPrint from '../pdf/DocumentChangeRequestPrint'
-import CARPrint from '../pdf/CARPrint'
-import RequisitionFormPrint from '../pdf/RequisitionFormPrint'
-import GenericFormPrint from '../pdf/GenericFormPrint'
 
+// Preview shows the template's ACTUAL PDF, not a rebuilt approximation — it is
+// the same document filled forms are generated from, so what an admin sees
+// here is exactly what downloads later.
 function PreviewModal({ template, onClose }) {
-  const printRef = useRef(null)
+  const [pdfUrl, setPdfUrl] = useState('')
+  const [state, setState] = useState('loading')   // loading | ready | missing
 
-  const PrintComponent =
-    template?.id === 'seed-fm-001-04' || template?.name === 'Document Change Request Form' || template?.formCode === 'FM-001-04'
-      ? DocumentChangeRequestPrint
-      : template?.id === 'seed-fm-002-01' || template?.name === 'Corrective Action Request Form' || template?.formCode === 'FM-002-01'
-        ? CARPrint
-        : template?.id === 'seed-fm-014-09' || template?.name === 'Requisition Form' || template?.formCode === 'FM-014-09'
-          ? RequisitionFormPrint
-          : GenericFormPrint
+  useEffect(() => {
+    let url = ''
+    let cancelled = false
+    ;(async () => {
+      try {
+        // The list endpoint omits the base64 PDF (it would be megabytes per
+        // row), so fetch the single template to get it.
+        let base64 = template.originalPdf
+        if (!base64) {
+          const res = await fetch(`${API_ENDPOINTS.ISO_FORMS_TEMPLATES}/${template.id}`)
+          if (res.ok) base64 = (await res.json()).originalPdf
+        }
+        if (cancelled) return
+        if (!base64) { setState('missing'); return }
+
+        const binary = atob(base64)
+        const bytes = new Uint8Array(binary.length)
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+        url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
+        setPdfUrl(url)
+        setState('ready')
+      } catch {
+        if (!cancelled) setState('missing')
+      }
+    })()
+    return () => { cancelled = true; if (url) URL.revokeObjectURL(url) }
+  }, [template])
 
   return (
     <div style={{
@@ -27,28 +46,34 @@ function PreviewModal({ template, onClose }) {
       display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
       zIndex: 9999, padding: '32px 16px', overflowY: 'auto',
     }}>
-      <div style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 860, position: 'relative' }}>
+      <div style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 900, position: 'relative' }}>
         <div style={{
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           padding: '18px 24px', borderBottom: '1px solid #ececf0',
         }}>
           <div>
             <div style={{ fontWeight: 800, fontSize: 17, color: '#14141c' }}>{template.name}</div>
-            <div style={{ fontSize: 13, color: '#7a7a8c', marginTop: 2 }}>Form preview — blank template</div>
+            <div style={{ fontSize: 13, color: '#7a7a8c', marginTop: 2 }}>Original template PDF — blank</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7a7a8c', display: 'flex' }}>
             <X size={22} />
           </button>
         </div>
-        <div style={{ padding: 24, overflowX: 'auto' }}>
-          <PrintComponent
-            ref={printRef}
-            entry={{ id: 'preview' }}
-            template={template}
-            formValues={{}}
-            approverValues={{}}
-            employees={[]}
-          />
+        <div style={{ padding: state === 'ready' ? 0 : 24 }}>
+          {state === 'loading' && <div style={{ color: '#7a7a8c' }}>Loading PDF…</div>}
+          {state === 'missing' && (
+            <div style={{ background: '#fff6e5', border: '1px solid #f2d9a0', color: '#8a6100', borderRadius: 12, padding: '14px 16px', fontSize: 14 }}>
+              This template has no PDF attached, so it can't be previewed or filled.
+              Edit the template and import its PDF.
+            </div>
+          )}
+          {state === 'ready' && (
+            <iframe
+              src={`${pdfUrl}#toolbar=0&navpanes=0&view=FitH`}
+              title={`${template.name} preview`}
+              style={{ width: '100%', height: '78vh', border: 'none', display: 'block', borderRadius: '0 0 20px 20px' }}
+            />
+          )}
         </div>
       </div>
     </div>
@@ -162,6 +187,15 @@ function TemplatesList() {
                         {offline && (
                           <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#92660a', background: '#fff7e6', border: '1px solid #ffe1a8', borderRadius: 999, padding: '2px 8px' }}>
                             Demo
+                          </span>
+                        )}
+                        {/* No PDF = no visual base to generate a filled form from. */}
+                        {!(t.hasOriginalPdf ?? Boolean(t.originalPdf)) && (
+                          <span
+                            title="No PDF attached — this template can't be filled or downloaded until an admin imports its PDF."
+                            style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#b42318', background: '#fdecea', border: '1px solid #f5c2c0', borderRadius: 999, padding: '2px 8px' }}
+                          >
+                            Needs PDF
                           </span>
                         )}
                       </div>
