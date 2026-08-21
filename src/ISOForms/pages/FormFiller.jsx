@@ -96,6 +96,12 @@ function FormFiller() {
     setError('')
 
     if (!template) return
+    // The completed form is produced by drawing values onto the template's own
+    // PDF, so a template without one has nothing to produce.
+    if (!template.originalPdf) {
+      setError('This template has no PDF attached, so a completed form cannot be generated. Ask an admin to edit the template and import its PDF first.')
+      return
+    }
     const missing = template.fields.filter(f => f.required && isFieldEmpty(f, values[f.id]))
     if (missing.length) { setError(`Please fill: ${missing.map(f => f.label).join(', ')}`); return }
     if (!relatedEmployeeId) { setError('Please select the employee this form is related to.'); return }

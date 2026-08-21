@@ -34,33 +34,57 @@ function PdfImportModal({ onImport, onClose }) {
   const [pdfName, setPdfName] = useState('')
   const [detectedCode, setDetectedCode] = useState(null)
   const [usingPreset, setUsingPreset] = useState(false)
+  const [usingAcroForm, setUsingAcroForm] = useState(false)
   const [selected, setSelected] = useState(new Set())
 
   const handleFile = async (file) => {
-    if (!file || file.type !== 'application/pdf') {
-      setError('Please select a valid PDF file.')
+    if (!file) return
+    // PDF only, and verified by content rather than by the MIME type/extension
+    // alone — a renamed .docx would otherwise be stored as the "original PDF"
+    // and break every download made from this template.
+    const looksPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
+    if (!looksPdf) {
+      setError('Only PDF files can be used as form templates.')
       return
     }
+    try {
+      const header = new Uint8Array(await file.slice(0, 5).arrayBuffer())
+      if (String.fromCharCode(...header) !== '%PDF-') {
+        setError('That file is not a real PDF (its contents don\'t start with %PDF). Please export it as a PDF and try again.')
+        return
+      }
+    } catch {
+      setError('Could not read that file. Please try again.')
+      return
+    }
+
     setError('')
     setParsing(true)
     try {
-      const [{ fields: detected, detectedFormCode, detectedAnyCode, allItems }, base64] = await Promise.all([
+      const [{ fields: detected, detectedFormCode, detectedAnyCode, allItems, geometry, hasAcroForm }, base64] = await Promise.all([
         parsePdf(file),
         pdfToBase64(file),
       ])
 
       setPdfBase64(base64)
       setPdfName(file.name)
+      setUsingAcroForm(hasAcroForm)
       // Prefer the recognized-form code (drives preset fields below); for any
       // other PTIS form, still capture its own "FM-###-##" code so the
       // generic layout can show a proper header instead of a blank Code.
       setDetectedCode(detectedFormCode || detectedAnyCode)
 
-      // If it's a known PTIS form, load pre-defined fields enriched with
-      // coordinates from the actual PDF so pdf-lib can overlay values correctly.
-      if (detectedFormCode && KNOWN_FORM_MAP[detectedFormCode]) {
+      // A PDF carrying its own form fields already states every position
+      // exactly, so it outranks even a hand-built preset for a known code.
+      // Otherwise, a known PTIS form loads its preset fields, positioned from
+      // the PDF's own geometry.
+      if (hasAcroForm) {
+        setFields(detected)
+        setSelected(new Set(detected.map(f => f.id)))
+        setUsingPreset(false)
+      } else if (detectedFormCode && KNOWN_FORM_MAP[detectedFormCode]) {
         const rawPreset = KNOWN_FORM_MAP[detectedFormCode].fields.map(f => ({ ...f }))
-        const enriched = enrichSeedFieldsWithCoords(rawPreset, allItems)
+        const enriched = enrichSeedFieldsWithCoords(rawPreset, allItems, geometry)
         setFields(enriched)
         setSelected(new Set(enriched.map(f => f.id)))
         setUsingPreset(true)
@@ -162,6 +186,17 @@ function PdfImportModal({ onImport, onClose }) {
           {/* Review panel */}
           {fields && (
             <>
+              {/* This PDF defines its own fields — nothing was guessed. */}
+              {usingAcroForm && (
+                <div style={{
+                  background: '#e7f6ec', border: '1px solid #a3d9b1', borderRadius: 12,
+                  padding: '12px 16px', marginBottom: 16, fontSize: 14, color: '#1a7f4e',
+                }}>
+                  <strong>✓ This PDF is a fillable form</strong> — read {fields.length} field(s)
+                  straight from it, with their exact positions and types. No detection needed.
+                </div>
+              )}
+
               {/* Known form banner */}
               {usingPreset && detectedCode && (
                 <div style={{

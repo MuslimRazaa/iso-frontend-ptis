@@ -1,15 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useLocation } from 'react-router-dom'
 import API_BASE_URL, { API_ENDPOINTS } from '../../config/api'
 import { getCurrentEmployeeId } from '../utils/currentEmployee'
 import DynamicField from '../components/DynamicField'
 import { isFieldEmpty } from '../utils/fieldHelpers'
 import { getOfflineEntry, updateOfflineEntry, getOfflineTemplate } from '../utils/offlineStore'
-import DocumentChangeRequestPrint from '../pdf/DocumentChangeRequestPrint'
-import CARPrint from '../pdf/CARPrint'
-import RequisitionFormPrint from '../pdf/RequisitionFormPrint'
-import GenericFormPrint from '../pdf/GenericFormPrint'
-import { downloadNodeAsPdf } from '../pdf/generatePdf'
 import { downloadFilledPdf } from '../pdf/fillOriginalPdf'
 import { SEED_EMPLOYEES } from '../seedTemplates'
 
@@ -48,7 +43,6 @@ function FormDetail() {
   const [approverValues, setApproverValues] = useState({})
   const [downloading, setDownloading] = useState(false)
   const [employees, setEmployees] = useState([])
-  const printRef = useRef(null)
 
   let isAdminOverride = !isUserSide
   try {
@@ -142,41 +136,29 @@ function FormDetail() {
 
   const setApproverValue = (fieldId, val) => setApproverValues(prev => ({ ...prev, [fieldId]: val }))
 
-  // Requisition Form's item grid is a fixed set of individual fields (no
-  // native "table" field type exists), so pdf-lib's coordinate overlay can't
-  // lay it out as a real table on the original PDF — the hand-built print
-  // layout (RequisitionFormPrint) always renders it properly, so always use
-  // the snapshot route for this form instead of the raw-PDF overlay.
-  const isRequisitionForm =
-    template?.id === 'seed-fm-014-09' || template?.name === 'Requisition Form' || template?.formCode === 'FM-014-09'
-
+  // The download is always the original uploaded PDF with values drawn onto
+  // it. There is deliberately no HTML/snapshot fallback: a fallback that
+  // silently produced a rebuilt layout is exactly what made downloads stop
+  // matching the real form. If the overlay can't run, we say so instead.
   const handleDownloadPdf = async () => {
     setDownloading(true)
     setError('')
     const filename = `${(entry.template_name || template?.name || 'form').replace(/\s+/g, '-')}-${entry.id}.pdf`
     try {
       const originalPdf = template?.originalPdf
-      let usedOriginal = false
-      if (originalPdf && template?.fields && !isRequisitionForm) {
-        // Download with the exact original PDF layout, values overlaid via pdf-lib
-        try {
-          const allFields = template.fields
-          await downloadFilledPdf(originalPdf, allFields, formValues, approverValues, employees, filename)
-          usedOriginal = true
-        } catch (pdfLibErr) {
-          // Attached PDF is missing/corrupt (e.g. cleared or re-saved incorrectly during
-          // a template edit) — fall through to the html2canvas snapshot instead of failing silently.
-          console.error('Original-PDF overlay failed, falling back to snapshot layout:', pdfLibErr)
-        }
+      if (!originalPdf) {
+        setError('This template has no PDF attached, so the form cannot be generated. Ask an admin to edit the template and import its PDF.')
+        return
       }
-      if (!usedOriginal) {
-        // Fallback: html2canvas snapshot of the styled print template
-        if (!printRef.current) throw new Error('Nothing to render for this form yet.')
-        await downloadNodeAsPdf(printRef.current, filename)
+      const { skipped } = await downloadFilledPdf(
+        originalPdf, template.fields || [], formValues, approverValues, employees, filename,
+      )
+      if (skipped.length) {
+        setError(`Downloaded, but ${skipped.length} filled field(s) have no position on the PDF yet and were left off: ${skipped.slice(0, 5).join(', ')}${skipped.length > 5 ? '…' : ''}. An admin can place them under Edit Template → Field Positions.`)
       }
     } catch (err) {
       console.error('Download PDF failed:', err)
-      setError('Could not generate the PDF. Please try again, or re-attach the template PDF if this keeps happening.')
+      setError('Could not generate the PDF from the attached template. The stored PDF may be corrupt — re-import it on the template and try again.')
     } finally {
       setDownloading(false)
     }
@@ -372,18 +354,6 @@ function FormDetail() {
         </article>
       )}
 
-      {/* Off-screen — captured by html2canvas for the PDF download, never shown to the user */}
-      <div style={{ position: 'absolute', left: -99999, top: 0 }}>
-        {template?.id === 'seed-fm-001-04' || template?.name === 'Document Change Request Form' || template?.formCode === 'FM-001-04' ? (
-          <DocumentChangeRequestPrint ref={printRef} entry={entry} formValues={formValues} approverValues={approverValues} employees={employees} />
-        ) : template?.id === 'seed-fm-002-01' || template?.name === 'Corrective Action Request Form' || template?.formCode === 'FM-002-01' ? (
-          <CARPrint ref={printRef} entry={entry} formValues={formValues} approverValues={approverValues} employees={employees} />
-        ) : isRequisitionForm ? (
-          <RequisitionFormPrint ref={printRef} entry={entry} formValues={formValues} approverValues={approverValues} employees={employees} />
-        ) : (
-          <GenericFormPrint ref={printRef} entry={entry} template={template} formValues={formValues} approverValues={approverValues} employees={employees} />
-        )}
-      </div>
     </div>
   )
 }
