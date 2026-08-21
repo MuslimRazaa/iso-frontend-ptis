@@ -32,7 +32,6 @@ const fromDB = row => ({
   manHours: row.man_hours != null ? String(row.man_hours) : '',
   drivenKm: row.driven_km != null ? String(row.driven_km) : '',
   jmps: row.jmps || '',
-  tra: row.tra || '',
   equipCL: row.equip_cl || '',
   vLog: row.v_log || '',
   tbt: row.tbt || '',
@@ -83,7 +82,6 @@ const toDB = data => ({
   man_hours: data.manHours || null,
   driven_km: data.drivenKm || null,
   jmps: data.jmps || null,
-  tra: data.tra || null,
   equip_cl: data.equipCL || null,
   v_log: data.vLog || null,
   tbt: data.tbt || null,
@@ -243,7 +241,7 @@ const emptyEntry = {
   sNo: '', client: '', workOrder: '', inspectorName: '', inspectorTeam: '',
   reference: '', location: '', natureOfJob: '', startDate: '', endDate: '',
   entryDate: '', vehicleUsed: '', days: '', calculatedDays: '', manPower: '',
-  manHours: '', drivenKm: '', jmps: '', tra: '', equipCL: '', vLog: '', tbt: '',
+  manHours: '', drivenKm: '', jmps: '', equipCL: '', vLog: '', tbt: '',
   jobTra: '', envTra: '', travTra: '', fmLog: '', fbForm: '',
   status: '', completionDate: '', rept: '', exp: '', accounts: '', it: '',
   submissionDate: '', source: '', remark: '', remarks: '',
@@ -284,14 +282,13 @@ const EXPORT_COLUMNS = [
   ['Man Hours', 'manHours'],
   ['Driven KM', 'drivenKm'],
   ['JMPs', 'jmps'],
-  ['TRA', 'tra'],
-  ['Equip C/L', 'equipCL'],
-  ['V. Log', 'vLog'],
-  ['TBT', 'tbt'],
   ['Job TRA', 'jobTra'],
   ['Env TRA', 'envTra'],
   ['Trav TRA', 'travTra'],
+  ['V. Log', 'vLog'],
   ['FM Log', 'fmLog'],
+  ['Equip C/L', 'equipCL'],
+  ['TBT', 'tbt'],
   ['FB Form', 'fbForm'],
   ['Status', 'status'],
   ['Completion Date', 'completionDate'],
@@ -356,7 +353,7 @@ const FIELD_DEPT = {
   source: 'operations', remark: 'operations', remarks: 'operations',
   remarkOperations: 'operations',
   // QHSE
-  tra: 'qhse', equipCL: 'qhse', vLog: 'qhse', tbt: 'qhse',
+  equipCL: 'qhse', vLog: 'qhse', tbt: 'qhse',
   jobTra: 'qhse', envTra: 'qhse', travTra: 'qhse', fmLog: 'qhse', fbForm: 'qhse',
   rept: 'qhse', submissionDate: 'qhse', remarkQhse: 'qhse',
   // Inventory
@@ -385,7 +382,7 @@ const COL_GROUPS = [
   { label: 'Identification', span: 7, color: '#eef3ff', textColor: '#2f74bf', borderColor: '#c9dcf5' },
   { label: 'Job Details', span: 5, color: '#fff8ef', textColor: '#c87e1c', borderColor: '#ffe4c4' },
   { label: 'Operational Metrics', span: 6, color: '#f0fff8', textColor: '#1d814c', borderColor: '#c3ecd4' },
-  { label: 'Safety Documentation', span: 9, color: '#fdf5ff', textColor: '#7c3aed', borderColor: '#ddb8f7' },
+  { label: 'Safety Documentation', span: 8, color: '#fdf5ff', textColor: '#7c3aed', borderColor: '#ddb8f7' },
   { label: 'Status & Tracking', span: 8, color: '#fff5f6', textColor: '#d7263d', borderColor: '#ffd1d8' },
   { label: 'Inventory', span: 4, color: '#fff9e6', textColor: '#a87800', borderColor: '#f4dd9d' },
   { label: 'Remarks', span: 2, color: '#f7f7f9', textColor: '#595966', borderColor: '#e0e0e6' },
@@ -1047,8 +1044,8 @@ function JobLogDescription() {
         e.sNo, e.entryDate, e.client, e.workOrder, e.inspectorName, e.inspectorTeam,
         e.reference, e.location, e.natureOfJob, e.startDate, e.endDate, e.vehicleUsed,
         e.days, e.calculatedDays, e.manPower, e.manHours, e.drivenKm,
-        e.jmps, e.tra, e.equipCL, e.vLog, e.tbt, e.status, e.completionDate,
-        e.rept, e.exp, e.iso, e.accounts, e.it, e.submissionDate, e.source,
+        e.jmps, e.jobTra, e.envTra, e.travTra, e.equipCL, e.vLog, e.fmLog, e.tbt, e.fbForm, e.status, e.completionDate,
+        e.rept, e.exp, e.accounts, e.it, e.submissionDate, e.source,
         e.remark, e.remarks, e.stockRequisition, e.goodsIssueNote, e.consumption, e.gatePass,
       ].filter(Boolean).join(' ').toLowerCase().includes(q)
     })
@@ -1128,9 +1125,10 @@ function JobLogDescription() {
       startDate: f('startDate'), endDate: f('endDate'), entryDate: f('entryDate'),
       vehicleUsed: f('vehicleUsed'), days: f('days'), calculatedDays: f('calculatedDays'),
       manPower: f('manPower'), manHours: f('manHours'), drivenKm: f('drivenKm'),
-      jmps: f('jmps'), tra: f('tra'), equipCL: f('equipCL'), vLog: f('vLog'), tbt: f('tbt'),
+      jmps: f('jmps'), equipCL: f('equipCL'), vLog: f('vLog'), tbt: f('tbt'),
+      jobTra: f('jobTra'), envTra: f('envTra'), travTra: f('travTra'), fmLog: f('fmLog'), fbForm: f('fbForm'),
       status: f('status'), completionDate: f('completionDate'), rept: f('rept'),
-      exp: f('exp'), iso: f('iso'), accounts: f('accounts'), it: f('it'),
+      exp: f('exp'), accounts: f('accounts'), it: f('it'),
       submissionDate: f('submissionDate'), source: f('source'), remark: f('remark'), remarks: f('remarks'),
       remarkOperations: f('remarkOperations'), remarkQhse: f('remarkQhse'),
       remarkInventory: f('remarkInventory'), remarkAccounts: f('remarkAccounts'), remarkIt: f('remarkIt'),
@@ -1583,14 +1581,13 @@ function JobLogDescription() {
                   <th title="Total man-hours">Man Hrs</th>
                   <th title="Km driven">Driven Km</th>
                   <th title="Job Method Procedures">JMPs</th>
-                  <th title="Task Risk Assessment">TRA</th>
-                  <th title="Equipment Checklist">Equip C/L</th>
-                  <th title="Vehicle Log">V. Log</th>
-                  <th title="Tool Box Talk">TBT</th>
                   <th title="Job Task Risk Assessment">Job TRA</th>
                   <th title="Environmental Task Risk Assessment">Env TRA</th>
                   <th title="Travel Task Risk Assessment">Trav TRA</th>
+                  <th title="Vehicle Log">V. Log</th>
                   <th title="Field Manager Log">FM Log</th>
+                  <th title="Equipment Checklist">Equip C/L</th>
+                  <th title="Tool Box Talk">TBT</th>
                   <th title="Field Ticket / FB Form">FB Form</th>
                   <th>Status</th><th>Completion</th>
                   <th title="Report">REPT</th>
@@ -1609,7 +1606,7 @@ function JobLogDescription() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={42} style={{ padding: '60px 32px', textAlign: 'center' }}>
+                    <td colSpan={41} style={{ padding: '60px 32px', textAlign: 'center' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
                         <span style={{ fontSize: 36 }}>⏳</span>
                         <span style={{ fontSize: 15, fontWeight: 600, color: '#7a7a8c' }}>Loading job log entries…</span>
@@ -1618,7 +1615,7 @@ function JobLogDescription() {
                   </tr>
                 ) : filteredEntries.length === 0 ? (
                   <tr>
-                    <td colSpan={42} style={{ padding: '60px 32px', textAlign: 'center' }}>
+                    <td colSpan={41} style={{ padding: '60px 32px', textAlign: 'center' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
                         <ClipboardList size={44} color="#b9c0cf" />
                         <span style={{ fontSize: 16, fontWeight: 700, color: '#1f1f27' }}>No job log entries found</span>
@@ -1659,14 +1656,13 @@ function JobLogDescription() {
                         <td className="all-records-cell-text" style={{ textAlign: 'center' }}>{rv(entry.manHours)}</td>
                         <td className="all-records-cell-text" style={{ textAlign: 'center' }}>{rv(entry.drivenKm)}</td>
                         <td className="all-records-cell-text" style={{ textAlign: 'center', fontWeight: 700 }}>{rv(entry.jmps)}</td>
-                        <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.tra} /></td>
-                        <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.equipCL} /></td>
-                        <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.vLog} /></td>
-                        <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.tbt} /></td>
                         <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.jobTra} /></td>
                         <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.envTra} /></td>
                         <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.travTra} /></td>
+                        <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.vLog} /></td>
                         <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.fmLog} /></td>
+                        <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.equipCL} /></td>
+                        <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.tbt} /></td>
                         <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.fbForm} /></td>
                         <td><StatusBadge value={entry.status} /></td>
                         <td className="all-records-cell-date">{rv(entry.completionDate)}</td>
@@ -1964,17 +1960,7 @@ function JobLogDescription() {
 
               <ModalSection Icon={MdOutlineHealthAndSafety} title="QHSE" hint="Safety & compliance" />
               <div className="form-row">
-                <label><span>TRA</span>
-                  <input type="number" min="0" value={modalState.tra}
-                    placeholder="e.g. 3"
-                    disabled={!canEdit('qhse')}
-                    onChange={e => handleModalChange('tra', e.target.value)} /></label>
-                <label><span>TBT</span>
-                  <input type="number" min="0" value={modalState.tbt}
-                    placeholder="e.g. 5"
-                    disabled={!canEdit('qhse')}
-                    onChange={e => handleModalChange('tbt', e.target.value)} /></label>
-                {[['equipCL', 'Equip C/L'], ['vLog', 'V. Log'], ['rept', 'REPT (Report)']].map(([f, l]) => (
+                {[['jobTra', 'Job TRA'], ['envTra', 'Env TRA'], ['travTra', 'Trav TRA'], ['vLog', 'V. Log'], ['fmLog', 'FM Log'], ['equipCL', 'Equip C/L']].map(([f, l]) => (
                   <label key={f}><span>{l}</span>
                     <select value={modalState[f]} disabled={!canEdit('qhse')}
                       onChange={e => handleModalChange(f, e.target.value)}>
@@ -1988,7 +1974,12 @@ function JobLogDescription() {
                     </select>
                   </label>
                 ))}
-                {[['jobTra', 'Job TRA'], ['envTra', 'Env TRA'], ['travTra', 'Trav TRA'], ['fmLog', 'FM Log'], ['fbForm', 'FB Form']].map(([f, l]) => (
+                <label><span>TBT</span>
+                  <input type="number" min="0" value={modalState.tbt}
+                    placeholder="e.g. 5"
+                    disabled={!canEdit('qhse')}
+                    onChange={e => handleModalChange('tbt', e.target.value)} /></label>
+                {[['fbForm', 'FB Form'], ['rept', 'REPT (Report)']].map(([f, l]) => (
                   <label key={f}><span>{l}</span>
                     <select value={modalState[f]} disabled={!canEdit('qhse')}
                       onChange={e => handleModalChange(f, e.target.value)}>
