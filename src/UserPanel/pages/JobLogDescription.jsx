@@ -40,7 +40,6 @@ const fromDB = row => ({
   completionDate: row.completion_date ? row.completion_date.slice(0, 10) : '',
   rept: row.rept || '',
   exp: row.exp || '',
-  iso: row.iso || '',
   accounts: row.accounts || '',
   it: row.it || '',
   submissionDate: row.submission_date ? row.submission_date.slice(0, 10) : '',
@@ -87,7 +86,6 @@ const toDB = data => ({
   completion_date: data.completionDate || null,
   rept: data.rept || null,
   exp: data.exp || null,
-  iso: data.iso || null,
   accounts: data.accounts || null,
   it: data.it || null,
   submission_date: data.submissionDate || null,
@@ -236,7 +234,7 @@ const emptyEntry = {
   reference: '', location: '', natureOfJob: '', startDate: '', endDate: '',
   entryDate: '', vehicleUsed: '', days: '', calculatedDays: '', manPower: '',
   manHours: '', drivenKm: '', jmps: '', tra: '', equipCL: '', vLog: '', tbt: '',
-  status: '', completionDate: '', rept: '', exp: '', iso: '', accounts: '', it: '',
+  status: '', completionDate: '', rept: '', exp: '', accounts: '', it: '',
   submissionDate: '', source: '', remark: '', remarks: '',
   remarkOperations: '', remarkQhse: '', remarkInventory: '', remarkAccounts: '', remarkIt: '',
   stockRequisition: '', goodsIssueNote: '', consumption: '', gatePass: ''
@@ -283,7 +281,6 @@ const EXPORT_COLUMNS = [
   ['Completion Date', 'completionDate'],
   ['REPT', 'rept'],
   ['EXP', 'exp'],
-  ['ISO', 'iso'],
   ['Accounts', 'accounts'],
   ['IT', 'it'],
   ['Submission Date', 'submissionDate'],
@@ -343,7 +340,7 @@ const FIELD_DEPT = {
   source: 'operations', remark: 'operations', remarks: 'operations',
   remarkOperations: 'operations',
   // QHSE
-  tra: 'qhse', equipCL: 'qhse', vLog: 'qhse', tbt: 'qhse', iso: 'qhse',
+  tra: 'qhse', equipCL: 'qhse', vLog: 'qhse', tbt: 'qhse',
   rept: 'qhse', submissionDate: 'qhse', remarkQhse: 'qhse',
   // Inventory
   stockRequisition: 'inventory', goodsIssueNote: 'inventory',
@@ -370,9 +367,9 @@ const calculateDays = (startDate, endDate) => {
 const COL_GROUPS = [
   { label: 'Identification', span: 7, color: '#eef3ff', textColor: '#2f74bf', borderColor: '#c9dcf5' },
   { label: 'Job Details', span: 5, color: '#fff8ef', textColor: '#c87e1c', borderColor: '#ffe4c4' },
-  { label: 'Operational Metrics', span: 5, color: '#f0fff8', textColor: '#1d814c', borderColor: '#c3ecd4' },
-  { label: 'Safety Documentation', span: 5, color: '#fdf5ff', textColor: '#7c3aed', borderColor: '#ddb8f7' },
-  { label: 'Status & Tracking', span: 9, color: '#fff5f6', textColor: '#d7263d', borderColor: '#ffd1d8' },
+  { label: 'Operational Metrics', span: 6, color: '#f0fff8', textColor: '#1d814c', borderColor: '#c3ecd4' },
+  { label: 'Safety Documentation', span: 4, color: '#fdf5ff', textColor: '#7c3aed', borderColor: '#ddb8f7' },
+  { label: 'Status & Tracking', span: 8, color: '#fff5f6', textColor: '#d7263d', borderColor: '#ffd1d8' },
   { label: 'Inventory', span: 4, color: '#fff9e6', textColor: '#a87800', borderColor: '#f4dd9d' },
   { label: 'Remarks', span: 2, color: '#f7f7f9', textColor: '#595966', borderColor: '#e0e0e6' },
   { label: 'Actions', span: 1, color: '#f7f7f9', textColor: '#595966', borderColor: '#e0e0e6' },
@@ -1034,7 +1031,7 @@ function JobLogDescription() {
         e.reference, e.location, e.natureOfJob, e.startDate, e.endDate, e.vehicleUsed,
         e.days, e.calculatedDays, e.manPower, e.manHours, e.drivenKm,
         e.jmps, e.tra, e.equipCL, e.vLog, e.tbt, e.status, e.completionDate,
-        e.rept, e.exp, e.iso, e.accounts, e.it, e.submissionDate, e.source,
+        e.rept, e.exp, e.accounts, e.it, e.submissionDate, e.source,
         e.remark, e.remarks, e.stockRequisition, e.goodsIssueNote, e.consumption, e.gatePass,
       ].filter(Boolean).join(' ').toLowerCase().includes(q)
     })
@@ -1116,7 +1113,7 @@ function JobLogDescription() {
       manPower: f('manPower'), manHours: f('manHours'), drivenKm: f('drivenKm'),
       jmps: f('jmps'), tra: f('tra'), equipCL: f('equipCL'), vLog: f('vLog'), tbt: f('tbt'),
       status: f('status'), completionDate: f('completionDate'), rept: f('rept'),
-      exp: f('exp'), iso: f('iso'), accounts: f('accounts'), it: f('it'),
+      exp: f('exp'), accounts: f('accounts'), it: f('it'),
       submissionDate: f('submissionDate'), source: f('source'), remark: f('remark'), remarks: f('remarks'),
       remarkOperations: f('remarkOperations'), remarkQhse: f('remarkQhse'),
       remarkInventory: f('remarkInventory'), remarkAccounts: f('remarkAccounts'), remarkIt: f('remarkIt'),
@@ -1576,7 +1573,6 @@ function JobLogDescription() {
                   <th>Status</th><th>Completion</th>
                   <th title="Report">REPT</th>
                   <th title="Expenses">EXP</th>
-                  <th title="ISO Compliance">ISO</th>
                   <th>Accounts</th>
                   <th title="IT Department">I.T</th>
                   <th>Submission</th><th>Region</th>
@@ -1591,7 +1587,7 @@ function JobLogDescription() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={38} style={{ padding: '60px 32px', textAlign: 'center' }}>
+                    <td colSpan={36} style={{ padding: '60px 32px', textAlign: 'center' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
                         <span style={{ fontSize: 36 }}>⏳</span>
                         <span style={{ fontSize: 15, fontWeight: 600, color: '#7a7a8c' }}>Loading job log entries…</span>
@@ -1600,7 +1596,7 @@ function JobLogDescription() {
                   </tr>
                 ) : filteredEntries.length === 0 ? (
                   <tr>
-                    <td colSpan={38} style={{ padding: '60px 32px', textAlign: 'center' }}>
+                    <td colSpan={36} style={{ padding: '60px 32px', textAlign: 'center' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
                         <ClipboardList size={44} color="#b9c0cf" />
                         <span style={{ fontSize: 16, fontWeight: 700, color: '#1f1f27' }}>No job log entries found</span>
@@ -1649,7 +1645,6 @@ function JobLogDescription() {
                         <td className="all-records-cell-date">{rv(entry.completionDate)}</td>
                         <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.rept} /></td>
                         <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.exp} /></td>
-                        <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.iso} /></td>
                         <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.accounts} /></td>
                         <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.it} /></td>
                         <td className="all-records-cell-date">{rv(entry.submissionDate)}</td>
