@@ -523,10 +523,21 @@ const TestingModule = () => {
     addToast({ id, message, type });
   }, []);
 
+  // An employee specifically granted "Testing: Admin" from Manage User Access
+  // (employees.testing_admin_access) is trusted the same way a host admin or
+  // the module's own hardcoded-password login is — without needing either.
+  const hasTestingAdminPermission = () => {
+    try {
+      return JSON.parse(localStorage.getItem('userPermissions') || '{}').testing_admin === true;
+    } catch {
+      return false;
+    }
+  };
+
   // State
   const [currentPage, setCurrentPage] = useState(() => {
     // Honor host project auth: admins from the host go straight to the admin panel.
-    if (localStorage.getItem('userType') === 'admin') return 'admin';
+    if (localStorage.getItem('userType') === 'admin' || hasTestingAdminPermission()) return 'admin';
     const savedPage = localStorage.getItem('ptis_current_page');
     const savedAdminState = localStorage.getItem('ptis_admin_logged_in');
     return savedAdminState === 'true' && savedPage === 'admin' ? 'admin' : 'home';
@@ -550,8 +561,9 @@ const TestingModule = () => {
   const [skipped, setSkipped] = useState([]);
   const [isReviewingSkipped, setIsReviewingSkipped] = useState(false);
   const [isAdmin, setIsAdmin] = useState(() => {
-    // Host admins are trusted as testing-module admins (no separate password).
-    if (localStorage.getItem('userType') === 'admin') return true;
+    // Host admins, and employees granted "Testing: Admin" in Manage User
+    // Access, are trusted as testing-module admins (no separate password).
+    if (localStorage.getItem('userType') === 'admin' || hasTestingAdminPermission()) return true;
     const savedAdminState = localStorage.getItem('ptis_admin_logged_in');
     return savedAdminState === 'true';
   });

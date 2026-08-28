@@ -49,6 +49,7 @@ const ManageUserAccess = () => {
       cvs: employee.cvs_access === 1,
       reports: employee.reports_access === 1,
       testing: employee.testing_access === 1,
+      testing_admin: employee.testing_admin_access === 1,
       iso_forms: employee.iso_forms_access === 1,
       iso_forms_admin: employee.iso_forms_admin_access === 1,
       jlr_operations: employee.jlr_operations_access === 1,
@@ -77,6 +78,7 @@ const ManageUserAccess = () => {
           cvs_access: permissions.cvs,
           reports_access: permissions.reports,
           testing_access: permissions.testing,
+          testing_admin_access: permissions.testing_admin,
           iso_forms_access: permissions.iso_forms,
           iso_forms_admin_access: permissions.iso_forms_admin,
           jlr_operations_access: permissions.jlr_operations,
@@ -108,6 +110,10 @@ const ManageUserAccess = () => {
       // ISO Forms admin access implies base ISO Forms access
       if (module === 'iso_forms_admin' && next.iso_forms_admin) {
         next.iso_forms = true;
+      }
+      // Testing admin access implies base Testing access
+      if (module === 'testing_admin' && next.testing_admin) {
+        next.testing = true;
       }
       // "Full Access" master switch — turning it ON enables every JLR department
       if (module === 'jlr_full' && next.jlr_full) {
@@ -155,7 +161,8 @@ const ManageUserAccess = () => {
               if (employee.portal_access === 1) assignedModules.push('Portal');
               if (employee.cvs_access === 1) assignedModules.push('CVs');
               if (employee.reports_access === 1) assignedModules.push('Reports');
-              if (employee.testing_access === 1) assignedModules.push('Testing');
+              if (employee.testing_admin_access === 1) assignedModules.push('Testing: Admin');
+              else if (employee.testing_access === 1) assignedModules.push('Testing');
               if (employee.iso_forms_admin_access === 1) assignedModules.push('ISO Forms: Admin');
               else if (employee.iso_forms_access === 1) assignedModules.push('ISO Forms');
               if (employee.jlr_full_access === 1) {
@@ -313,8 +320,27 @@ const ManageUserAccess = () => {
                   <label className="toggle-switch">
                     <input
                       type="checkbox"
-                      checked={permissions.testing}
+                      checked={permissions.testing || permissions.testing_admin}
+                      disabled={permissions.testing_admin}
                       onChange={() => togglePermission('testing')}
+                    />
+                    <span className="toggle-slider"></span>
+                  </label>
+                </div>
+
+                <div className="permission-item">
+                  <div className="permission-info">
+                    <div className="permission-icon" style={{ background: '#d7263d', color: '#fff' }}>🛠️</div>
+                    <div>
+                      <strong>Testing: Admin</strong>
+                      <p>Manage standards/test types, question bank, results, certificates and practical marks (includes Testing access)</p>
+                    </div>
+                  </div>
+                  <label className="toggle-switch">
+                    <input
+                      type="checkbox"
+                      checked={permissions.testing_admin}
+                      onChange={() => togglePermission('testing_admin')}
                     />
                     <span className="toggle-slider"></span>
                   </label>
