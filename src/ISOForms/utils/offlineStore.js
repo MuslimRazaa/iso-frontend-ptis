@@ -52,6 +52,8 @@ export const addOfflineEntry   = (entry) => {
 }
 export const updateOfflineEntry = (id, patch) =>
   write(ENTRIES_KEY, read(ENTRIES_KEY).map(e => (String(e.id) === String(id) ? { ...e, ...patch } : e)))
+export const deleteOfflineEntry = (id) =>
+  write(ENTRIES_KEY, read(ENTRIES_KEY).filter(e => String(e.id) !== String(id)))
 
 // Seeds one real PTIS form (FM-001-04) the first time the module is opened
 // without a backend, so there's something concrete to click through.

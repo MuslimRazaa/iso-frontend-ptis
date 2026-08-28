@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { X, Move, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { X, Move, Trash2, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { loadPdfDocument, renderPageToCanvas } from '../utils/renderPdfPage'
 import {
   normalizePdfCoords,
@@ -8,6 +8,7 @@ import {
   DEFAULT_BOX_WIDTH,
   DEFAULT_BOX_HEIGHT,
 } from '../utils/pdfCoords'
+import { FIELD_TYPES, OWNERS, blankField, hasOptions } from '../utils/fieldTypes'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Field position editor.
@@ -33,6 +34,43 @@ const parseSeries = (label) => {
   return { key: `${m[1]}#${m[3]}`, num: Number(m[2]) }
 }
 
+const round2 = (n) => Math.round(n * 100) / 100
+
+// A number input that keeps its own text while focused. Binding straight to the
+// stored value makes the box unclearable — an empty string parses to 0 and is
+// written back the moment the admin deletes the last digit — so typed edits are
+// committed as they parse and the field re-syncs on blur.
+function NumInput({ value, onCommit, min, step = 1 }) {
+  const [text, setText] = useState(value == null ? '' : String(value))
+  const [focused, setFocused] = useState(false)
+  const [synced, setSynced] = useState(value)
+
+  // Re-sync from the stored value only while the box is idle: dragging the field
+  // must update these numbers, but not overwrite a half-typed one.
+  if (!focused && value !== synced) {
+    setSynced(value)
+    setText(value == null ? '' : String(value))
+  }
+
+  return (
+    <input
+      type="number"
+      min={min}
+      step={step}
+      value={text}
+      onFocus={() => setFocused(true)}
+      onBlur={() => { setFocused(false); setText(value == null ? '' : String(value)) }}
+      onChange={(e) => {
+        const raw = e.target.value
+        setText(raw)
+        const n = Number(raw)
+        if (raw !== '' && Number.isFinite(n)) onCommit(n)
+      }}
+      style={S.input}
+    />
+  )
+}
+
 function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
   const canvasRef = useRef(null)
   const surfaceRef = useRef(null)
@@ -46,6 +84,10 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
   const [selectedId, setSelectedId] = useState(null)
   const [placingId, setPlacingId] = useState(null)
   const [loadError, setLoadError] = useState('')
+  const [draft, setDraft] = useState(null)          // new-field form, null = closed
+  // Fields born in this editor: only those may be deleted outright here, since
+  // removing one that came from the template would be a silent template edit.
+  const [createdIds, setCreatedIds] = useState(() => new Set())
 
   // ── Load the PDF once ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -185,6 +227,66 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
     }))
   }
 
+  // ── New fields ─────────────────────────────────────────────────────────────
+  const addDraftField = () => {
+    const label = draft.label.trim()
+    if (!label) return
+    const field = { ...blankField(), ...draft, label }
+    setLocalFields(prev => [...prev, field])
+    setCreatedIds(prev => new Set(prev).add(field.id))
+    setDraft(null)
+    setSelectedId(field.id)
+    setPlacingId(field.id)          // arm it: next click on the page drops its box
+  }
+
+  const deleteField = (fieldId) => {
+    setLocalFields(prev => prev.filter(f => f.id !== fieldId))
+    setCreatedIds(prev => { const next = new Set(prev); next.delete(fieldId); return next })
+    if (selectedId === fieldId) setSelectedId(null)
+    if (placingId === fieldId) setPlacingId(null)
+  }
+
+  // ── Typed geometry ─────────────────────────────────────────────────────────
+  // Legacy anchor records carry no box extents, and normalizePdfCoords rebuilds
+  // those defaults whenever either extent is missing — so a typed edit always
+  // writes the whole box, or the value would be recomputed away on next read.
+  const setGeometry = (field, coords, patch) => {
+    patchCoords(field.id, {
+      page: coords.page,
+      x: coords.x, y: coords.y,
+      width: coords.width, height: coords.height,
+      ...patch,
+    })
+  }
+
+  // Growing a box moves its PDF-space y, because y is the BOTTOM edge while the
+  // resize handle (and the admin's eye) holds the top edge still.
+  const heightPatch = (coords, height) => ({
+    height: round2(height),
+    y: round2(coords.y + coords.height - height),
+  })
+
+  // Equalising by hand is the whole reason typed sizes exist, so the size of the
+  // selected box can be pushed onto every other placed field in one go.
+  const applySizeToAllPlaced = (withWidth) => {
+    if (!selectedCoords) return
+    const { width, height } = selectedCoords
+    setLocalFields(prev => prev.map(f => {
+      const c = normalizePdfCoords(f.pdfCoords)
+      if (!c) return f
+      return {
+        ...f,
+        pdfCoords: {
+          ...f.pdfCoords,
+          page: c.page,
+          x: c.x,
+          width: withWidth ? width : c.width,
+          ...heightPatch(c, height),
+        },
+      }
+    }))
+  }
+
   const clearPosition = (fieldId) => {
     setLocalFields(prev => prev.map(f => {
       if (f.id !== fieldId) return f
@@ -224,6 +326,79 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
         <div style={S.body}>
           {/* ── Sidebar ───────────────────────────────────────────────────── */}
           <div style={S.sidebar}>
+            {draft ? (
+              <div style={S.panel}>
+                <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>New field</div>
+
+                <label style={S.label}>Label</label>
+                <input
+                  type="text"
+                  autoFocus
+                  value={draft.label}
+                  placeholder="e.g. Department"
+                  onChange={(e) => setDraft(d => ({ ...d, label: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === 'Enter') addDraftField() }}
+                  style={S.input}
+                />
+
+                <label style={S.label}>Type</label>
+                <select
+                  value={draft.type}
+                  onChange={(e) => setDraft(d => ({ ...d, type: e.target.value }))}
+                  style={S.input}
+                >
+                  {FIELD_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+
+                {hasOptions(draft.type) && (
+                  <>
+                    <label style={S.label}>Options</label>
+                    <input
+                      type="text"
+                      value={draft.options}
+                      placeholder="Hardware, Software, Network"
+                      onChange={(e) => setDraft(d => ({ ...d, options: e.target.value }))}
+                      style={S.input}
+                    />
+                  </>
+                )}
+
+                <label style={S.label}>Filled by</label>
+                <select
+                  value={draft.owner}
+                  onChange={(e) => setDraft(d => ({ ...d, owner: e.target.value }))}
+                  style={S.input}
+                >
+                  {OWNERS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+
+                <label style={{ ...S.label, display: 'flex', alignItems: 'center', gap: 6, textTransform: 'none' }}>
+                  <input
+                    type="checkbox"
+                    checked={draft.required}
+                    onChange={(e) => setDraft(d => ({ ...d, required: e.target.checked }))}
+                  />
+                  Required
+                </label>
+
+                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                  <button
+                    type="button"
+                    onClick={addDraftField}
+                    disabled={!draft.label.trim()}
+                    style={{ ...S.seriesBtn, opacity: draft.label.trim() ? 1 : 0.5 }}
+                  >
+                    Add &amp; place
+                  </button>
+                  <button type="button" onClick={() => setDraft(null)} style={S.smallGhostBtn}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <button type="button" onClick={() => setDraft(blankField())} style={S.addBtn}>
+                <Plus size={14} /> Add Field
+              </button>
+            )}
+
             {placingId && (
               <div style={S.hint}>
                 Click on the page to place <strong>{localFields.find(f => f.id === placingId)?.label}</strong>.
@@ -255,6 +430,56 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
                   <option value="center">Center</option>
                   <option value="right">Right</option>
                 </select>
+
+                <label style={S.label}>Box size &amp; position (pt)</label>
+                <div style={S.geomGrid}>
+                  <div>
+                    <span style={S.geomTag}>Width</span>
+                    <NumInput
+                      value={round2(selectedCoords.width)}
+                      min={1} step={1}
+                      onCommit={(n) => setGeometry(selected, selectedCoords, { width: round2(Math.max(1, n)) })}
+                    />
+                  </div>
+                  <div>
+                    <span style={S.geomTag}>Height</span>
+                    <NumInput
+                      value={round2(selectedCoords.height)}
+                      min={1} step={1}
+                      onCommit={(n) => setGeometry(selected, selectedCoords, heightPatch(selectedCoords, Math.max(1, n)))}
+                    />
+                  </div>
+                  <div>
+                    <span style={S.geomTag}>X</span>
+                    <NumInput
+                      value={round2(selectedCoords.x)}
+                      step={1}
+                      onCommit={(n) => setGeometry(selected, selectedCoords, { x: round2(n) })}
+                    />
+                  </div>
+                  <div>
+                    <span style={S.geomTag}>Y (from bottom)</span>
+                    <NumInput
+                      value={round2(selectedCoords.y)}
+                      step={1}
+                      onCommit={(n) => setGeometry(selected, selectedCoords, { y: round2(n) })}
+                    />
+                  </div>
+                </div>
+
+                {placed.length > 1 && (
+                  <div style={S.applyBox}>
+                    <div style={{ marginBottom: 6 }}>Apply this box to all {placed.length} placed fields:</div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button type="button" onClick={() => applySizeToAllPlaced(false)} style={S.smallGhostBtn}>
+                        Height only
+                      </button>
+                      <button type="button" onClick={() => applySizeToAllPlaced(true)} style={S.smallGhostBtn}>
+                        Height + width
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {(() => {
                   const info = seriesInfoFor(selected)
                   if (!info || !info.missing.length) return null
@@ -278,20 +503,37 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
                 <button type="button" onClick={() => clearPosition(selected.id)} style={S.removeBtn}>
                   <Trash2 size={13} /> Remove position
                 </button>
+                {createdIds.has(selected.id) && (
+                  <button type="button" onClick={() => deleteField(selected.id)} style={S.removeBtn}>
+                    <Trash2 size={13} /> Delete field
+                  </button>
+                )}
               </div>
             )}
 
             <div style={S.sectionTitle}>Unplaced ({unplaced.length})</div>
             {unplaced.length === 0 && <div style={S.muted}>All fields are placed.</div>}
             {unplaced.map(f => (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => setPlacingId(f.id)}
-                style={{ ...S.fieldRow, ...(placingId === f.id ? S.fieldRowActive : null) }}
-              >
-                <Move size={13} /> <span style={S.ellipsis}>{f.label}</span>
-              </button>
+              <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <button
+                  type="button"
+                  onClick={() => setPlacingId(f.id)}
+                  style={{ ...S.fieldRow, minWidth: 0, ...(placingId === f.id ? S.fieldRowActive : null) }}
+                >
+                  <Move size={13} /> <span style={S.ellipsis}>{f.label}</span>
+                </button>
+                {/* Only fields added here can be taken back here — see createdIds. */}
+                {createdIds.has(f.id) && (
+                  <button
+                    type="button"
+                    title="Delete field"
+                    onClick={() => deleteField(f.id)}
+                    style={S.rowDeleteBtn}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
             ))}
 
             <div style={S.sectionTitle}>Placed ({placed.length})</div>
@@ -435,6 +677,27 @@ const S = {
     display: 'flex', alignItems: 'center', gap: 5, marginTop: 12, padding: '6px 10px',
     borderRadius: 7, border: '1px solid #f5c2c0', background: '#fff', color: '#b42318',
     cursor: 'pointer', fontSize: 12, fontWeight: 600,
+  },
+  addBtn: {
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+    width: '100%', padding: '8px 10px', marginBottom: 12, borderRadius: 8,
+    border: '1px dashed #b8c6dd', background: '#fff', color: '#2c4f86',
+    cursor: 'pointer', fontSize: 12.5, fontWeight: 700,
+  },
+  smallGhostBtn: {
+    padding: '7px 10px', borderRadius: 7, border: '1px solid #d8d8e0',
+    background: '#fff', color: '#4a4a58', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+  },
+  rowDeleteBtn: {
+    display: 'flex', alignItems: 'center', flexShrink: 0, marginBottom: 4,
+    padding: '6px 7px', borderRadius: 7, border: '1px solid #f5c2c0',
+    background: '#fff', color: '#b42318', cursor: 'pointer',
+  },
+  geomGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 },
+  geomTag: { display: 'block', fontSize: 10, color: '#9a9aa6', marginBottom: 2 },
+  applyBox: {
+    marginTop: 12, padding: '9px 10px', borderRadius: 8, fontSize: 11.5,
+    background: '#f5f6f9', border: '1px solid #e0e2e8', color: '#4a4a58', lineHeight: 1.45,
   },
   canvasPane: { flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: '#eceef2' },
   pager: {

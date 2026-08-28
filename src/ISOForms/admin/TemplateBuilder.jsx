@@ -5,31 +5,7 @@ import { getOfflineTemplate, addOfflineTemplate, updateOfflineTemplate } from '.
 import PdfImportModal from '../components/PdfImportModal'
 import FieldPositionEditor from './FieldPositionEditor'
 import { isPlaced } from '../utils/pdfCoords'
-
-const FIELD_TYPES = [
-  { value: 'text',           label: 'Short Text' },
-  { value: 'textarea',       label: 'Long Text' },
-  { value: 'number',         label: 'Number' },
-  { value: 'date',           label: 'Date' },
-  { value: 'dropdown',       label: 'Dropdown (single choice)' },
-  { value: 'checkbox',       label: 'Checkbox (yes/no)' },
-  { value: 'checkbox-group', label: 'Checkbox Group (multi-select)' },
-  { value: 'employee',       label: 'Employee Picker (from Employee Management)' },
-]
-
-const OWNERS = [
-  { value: 'requester', label: 'Requester — filled when submitting' },
-  { value: 'approver',  label: 'Approver — filled at approve/reject time' },
-]
-
-const blankField = () => ({
-  id: `f_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-  label: '',
-  type: 'text',
-  required: false,
-  options: '',
-  owner: 'requester',
-})
+import { FIELD_TYPES, OWNERS, blankField, hasOptions } from '../utils/fieldTypes'
 
 function TemplateBuilder() {
   const navigate = useNavigate()
@@ -264,7 +240,7 @@ function TemplateBuilder() {
               </select>
             </div>
 
-            {(field.type === 'dropdown' || field.type === 'checkbox-group') && (
+            {hasOptions(field.type) && (
               <input
                 type="text"
                 value={field.options}
@@ -327,7 +303,15 @@ function TemplateBuilder() {
             // Merge positions back by id; fields the editor didn't see
             // (blank-label rows still being typed) are left untouched.
             const byId = new Map(updated.map(f => [f.id, f]))
-            setFields(prev => prev.map(f => byId.get(f.id) || f))
+            setFields(prev => {
+              const known = new Set(prev.map(f => f.id))
+              return [
+                ...prev.map(f => byId.get(f.id) || f),
+                // Fields created inside the position editor have no row here
+                // yet — append them so they reach the payload on save.
+                ...updated.filter(f => !known.has(f.id)),
+              ]
+            })
             setShowPositions(false)
           }}
         />

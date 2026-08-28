@@ -21,6 +21,60 @@ const mul = (m, n) => [
 ]
 const apply = (m, x, y) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]]
 
+// pdfjs encodes a path as a flat run of [op, x, y, op, x, y, …] where 0 moves,
+// 1 draws a line and 4 closes. Curves use other codes whose arity we don't
+// need, so a path containing any is left to its bounding box instead.
+const P_MOVE = 0, P_LINE = 1, P_CLOSE = 4
+
+/**
+ * Axis-aligned segments of a path, as thin boxes in page space.
+ *
+ * Returns [] for anything containing curves or for paths with no straight
+ * runs, letting the caller fall back to the path's bounding box.
+ */
+function pathSegments(coordsArg, ctm) {
+  const raw = Array.isArray(coordsArg) ? coordsArg[0] : coordsArg
+  if (!raw) return []
+  const n = raw.length ?? Object.keys(raw).length
+  if (!n) return []
+
+  const out = []
+  let cur = null, start = null
+  for (let i = 0; i < n;) {
+    const op = raw[i]
+    if (op === P_CLOSE) {
+      if (cur && start) addSegment(out, cur, start, ctm)
+      cur = start
+      i += 1
+      continue
+    }
+    if (op !== P_MOVE && op !== P_LINE) return []   // a curve: not our business
+    const x = raw[i + 1], y = raw[i + 2]
+    if (typeof x !== 'number' || typeof y !== 'number') return []
+    const pt = [x, y]
+    if (op === P_MOVE) { cur = pt; start = pt }
+    else { if (cur) addSegment(out, cur, pt, ctm); cur = pt }
+    i += 3
+  }
+  return out
+}
+
+function addSegment(out, a, b, ctm) {
+  const [x0, y0] = apply(ctm, a[0], a[1])
+  const [x1, y1] = apply(ctm, b[0], b[1])
+  if (![x0, y0, x1, y1].every(Number.isFinite)) return
+  const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0)
+  // Only horizontal and vertical runs describe form structure.
+  if (dx > 1 && dy > 1) return
+  if (dx < 1 && dy < 1) return
+  out.push({
+    x: Math.min(x0, x1),
+    y: Math.min(y0, y1),
+    w: dx < 1 ? 0.5 : dx,
+    h: dy < 1 ? 0.5 : dy,
+  })
+}
+
 /**
  * Bounding boxes of every path drawn on a page, in PDF user space.
  *
@@ -45,9 +99,14 @@ export async function extractPageGeometry(page, OPS) {
     else if (fn === OPS.restore) ctm = stack.pop() || IDENTITY.slice()
     else if (fn === OPS.transform) ctm = mul(ctm, ops.argsArray[i])
     else if (fn === OPS.constructPath) {
-      // pdfjs hands back the path's min/max box, which for the rectangles and
-      // straight rules forms are built from is the shape itself.
-      const mm = ops.argsArray[i]?.[2]
+      const args = ops.argsArray[i]
+      // Prefer the path's real segments. A producer will happily stroke every
+      // separator of a table inside ONE path, and its bounding box is then the
+      // whole table — which loses every interior line and merges the columns.
+      const segs = pathSegments(args?.[1], ctm)
+      if (segs.length) { boxes.push(...segs); continue }
+
+      const mm = args?.[2]
       if (!mm || mm.length < 4) continue
       const [ax, ay] = apply(ctm, mm[0], mm[1])
       const [bx, by] = apply(ctm, mm[2], mm[3])
@@ -58,19 +117,227 @@ export async function extractPageGeometry(page, OPS) {
     }
   }
 
+  const hlines = boxes.filter(b => b.h <= 2.5 && b.w >= 20)
+  // Verticals matter as much as horizontals: plenty of producers stroke a
+  // table as individual lines rather than emitting a rectangle per cell, and
+  // without these such a grid has no detectable cells at all.
+  const vlines = boxes.filter(b => b.w <= 2.5 && b.h >= 10)
+  const drawnRects = boxes.filter(b => b.w > 16 && b.h > 8)
+
   return {
-    // Rules a value is written on top of.
-    hlines: boxes.filter(b => b.h <= 2.5 && b.w >= 20),
-    // Tick boxes: small and roughly square.
+    hlines,
+    vlines,
     squares: boxes.filter(b =>
       b.w >= 5 && b.w <= 18 && b.h >= 5 && b.h <= 18 && Math.abs(b.w - b.h) <= 4),
-    // Anything big enough to be a table cell or framed area.
-    rects: boxes.filter(b => b.w > 16 && b.h > 8),
+    // Cells the producer drew outright, plus those implied by a line grid.
+    rects: [...drawnRects, ...cellsFromRules(hlines, vlines)],
   }
+}
+
+const GRID_TOL = 3
+
+const clusterValues = (values, tol) => {
+  const out = []
+  for (const v of [...values].sort((a, b) => a - b)) {
+    const last = out[out.length - 1]
+    if (last !== undefined && v - last <= tol) continue
+    out.push(v)
+  }
+  return out
+}
+
+/**
+ * Rebuilds table cells from a grid of stroked lines.
+ *
+ * A cell exists where two adjacent horizontal rules and two adjacent vertical
+ * rules enclose an area, so this pairs up the ruling and emits the rectangles
+ * the producer never wrote down. Coverage is checked rather than exact
+ * endpoints, because grid lines are routinely drawn in segments.
+ */
+export function cellsFromRules(hlines, vlines) {
+  if (hlines.length < 2 || vlines.length < 2) return []
+
+  const ys = clusterValues(hlines.map(l => l.y), GRID_TOL)
+  const xs = clusterValues(vlines.map(l => l.x), GRID_TOL)
+  if (ys.length < 2 || xs.length < 2) return []
+
+  const spans = (lines, at, atKey, from, to, startKey, sizeKey) => {
+    let covered = 0
+    for (const l of lines) {
+      if (Math.abs(l[atKey] - at) > GRID_TOL) continue
+      const s = l[startKey], e = l[startKey] + l[sizeKey]
+      covered += Math.max(0, Math.min(e, to) - Math.max(s, from))
+    }
+    return covered >= (to - from) * 0.7
+  }
+
+  const cells = []
+  for (let r = 0; r < ys.length - 1; r++) {
+    const y0 = ys[r], y1 = ys[r + 1]
+    if (y1 - y0 < 8) continue
+
+    // Only the verticals that actually run down THIS row divide it. Taking
+    // every x on the page instead would let a boundary belonging to some other
+    // block sit between two real ones, so both halves fail their check and the
+    // real cell is never produced — and it keeps merged cells intact.
+    const colsHere = xs.filter(x => spans(vlines, x, 'x', y0, y1, 'y', 'h'))
+
+    for (let c = 0; c < colsHere.length - 1; c++) {
+      const x0 = colsHere[c], x1 = colsHere[c + 1]
+      if (x1 - x0 < 16) continue
+      if (spans(hlines, y0, 'y', x0, x1, 'x', 'w') &&
+          spans(hlines, y1, 'y', x0, x1, 'x', 'w')) {
+        cells.push({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 })
+      }
+    }
+  }
+  return cells
 }
 
 const ROW_TOL = 3
 const COL_TOL = 4
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Input-region detection.
+//
+// Earlier passes tried to recognise particular form *shapes* — a table whose
+// rows all share a height, a label with a rule after it — and each new layout
+// broke a different assumption. ("Data rows are empty" fails the moment a log
+// pre-prints 1., 2., 3. down its first column.)
+//
+// This works the other way round and asks one question of the page: which
+// drawn areas are empty? On a blank form, an empty box IS an input — that is
+// what makes it a form. It needs no uniform rows, no complete borders and no
+// particular column layout, so it carries across form designs instead of
+// having to be taught each one.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const LINE = 12
+
+const overlaps1D = (a1, a2, b1, b2) => Math.min(a2, b2) - Math.max(a1, b1)
+
+/** Text whose baseline sits inside a box. */
+const textInside = (box, textItems) => textItems.filter(t =>
+  t.x + t.width > box.x + 1 &&
+  t.x < box.x + box.w - 1 &&
+  t.pdfY > box.y - 1 &&
+  t.pdfY < box.y + box.h - 1)
+
+/**
+ * Drawn boxes reduced to the ones that can hold a value.
+ *
+ * Duplicate outlines are collapsed, and any box that encloses several others
+ * is treated as a frame (a table outline or section border) rather than a
+ * field. A box that carries only a caption on its top line still counts: the
+ * space beneath the caption is the writable part.
+ */
+export function detectInputRegions(rects, hlines, textItems) {
+  // Collapse borders that were drawn more than once.
+  const seen = new Set()
+  const boxes = []
+  for (const r of rects) {
+    const key = `${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.w)},${Math.round(r.h)}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    boxes.push(r)
+  }
+
+  const strictlyInside = (inner, outer) =>
+    inner !== outer &&
+    inner.x >= outer.x - 1 && inner.x + inner.w <= outer.x + outer.w + 1 &&
+    inner.y >= outer.y - 1 && inner.y + inner.h <= outer.y + outer.h + 1 &&
+    inner.w * inner.h < outer.w * outer.h * 0.92
+
+  const regions = []
+
+  for (const box of boxes) {
+    if (box.w < 24 || box.h < 10) continue
+    // A frame around other cells is structure, not an input.
+    if (boxes.filter(o => strictlyInside(o, box)).length >= 2) continue
+
+    const inside = textInside(box, textItems)
+
+    if (!inside.length) {
+      regions.push({ ...box, kind: 'cell' })
+      continue
+    }
+
+    // Caption on top, space underneath → the space is the input.
+    const lowestCaption = Math.min(...inside.map(t => t.pdfY))
+    const spare = lowestCaption - box.y
+    const captionAtTop = inside.every(t => t.pdfY >= box.y + box.h - LINE * 2.2)
+    if (captionAtTop && spare >= LINE * 1.4) {
+      regions.push({ x: box.x, y: box.y, w: box.w, h: spare - 2, kind: 'below-caption' })
+    }
+  }
+
+  // Rules that nothing is written on are inputs too.
+  for (const l of hlines) {
+    if (l.w < 24) continue
+    const onIt = textItems.some(t =>
+      overlaps1D(t.x, t.x + t.width, l.x, l.x + l.w) > l.w * 0.4 &&
+      t.pdfY > l.y - 2 && t.pdfY < l.y + LINE)
+    if (onIt) continue
+    // Skip a rule that merely traces the edge of a box we already captured.
+    const isEdge = boxes.some(b =>
+      Math.abs(b.x - l.x) <= 2 && Math.abs(b.w - l.w) <= 3 &&
+      (Math.abs(b.y - l.y) <= 1.5 || Math.abs(b.y + b.h - l.y) <= 1.5))
+    if (isEdge) continue
+    // And skip one that sits inside a region already found.
+    const covered = regions.some(r =>
+      l.x >= r.x - 2 && l.x + l.w <= r.x + r.w + 2 && l.y >= r.y - 2 && l.y <= r.y + r.h + 2)
+    if (covered) continue
+    regions.push({ x: l.x, y: l.y + 1, w: l.w, h: LINE, kind: 'rule' })
+  }
+
+  // Drop regions swallowed by a bigger one that was also kept.
+  return regions.filter((r, i) => !regions.some((o, j) =>
+    j !== i && o.w * o.h > r.w * r.h &&
+    r.x >= o.x - 1 && r.x + r.w <= o.x + o.w + 1 &&
+    r.y >= o.y - 1 && r.y + r.h <= o.y + o.h + 1))
+}
+
+/**
+ * Names an input region from the form's own printed text: the caption to its
+ * left on the same line, else the column heading above it.
+ */
+// "1.", "2)", "14" — a row marker in a log's first column. It sits to the left
+// of the row's cells but names the row, not the field, so it must not be taken
+// as a caption or every column inherits the row number as its label.
+const ROW_MARKER = /^\(?\d{1,3}\s*[.)]?$/
+
+export function labelForRegion(region, textItems, { maxLeftGap = 260 } = {}) {
+  const left = textItems
+    .filter(t =>
+      t.x + t.width <= region.x + 2 &&
+      region.x - (t.x + t.width) <= maxLeftGap &&
+      t.pdfY + LINE > region.y &&
+      t.pdfY < region.y + region.h + 2 &&
+      !ROW_MARKER.test(t.text.trim()))
+    .sort((a, b) => (b.x + b.width) - (a.x + a.width))[0]
+  if (left) return { text: left.text, from: 'left' }
+
+  // Column heading above. Headings wrap ("Rev /" over "Issue #"), so take the
+  // nearest line plus anything stacked directly on top of it.
+  const aboveAll = textItems
+    .filter(t =>
+      t.pdfY >= region.y + region.h - 2 &&
+      !ROW_MARKER.test(t.text.trim()) &&
+      overlaps1D(t.x, t.x + t.width, region.x, region.x + region.w) >
+        Math.min(t.width, region.w) * 0.35)
+    .sort((a, b) => a.pdfY - b.pdfY)
+  if (!aboveAll.length) return null
+
+  const base = aboveAll[0]
+  const stacked = aboveAll
+    .filter(t => t.pdfY <= base.pdfY + LINE * 2.2)
+    .sort((a, b) => b.pdfY - a.pdfY || a.x - b.x)
+  return {
+    text: stacked.map(t => t.text).join(' ').replace(/\s+/g, ' ').trim(),
+    from: 'above',
+    y: base.pdfY,
+  }
+}
 
 /**
  * Finds table grids among the page's rectangles.
@@ -94,60 +361,101 @@ export function detectTables(rects, textItems, { minCols = 3, minRows = 2 } = {}
     if (band) band.cells.push(r)
     else bands.push({ y: r.y, cells: [r] })
   }
+  for (const b of bands) b.height = Math.max(...b.cells.map(c => c.h))
 
-  const signature = (cells) => [...new Set(cells.map(c => Math.round(c.x / COL_TOL)))]
-    .sort((a, b) => a - b).join(',')
-
-  // ── Group consecutive bands sharing a column layout ───────────────────────
-  const groups = []
+  // ── Group consecutive bands of uniform height into candidate tables ───────
+  // Rows are grouped by height rather than by an exact set of column edges:
+  // producers routinely omit a shared border on some rows, so requiring every
+  // row to declare the identical column set misses real tables entirely.
+  const HEIGHT_TOL = 6
+  const runs = []
   for (const band of bands) {
-    const cols = [...new Set(band.cells.map(c => Math.round(c.x / COL_TOL)))]
-    if (cols.length < minCols) { groups.push(null); continue }   // breaks a run
-    const sig = signature(band.cells)
-    const last = groups[groups.length - 1]
-    if (last && last.sig === sig) last.bands.push(band)
-    else groups.push({ sig, bands: [band] })
+    if (band.cells.length < 2) { runs.push(null); continue }   // breaks a run
+    const last = runs[runs.length - 1]
+    const contiguous = last &&
+      Math.abs(band.height - last.height) <= HEIGHT_TOL &&
+      Math.abs((last.bands.at(-1).y - band.y) - last.height) <= HEIGHT_TOL * 2
+    if (contiguous) last.bands.push(band)
+    else runs.push({ height: band.height, bands: [band] })
   }
 
   const tables = []
-  for (const g of groups) {
-    if (!g || g.bands.length < minRows + 1) continue   // need header + data
+  for (const run of runs) {
+    if (!run || run.bands.length < minRows) continue
 
-    const all = g.bands.flatMap(b => b.cells)
-    const lefts = [...new Set(all.map(c => Math.round(c.x / COL_TOL) * COL_TOL))].sort((a, b) => a - b)
-    if (lefts.length < minCols) continue
+    const all = run.bands.flatMap(b => b.cells)
+    const runTop = run.bands[0].y + run.bands[0].height
+    const runBottom = run.bands.at(-1).y
+    const rightEdge = Math.max(...all.map(c => c.x + c.w))
+    const runLeft = Math.min(...all.map(c => c.x))
 
-    const columns = lefts.map((x, i) => {
-      const sample = all.filter(c => Math.abs(c.x - x) <= COL_TOL)
-      const width = Math.max(...sample.map(c => c.w))
-      return { index: i, x, width, x2: x + width }
-    })
+    const bandHasText = (b) => textItems.some(t =>
+      t.pdfY >= b.y - 2 && t.pdfY <= b.y + b.height + 2 &&
+      t.x >= runLeft - 4 && t.x <= rightEdge + 4)
 
-    const left = columns[0].x, right = columns.at(-1).x2
-    const rows = g.bands.map(b => {
-      const height = Math.max(...b.cells.map(c => c.h))
-      const hasText = textItems.some(t =>
-        t.pdfY >= b.y - 1 && t.pdfY <= b.y + height + 1 &&
-        t.x >= left - 4 && t.x <= right + 4)
-      return { y: b.y, height, hasText }
-    })
+    // The caption row is whichever band carries the column headings. Depending
+    // on how uniform the row heights are it may have been swept into the run
+    // itself, or sit just above it — so look inside first, then above.
+    const headerBand =
+      run.bands.find(bandHasText) ||
+      bands
+        .filter(b => !run.bands.includes(b) && b.y >= runTop - ROW_TOL && bandHasText(b))
+        .sort((a, b) => a.y - b.y)[0]
 
-    const headerRows = rows.filter(r => r.hasText)
-    const dataRows = rows.filter(r => !r.hasText)
-    if (!dataRows.length || !headerRows.length) continue
-
-    // Caption text is whatever sits inside this column within the header band.
-    for (const col of columns) {
-      col.caption = textItems
-        .filter(t => t.x >= col.x - 2 && t.x < col.x2 - 2 &&
-          headerRows.some(h => t.pdfY >= h.y - 1 && t.pdfY <= h.y + h.height + 1))
-        .sort((a, b) => b.pdfY - a.pdfY || a.x - b.x)
-        .map(t => t.text)
-        .join(' ')
-        .trim()
+    // Columns come from the left edges of the data rows, plus those of the
+    // header row: a header often declares a boundary that the empty rows below
+    // it leave undrawn, and missing it would merge two columns into one.
+    const EDGE_TOL = 6
+    const lefts = []
+    const addEdge = (x, rowKey, fromHeader) => {
+      const hit = lefts.find(l => Math.abs(l.x - x) <= EDGE_TOL)
+      if (hit) { hit.rows.add(rowKey); hit.header = hit.header || fromHeader }
+      else lefts.push({ x, rows: new Set([rowKey]), header: fromHeader })
     }
+    for (const c of [...all].sort((a, b) => a.x - b.x)) addEdge(c.x, c.y, false)
+    if (headerBand && !run.bands.includes(headerBand)) {
+      for (const c of [...headerBand.cells].sort((a, b) => a.x - b.x)) {
+        if (c.x >= runLeft - EDGE_TOL && c.x <= rightEdge) addEdge(c.x, 'header', true)
+      }
+    }
+    lefts.sort((a, b) => a.x - b.x)
 
-    tables.push({ columns, dataRows, headerRows })
+    // A column counts if it shows up on a reasonable share of rows — a border
+    // that a few rows happen to omit is still a real column.
+    const keep = lefts.filter(l =>
+      l.header || l.rows.size >= Math.max(2, run.bands.length * 0.25))
+    if (keep.length < minCols) continue
+
+    const columns = keep.map((l, i) => {
+      // A column runs to the next column's edge, so widths stay correct even
+      // when a row's own cell rect spans several columns.
+      const next = keep[i + 1]
+      const x2 = next ? next.x : rightEdge
+      return { index: i, x: l.x, width: x2 - l.x, x2 }
+    })
+
+    for (const col of columns) {
+      const inHeader = headerBand
+        ? textItems.filter(t =>
+          t.pdfY >= headerBand.y - 2 && t.pdfY <= headerBand.y + headerBand.height + 2 &&
+          t.x >= col.x - 3 && t.x < col.x2 - 2)
+        : []
+      // Top line first: a caption wrapped as "Sr." above "No:" reads "Sr. No:".
+      col.caption = inHeader
+        .sort((a, b) => b.pdfY - a.pdfY || a.x - b.x)
+        .map(t => t.text).join(' ').trim()
+    }
+    if (!columns.some(c => c.caption)) continue
+
+    // Rows holding printed text are headers; the empty ones are fillable.
+    const dataRows = run.bands
+      .filter(b => !textItems.some(t =>
+        t.pdfY >= b.y - 1 && t.pdfY <= b.y + b.height + 1 &&
+        t.x >= columns[0].x - 4 && t.x <= columns.at(-1).x2 + 4))
+      .map(b => ({ y: b.y, height: b.height }))
+    if (dataRows.length < minRows) continue
+
+    tables.push({ columns, dataRows, headerRows: [], top: runTop, bottom: runBottom })
   }
 
   return tables
