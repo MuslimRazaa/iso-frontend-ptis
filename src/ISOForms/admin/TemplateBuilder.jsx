@@ -7,6 +7,41 @@ import FieldPositionEditor from './FieldPositionEditor'
 import { isPlaced } from '../utils/pdfCoords'
 import { FIELD_TYPES, OWNERS, blankField, hasOptions } from '../utils/fieldTypes'
 
+// The template PDF is sent as a real file part, not as base64 inside the JSON
+// body: shared hosting (mod_security) caps non-file request data at 128 KB and
+// answered every template save with a 413, so saves worked locally and failed
+// live. File parts are exempt from that cap.
+function base64ToBlob(base64, type = 'application/pdf') {
+  const binary = atob(base64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return new Blob([bytes], { type })
+}
+
+// Turns a failed save response into something an admin can act on. Size-related
+// rejections (a proxy's body cap, MySQL's max_allowed_packet) are the common
+// live-only failure — the same template saves fine locally — so they are named
+// explicitly instead of surfacing as a bare 500.
+async function describeSaveFailure(res, bodyBytes) {
+  const mb = (bodyBytes / (1024 * 1024)).toFixed(1)
+  let serverMessage = ''
+  try {
+    const text = await res.text()
+    try { serverMessage = JSON.parse(text).error || '' }
+    catch { serverMessage = /<html/i.test(text) ? '' : text.slice(0, 200) }
+  } catch { /* body already consumed or unreadable */ }
+
+  if (res.status === 413) {
+    return `The server refused this upload as too large (PDF is ${mb} MB). ` +
+      'Compress the PDF and try again, or ask the host to raise the upload limit.'
+  }
+  if (res.status >= 500) {
+    return `The server could not save this template (HTTP ${res.status}${serverMessage ? ` — ${serverMessage}` : ''}). ` +
+      `The request was ${mb} MB; if the PDF is large this is usually a server-side size limit.`
+  }
+  return serverMessage || `The server rejected this template (HTTP ${res.status}).`
+}
+
 function TemplateBuilder() {
   const navigate = useNavigate()
   const { id } = useParams()
@@ -111,6 +146,7 @@ function TemplateBuilder() {
     }
 
     setSaving(true)
+    // Kept for the offline demo store, which holds the PDF inline.
     const payload = {
       name: name.trim(),
       description: description.trim(),
@@ -119,30 +155,50 @@ function TemplateBuilder() {
       originalPdfName: originalPdfName || undefined,
       formCode: formCode || undefined,
     }
+
+    let body
+    try {
+      body = new FormData()
+      body.append('data', JSON.stringify({
+        name: payload.name,
+        description: payload.description,
+        fields,
+        originalPdfName: originalPdfName || 'template.pdf',
+        formCode: formCode || undefined,
+      }))
+      body.append('pdf', base64ToBlob(originalPdfBase64), originalPdfName || 'template.pdf')
+    } catch {
+      setError('The attached PDF could not be read. Re-import it and try again.')
+      setSaving(false)
+      return
+    }
+    const sentBytes = body.get('pdf')?.size || 0
+
+    let res
     try {
       const url = isEdit ? `${API_ENDPOINTS.ISO_FORMS_TEMPLATES}/${id}` : API_ENDPOINTS.ISO_FORMS_TEMPLATES
-      const res = await fetch(url, {
-        method: isEdit ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      // A 4xx is the server rejecting this template (e.g. the PDF isn't
-      // valid) — that must surface, not be mistaken for "no backend yet" and
-      // quietly written to the demo store.
-      if (res.status >= 400 && res.status < 500) {
-        const body = await res.json().catch(() => ({}))
-        setError(body.error || 'The server rejected this template.')
-        setSaving(false)
-        return
-      }
-      if (!res.ok) throw new Error('save failed')
+      // No Content-Type header — the browser sets the multipart boundary.
+      res = await fetch(url, { method: isEdit ? 'PUT' : 'POST', body })
     } catch {
-      // Backend unreachable — save into the local demo store so the template is still usable.
+      // The request never reached a server (no backend running / offline) —
+      // only THEN fall back to the local demo store.
       if (isEdit) updateOfflineTemplate(id, payload)
       else addOfflineTemplate({ id: `local-${Date.now()}`, created_by_name: 'You (demo)', ...payload })
-    } finally {
       setSaving(false)
+      navigate(`${base}/templates`)
+      return
     }
+
+    // The server answered. ANY error status must be shown — silently writing to
+    // the demo store here looked like "nothing happened": the list reloads from
+    // the server (which works) and the localStorage copy is never displayed.
+    if (!res.ok) {
+      setError(await describeSaveFailure(res, sentBytes))
+      setSaving(false)
+      return
+    }
+
+    setSaving(false)
     navigate(`${base}/templates`)
   }
 
