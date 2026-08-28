@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Search, Calendar, X } from 'lucide-react'
+import { Search, Calendar, X, Trash2 } from 'lucide-react'
 import { API_ENDPOINTS } from '../../config/api'
 import { getCurrentEmployeeId } from '../utils/currentEmployee'
-import { getOfflineEntries } from '../utils/offlineStore'
+import { getOfflineEntries, deleteOfflineEntry } from '../utils/offlineStore'
 
 const STATUS_COLORS = {
   pending:  { bg: '#fff7e6', color: '#b54708' },
@@ -115,6 +115,20 @@ function FormEntriesList() {
       return true
     })
   }, [entries, search, templateFilter, createdByFilter, relatedToFilter, dateFrom, dateTo])
+
+  // Admin-only. A submitted form is a record, so this is confirmed first and
+  // the row is dropped locally rather than re-running the whole list fetch.
+  const handleDelete = async (entry) => {
+    const label = entry.template_name || `Form #${entry.id}`
+    if (!window.confirm(`Delete "${label}"? This permanently removes the submission and its attachments.`)) return
+    try {
+      const res = await fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}/${entry.id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('delete failed')
+    } catch {
+      deleteOfflineEntry(entry.id)
+    }
+    setEntries(prev => prev.filter(e => String(e.id) !== String(entry.id)))
+  }
 
   const clearFilters = () => {
     setSearch('')
@@ -303,9 +317,21 @@ function FormEntriesList() {
                     {entry.created_at ? new Date(entry.created_at).toLocaleDateString() : '—'}
                   </td>
                   <td style={{ padding: '16px 20px', textAlign: 'right' }}>
-                    <Link to={`${base}/entries/${entry.id}`} style={{ textDecoration: 'none' }}>
-                      <button type="button" className="ghost-btn small">View</button>
-                    </Link>
+                    <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+                      <Link to={`${base}/entries/${entry.id}`} style={{ textDecoration: 'none' }}>
+                        <button type="button" className="ghost-btn small">View</button>
+                      </Link>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          title="Delete form"
+                          className="ghost-btn small"
+                          onClick={() => handleDelete(entry)}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

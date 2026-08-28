@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Link, useParams, useLocation } from 'react-router-dom'
+import { Link, useParams, useLocation, useNavigate } from 'react-router-dom'
 import API_BASE_URL, { API_ENDPOINTS } from '../../config/api'
 import { getCurrentEmployeeId } from '../utils/currentEmployee'
 import DynamicField from '../components/DynamicField'
 import { isFieldEmpty } from '../utils/fieldHelpers'
-import { getOfflineEntry, updateOfflineEntry, getOfflineTemplate } from '../utils/offlineStore'
+import { getOfflineEntry, updateOfflineEntry, deleteOfflineEntry, getOfflineTemplate } from '../utils/offlineStore'
 import { downloadFilledPdf } from '../pdf/fillOriginalPdf'
 import { SEED_EMPLOYEES } from '../seedTemplates'
 
@@ -27,6 +27,7 @@ const StatusBadge = ({ status }) => {
 
 function FormDetail() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const location = useLocation()
   const isUserSide = location.pathname.startsWith('/user')
   const base = isUserSide ? '/user/iso-forms' : '/iso-forms'
@@ -196,6 +197,19 @@ function FormDetail() {
     load()
   }
 
+  // Admin-only, and confirmed — a submitted form is a record, not a draft.
+  const handleDelete = async () => {
+    const label = entry?.template_name || template?.name || `Form #${id}`
+    if (!window.confirm(`Delete "${label}"? This permanently removes the submission and its attachments.`)) return
+    try {
+      const res = await fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('delete failed')
+    } catch {
+      deleteOfflineEntry(id)
+    }
+    navigate(`${base}/entries`)
+  }
+
   if (loading) return <div style={{ padding: 40 }}>Loading form…</div>
   if (error && !entry) return <div style={{ padding: 40, color: '#b42318' }}>{error}</div>
   if (!entry) return null
@@ -215,6 +229,11 @@ function FormDetail() {
           <button type="button" className="ghost-btn" disabled={downloading} onClick={handleDownloadPdf}>
             {downloading ? 'Preparing PDF…' : '⬇ Download PDF'}
           </button>
+          {isAdminOverride && (
+            <button type="button" className="ghost-btn" onClick={handleDelete} style={{ color: '#b42318' }}>
+              🗑 Delete Form
+            </button>
+          )}
           <StatusBadge status={entry.status} />
         </div>
       </div>

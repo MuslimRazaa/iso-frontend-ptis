@@ -6,6 +6,8 @@ import {
   detectTables,
   squareBeforeText,
   valueBoxForLabel,
+  detectInputRegions,
+  labelForRegion,
 } from './detectPdfGeometry'
 import { readAcroFormFields } from './readAcroForm'
 
@@ -77,6 +79,8 @@ const VALUE_FONT_SIZE = 9
 // run to the page edge (what the importer did before boxes existed) than to
 // emit a 30pt sliver.
 const MIN_USABLE_WIDTH = 60
+// A box taller than roughly two lines is meant to hold prose.
+const LINE_TALL = 30
 
 /**
  * The value box for a label: what the form draws if it draws anything, and
@@ -84,8 +88,18 @@ const MIN_USABLE_WIDTH = 60
  * generic and preset imports position identically.
  */
 const valueBoxFor = (labelItem, geom, nextItem) => {
-  const drawn = valueBoxForLabel(labelItem, geom)
-  const box = drawn || boxAfterLabel(labelItem, nextItem)
+  // A typed-underscore rule right after the label IS the value area, so write
+  // on it rather than past it.
+  const typedRule = nextItem &&
+    nextItem.page === labelItem.page &&
+    RULE_RUN.test(nextItem.text) &&
+    Math.abs(nextItem.pdfY - labelItem.pdfY) <= 3 &&
+    nextItem.x >= labelItem.x + labelItem.width - 2 &&
+    nextItem.width >= 20
+      ? { x: nextItem.x + 1, y: nextItem.pdfY - 1, width: nextItem.width - 2, height: 12 }
+      : null
+
+  const box = typedRule || valueBoxForLabel(labelItem, geom) || boxAfterLabel(labelItem, nextItem)
   return {
     page: labelItem.page,
     pageWidth: labelItem.pageWidth,
@@ -224,6 +238,11 @@ const cellForSeriesField = (label, geometry) => {
  */
 const MERGE_GAP = 4
 
+// A run of underscores or dots is a fill-in rule typed as text ("PREPARED BY:
+// ______"), not part of the label. Keeping it separate preserves its exact
+// x-range, so a value can be written ON the rule instead of after it.
+const RULE_RUN = /^[_.․‥…\-—–\s]{3,}$/
+
 const mergeTextRuns = (items) => {
   const byLine = [...items].sort((a, b) => b.pdfY - a.pdfY || a.x - b.x)
   const merged = []
@@ -232,6 +251,8 @@ const mergeTextRuns = (items) => {
     const prev = merged[merged.length - 1]
     const adjacent = prev &&
       prev.page === item.page &&
+      !RULE_RUN.test(item.text) &&
+      !RULE_RUN.test(prev.text) &&
       Math.abs(prev.pdfY - item.pdfY) <= 2 &&
       item.x - (prev.x + prev.width) <= MERGE_GAP &&
       item.x >= prev.x
@@ -426,6 +447,77 @@ export async function parsePdf(file) {
         pdfCoords: coords,
       })
     }
+  }
+
+  // ── Fields from the form's empty drawn areas ───────────────────────────────
+  // This is the general pass: whatever the layout, an empty box or an unused
+  // rule on a blank form is somewhere a value goes. It names each one from the
+  // form's own text, so it works on register logs, labelled forms and mixtures
+  // alike without recognising any particular design.
+  const regionFields = []
+
+  geometry.forEach((geom, pageIdx) => {
+    const items = pages[pageIdx] || []
+    const sample = items[0]
+    const regions = detectInputRegions(geom.rects || [], geom.hlines || [], items)
+    if (!regions.length) return
+
+    // Regions sharing a heading are rows of one column, so they are numbered
+    // down the page ("Originator" 1..14) rather than left as duplicates.
+    const named = regions.map(region => ({ region, label: labelForRegion(region, items) }))
+    const columnCounts = new Map()
+    for (const n of named) {
+      if (n.label?.from !== 'above') continue
+      const key = n.label.text.toLowerCase().trim()
+      columnCounts.set(key, (columnCounts.get(key) || 0) + 1)
+    }
+    const rowSeen = new Map()
+
+    named
+      .sort((a, b) => b.region.y - a.region.y || a.region.x - b.region.x)
+      .forEach(({ region, label }, idx) => {
+        const caption = (label?.text || '').replace(/[:\s]+$/, '').replace(/\s+/g, ' ').trim()
+        let name = caption || `Field ${idx + 1}`
+
+        if (label?.from === 'above') {
+          const key = label.text.toLowerCase().trim()
+          if ((columnCounts.get(key) || 0) > 1) {
+            const n = (rowSeen.get(key) || 0) + 1
+            rowSeen.set(key, n)
+            name = `Row ${n} — ${caption}`
+          }
+        }
+
+        regionFields.push({
+          id: `f_area_${pageIdx}_${idx}_${Date.now().toString(36)}`,
+          label: name,
+          // Headings are not sentences, so the label heuristics misread them
+          // ("Document Name" as a person). Only shape and dates read reliably.
+          type: /\bdate\b/i.test(caption) ? 'date'
+            : region.h > LINE_TALL ? 'textarea'
+            : 'text',
+          required: false,
+          owner: 'requester',
+          options: '',
+          pdfCoords: {
+            page: pageIdx,
+            x: region.x + 3,
+            y: region.y + 2,
+            width: Math.max(12, region.w - 6),
+            height: Math.max(8, region.h - 4),
+            pageWidth: sample?.pageWidth,
+            pageHeight: sample?.pageHeight,
+          },
+        })
+      })
+  })
+
+  // The drawn-area pass is the more reliable of the two, so when it finds
+  // anything it supersedes the label scan rather than being merged with it —
+  // merging produced two fields for every labelled box.
+  if (regionFields.length) {
+    fields.length = 0
+    fields.push(...regionFields)
   }
 
   // Deduplicate by label (table structures repeat the same label text)

@@ -8,6 +8,12 @@ import { ensureSeeded, getOfflineTemplates, getOfflineTemplate, addOfflineEntry 
 import { getCurrentEmployeeId } from '../utils/currentEmployee'
 import { fileToDataUrl } from '../utils/fileToDataUrl'
 
+// One column per ~340px of available width, so the same markup is a single
+// column on a laptop-narrow pane and four across on a wide monitor.
+const FIELD_COLUMNS = 'repeat(auto-fit, minmax(340px, 1fr))'
+
+const isWideField = (field) => field.type === 'textarea' || field.type === 'checkbox-group'
+
 function FormFiller() {
   const { templateId } = useParams()
   const navigate = useNavigate()
@@ -199,7 +205,10 @@ function FormFiller() {
   if (!template) return <div style={{ padding: 40, color: '#b42318' }}>Could not load this form template.</div>
 
   return (
-    <div style={{ padding: 'clamp(24px, 4vw, 48px)', maxWidth: 860, margin: '0 auto' }}>
+    // Full bleed on purpose: a long form in a 860px column is mostly scrolling
+    // past empty margins, so the fields flow into however many columns the
+    // screen affords and the page gets shorter instead of narrower.
+    <div style={{ padding: 'clamp(20px, 3vw, 40px)', width: '100%', boxSizing: 'border-box' }}>
       <p className="eyebrow" style={{ margin: 0 }}>ISO Forms</p>
       <h1 style={{ margin: '4px 0 8px', fontSize: 26, fontWeight: 800, color: '#14141c' }}>{template.name}</h1>
       {template.description && <p style={{ margin: '0 0 24px', color: '#7a7a8c' }}>{template.description}</p>}
@@ -211,9 +220,11 @@ function FormFiller() {
       )}
 
       <form onSubmit={handleSubmit}>
-        <article className="panel" style={{ padding: 24, marginBottom: 20, display: 'grid', gap: 18 }}>
+        <article className="panel" style={{ padding: 24, marginBottom: 20, display: 'grid', gridTemplateColumns: FIELD_COLUMNS, gap: '18px 24px', alignItems: 'start' }}>
           {template.fields.map(field => (
-            <div key={field.id}>
+            // Long Text and multi-select choices need the full row; everything
+            // else is a single control that reads fine beside its neighbour.
+            <div key={field.id} style={isWideField(field) ? { gridColumn: '1 / -1' } : undefined}>
               <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, fontSize: 14 }}>
                 {field.label}{field.required && <span style={{ color: '#d7263d' }}> *</span>}
               </label>
@@ -222,43 +233,45 @@ function FormFiller() {
           ))}
         </article>
 
-        <article className="panel" style={{ padding: 24, marginBottom: 20 }}>
-          <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, fontSize: 14 }}>
-            Related Employee (Approver)<span style={{ color: '#d7263d' }}> *</span>
-          </label>
-          <select
-            value={relatedEmployeeId}
-            onChange={e => setRelatedEmployeeId(e.target.value)}
-            style={{ width: '100%', padding: '12px 15px', border: '2px solid #e0e0e6', borderRadius: 12, fontSize: 14, cursor: 'pointer' }}
-          >
-            <option value="">Select an employee…</option>
-            {employees.map(emp => (
-              <option key={emp.id} value={emp.id}>{emp.full_name || emp.name} {emp.department_name ? `— ${emp.department_name}` : ''}</option>
-            ))}
-          </select>
-          <p style={{ margin: '8px 0 0', fontSize: 12, color: '#7a7a8c' }}>
-            This person will need to approve or reject the form once submitted.
-          </p>
-        </article>
+        <div style={{ display: 'grid', gridTemplateColumns: FIELD_COLUMNS, gap: 20, marginBottom: 20, alignItems: 'start' }}>
+          <article className="panel" style={{ padding: 24 }}>
+            <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, fontSize: 14 }}>
+              Related Employee (Approver)<span style={{ color: '#d7263d' }}> *</span>
+            </label>
+            <select
+              value={relatedEmployeeId}
+              onChange={e => setRelatedEmployeeId(e.target.value)}
+              style={{ width: '100%', padding: '12px 15px', border: '2px solid #e0e0e6', borderRadius: 12, fontSize: 14, cursor: 'pointer', boxSizing: 'border-box' }}
+            >
+              <option value="">Select an employee…</option>
+              {employees.map(emp => (
+                <option key={emp.id} value={emp.id}>{emp.full_name || emp.name} {emp.department_name ? `— ${emp.department_name}` : ''}</option>
+              ))}
+            </select>
+            <p style={{ margin: '8px 0 0', fontSize: 12, color: '#7a7a8c' }}>
+              This person will need to approve or reject the form once submitted.
+            </p>
+          </article>
 
-        <article className="panel" style={{ padding: 24, marginBottom: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-            <label style={{ fontWeight: 600, fontSize: 14 }}>Attachments</label>
-            <button type="button" className="ghost-btn small" onClick={addAttachment}>+ Add Attachment</button>
-          </div>
-          {attachments.length === 0 ? (
-            <p style={{ margin: 0, fontSize: 13, color: '#7a7a8c' }}>No attachments added yet.</p>
-          ) : attachments.map((file, index) => (
-            <div key={index} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-              <input
-                type="file"
-                onChange={(e) => updateAttachment(index, e.target.files[0])}
-                style={{ flex: 1, fontSize: 13 }}
-              />
-              <button type="button" className="ghost-btn small" onClick={() => removeAttachment(index)}>Remove</button>
+          <article className="panel" style={{ padding: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 12 }}>
+              <label style={{ fontWeight: 600, fontSize: 14 }}>Attachments</label>
+              <button type="button" className="ghost-btn small" onClick={addAttachment}>+ Add Attachment</button>
             </div>
-          ))}
-        </article>
+            {attachments.length === 0 ? (
+              <p style={{ margin: 0, fontSize: 13, color: '#7a7a8c' }}>No attachments added yet.</p>
+            ) : attachments.map((file, index) => (
+              <div key={index} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                <input
+                  type="file"
+                  onChange={(e) => updateAttachment(index, e.target.files[0])}
+                  style={{ flex: 1, minWidth: 0, fontSize: 13 }}
+                />
+                <button type="button" className="ghost-btn small" onClick={() => removeAttachment(index)}>Remove</button>
+              </div>
+            ))}
+          </article>
+        </div>
 
         <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
           <Link to={`${base}/entries`} style={{ textDecoration: 'none' }}>
