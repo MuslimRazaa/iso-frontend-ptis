@@ -36,3 +36,16 @@ jobs:
           git add dist/ -f
           git commit -m "Auto build dist" || echo "Nothing to commit"
           git push origin main
+
+      # Committing the build to git does not put it on the server: the host has
+      # to pull it. Without this the site kept serving the previous bundle until
+      # someone deployed by hand, which reads as "the change never shipped".
+      # Never fails the run - the build is committed either way - and the HTTP
+      # code is printed so a missing or rejected secret is visible in the log.
+      - name: Trigger Deployment Webhook
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" "https://ptis.co/deploy.php?secret=${{ secrets.DEPLOY_SECRET }}")
+          echo "deploy.php responded $code"
+          if [ "$code" != "200" ]; then
+            echo "::warning::Deploy webhook returned $code - the host may still be serving the previous build."
+          fi
