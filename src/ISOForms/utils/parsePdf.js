@@ -186,25 +186,37 @@ const optionWidthWithin = (hit, opt) => {
   return hit.width * Math.min(1, (at + plain.length) / raw.length)
 }
 
-const findOptionMarks = (optionList, labelItem, allItems, geom, depth = OPTION_SEARCH_DEPTH) => {
+const findOptionMarks = (optionList, labelItem, allItems, geom, {
+  depthBelow = OPTION_SEARCH_DEPTH,
+  depthAbove = 6,
+  nearest = false,
+} = {}) => {
   const opts = String(optionList || '').split(',').map(s => s.trim()).filter(Boolean)
   if (opts.length < 2) return null
 
   const nearby = allItems.filter(it =>
     it.page === labelItem.page &&
     it.text.trim().length >= 3 &&
-    labelItem.pdfY - it.pdfY <= depth &&                 // same line or below
-    it.pdfY - labelItem.pdfY <= 6)
+    labelItem.pdfY - it.pdfY <= depthBelow &&
+    it.pdfY - labelItem.pdfY <= depthAbove)
 
-  // Pair each option with the text the form prints for it.
+  // Pair each option with the text the form prints for it. Searching from a
+  // placed field rather than from its printed label takes the closest match:
+  // a form with three identical follow-up columns prints "closed"/"pending"
+  // three times, and taking the first would tick the first column for all of
+  // them.
+  const distanceTo = (it) => Math.hypot(it.x - labelItem.x, it.pdfY - labelItem.pdfY)
   const hits = []
   for (const opt of opts) {
     const head = optionKey(opt)
     if (head.length < 3) continue
-    const hit = nearby.find(it => {
+    const matches = nearby.filter(it => {
       const t = optionKey(it.text)
       return t.length >= 3 && (t.startsWith(head) || head.startsWith(t))
     })
+    const hit = nearest
+      ? matches.sort((a, b) => distanceTo(a) - distanceTo(b))[0]
+      : matches[0]
     if (hit) hits.push({ opt, hit })
   }
   if (hits.length < 2) return null
@@ -824,14 +836,20 @@ export async function detectOptionMarksOnPage(page, field, pageIndex = 0) {
 
   const coords = field?.pdfCoords || {}
   const y = Number(coords.y ?? coords.pdfY)
-  // A placed field searches down from its own row; an unplaced one has no row
-  // to search from, so it scans the page.
-  const anchor = Number.isFinite(y)
-    ? { page: pageIndex, x: Number(coords.x) || 0, pdfY: y }
-    : { page: pageIndex, x: 0, pdfY: page.getViewport({ scale: 1 }).height }
-  const depth = Number.isFinite(y) ? OPTION_SEARCH_DEPTH : Infinity
+  if (!Number.isFinite(y)) {
+    // Nothing to search around: scan the page and take the first match of each
+    // option, which is all an unplaced field can be given.
+    const top = page.getViewport({ scale: 1 }).height
+    return findOptionMarks(field?.options, { page: pageIndex, x: 0, pdfY: top }, items, geom,
+      { depthBelow: Infinity })
+  }
 
-  return findOptionMarks(field?.options, anchor, items, geom, depth)
+  // A field's box sits ON one of the option rows as often as above them (the
+  // box for this form's "Type of non-conformance" is on the second row), so the
+  // search reaches both ways around it and the closest match wins.
+  const anchor = { page: pageIndex, x: Number(coords.x) || 0, pdfY: y }
+  return findOptionMarks(field?.options, anchor, items, geom,
+    { depthBelow: 90, depthAbove: 60, nearest: true })
 }
 
 /**
