@@ -178,6 +178,7 @@ function App() {
               <Route path="new/:templateId" element={<FormFiller />} />
               <Route path="entries" element={<FormEntriesList />} />
               <Route path="entries/:id" element={<FormDetail />} />
+              <Route path="entries/:id/edit" element={<FormFiller />} />
             </Route>
 
             {/* User — ISO Forms (same standalone layout, role-based fields) */}
@@ -190,6 +191,7 @@ function App() {
               <Route path="new/:templateId" element={<FormFiller />} />
               <Route path="entries" element={<FormEntriesList />} />
               <Route path="entries/:id" element={<FormDetail />} />
+              <Route path="entries/:id/edit" element={<FormFiller />} />
             </Route>
 
             {/* User — LMS (user-specific layout, no admin pages) */}

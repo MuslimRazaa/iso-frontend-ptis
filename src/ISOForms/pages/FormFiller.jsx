@@ -15,16 +15,29 @@ const FIELD_COLUMNS = 'repeat(auto-fit, minmax(340px, 1fr))'
 const isWideField = (field) => field.type === 'textarea' || field.type === 'checkbox-group'
 
 function FormFiller() {
-  const { templateId } = useParams()
+  // The same screen fills a new form (`new/:templateId`) and revises a
+  // submitted one (`entries/:id/edit`) — the fields, validation and layout are
+  // identical, and a second copy of them would drift.
+  const { templateId, id: entryId } = useParams()
+  const isEdit = Boolean(entryId)
   const navigate = useNavigate()
   const location = useLocation()
   const isUserSide = location.pathname.startsWith('/user')
   const base = isUserSide ? '/user/iso-forms' : '/iso-forms'
 
+  const isAdmin = !isUserSide || (() => {
+    try { return JSON.parse(localStorage.getItem('userPermissions') || '{}').iso_forms_admin === true } catch { return false }
+  })()
+
   const [templates, setTemplates] = useState([])
   const [template, setTemplate] = useState(null)
-  const [loadingTemplates, setLoadingTemplates] = useState(!templateId)
+  const [loadingTemplates, setLoadingTemplates] = useState(!templateId && !entryId)
   const [loadingTemplate, setLoadingTemplate] = useState(Boolean(templateId))
+
+  const [entry, setEntry] = useState(null)
+  const [loadingEntry, setLoadingEntry] = useState(isEdit)
+  // Attachments already stored on the entry; the backend keeps exactly these.
+  const [storedAttachments, setStoredAttachments] = useState([])
 
   const [values, setValues] = useState({})
   const [attachments, setAttachments] = useState([])
@@ -37,7 +50,7 @@ function FormFiller() {
 
   // Template picker (when no templateId is in the URL)
   useEffect(() => {
-    if (templateId) return
+    if (templateId || entryId) return
     fetch(API_ENDPOINTS.ISO_FORMS_TEMPLATES)
       .then(res => (res.ok ? res.json() : Promise.reject()))
       .then(json => {
@@ -52,11 +65,32 @@ function FormFiller() {
         setOffline(true)
       })
       .finally(() => setLoadingTemplates(false))
-  }, [templateId])
+  }, [templateId, entryId])
+
+  // Load the form being revised, and prefill from what was submitted.
+  useEffect(() => {
+    if (!entryId) return
+    let active = true
+    fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}/${entryId}`)
+      .then(res => (res.ok ? res.json() : Promise.reject()))
+      .then(json => {
+        if (!active) return
+        setEntry(json)
+        const parsed = typeof json.form_data === 'string' ? JSON.parse(json.form_data || '{}') : (json.form_data || {})
+        setValues(parsed && typeof parsed === 'object' ? parsed : {})
+        setRelatedEmployeeId(json.related_employee_id != null ? String(json.related_employee_id) : '')
+        const files = typeof json.attachments === 'string' ? JSON.parse(json.attachments || '[]') : (json.attachments || [])
+        setStoredAttachments(Array.isArray(files) ? files : [])
+      })
+      .catch(() => { if (active) setError('Could not load this form.') })
+      .finally(() => { if (active) { setLoadingEntry(false); setLoadingTemplate(true) } })
+    return () => { active = false }
+  }, [entryId])
 
   // Load the selected template's field schema
+  const schemaId = templateId || entry?.template_id
   useEffect(() => {
-    if (!templateId) return
+    if (!schemaId) return
     let active = true
     const applyTemplate = (json, isOffline) => {
       if (!active || !json) return
@@ -67,16 +101,16 @@ function FormFiller() {
       setTemplate({ ...json, fields: fields.filter(f => (f.owner || 'requester') === 'requester') })
       setOffline(isOffline)
     }
-    fetch(`${API_ENDPOINTS.ISO_FORMS_TEMPLATES}/${templateId}`)
+    fetch(`${API_ENDPOINTS.ISO_FORMS_TEMPLATES}/${schemaId}`)
       .then(res => (res.ok ? res.json() : Promise.reject()))
       .then(json => applyTemplate(json, false))
       .catch(() => {
         ensureSeeded(SEED_TEMPLATES, SEED_VERSION)
-        applyTemplate(getOfflineTemplate(templateId), true)
+        applyTemplate(getOfflineTemplate(schemaId), true)
       })
       .finally(() => { if (active) setLoadingTemplate(false) })
     return () => { active = false }
-  }, [templateId])
+  }, [schemaId])
 
   // Employees list, for the related-employee (approver) picker
   useEffect(() => {
@@ -118,6 +152,41 @@ function FormFiller() {
     const relatedEmployee = employees.find(emp => String(emp.id) === String(relatedEmployeeId))
     const relatedEmployeeName = relatedEmployee?.full_name || relatedEmployee?.name || ''
     const myEmployeeId = await getCurrentEmployeeId()
+
+    // ── Revising an existing form ───────────────────────────────────────────
+    // No offline fallback here: the form already exists on the server, so a
+    // failed save must be reported rather than written to the demo store where
+    // the entries list — which reloads from the server — would never show it.
+    if (isEdit) {
+      try {
+        const body = new FormData()
+        body.append('form_data', JSON.stringify(values))
+        body.append('related_employee_id', relatedEmployeeId)
+        body.append('related_employee_name', relatedEmployeeName)
+        body.append('keep_attachments', JSON.stringify(storedAttachments.map(a => a.file_path)))
+        if (isAdmin) body.append('admin', '1')
+        if (myEmployeeId || localStorage.getItem('userEmail')) {
+          body.append('editor', myEmployeeId || localStorage.getItem('userEmail'))
+        }
+        attachments.forEach(file => { if (file) body.append('attachments', file) })
+
+        const res = await fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}/${entryId}`, { method: 'PUT', body })
+        if (!res.ok) {
+          const failed = await res.json().catch(() => ({}))
+          setError(failed.error || `Could not save the changes (HTTP ${res.status}).`)
+          setSubmitting(false)
+          return
+        }
+      } catch {
+        setError('Could not reach the server to save the changes.')
+        setSubmitting(false)
+        return
+      }
+      setSubmitting(false)
+      navigate(`${base}/entries/${entryId}`)
+      return
+    }
+
     const createdBy = myEmployeeId || localStorage.getItem('userEmail') || ''
     const createdByName = localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || ''
     try {
@@ -164,7 +233,7 @@ function FormFiller() {
   }
 
   // ── Template picker screen ──────────────────────────────────────
-  if (!templateId) {
+  if (!templateId && !entryId) {
     return (
       <div style={{ padding: 'clamp(24px, 4vw, 48px)' }}>
         <p className="eyebrow" style={{ margin: 0 }}>ISO Forms</p>
@@ -201,7 +270,7 @@ function FormFiller() {
     )
   }
 
-  if (loadingTemplate) return <div style={{ padding: 40 }}>Loading form…</div>
+  if (loadingEntry || loadingTemplate) return <div style={{ padding: 40 }}>Loading form…</div>
   if (!template) return <div style={{ padding: 40, color: '#b42318' }}>Could not load this form template.</div>
 
   return (
@@ -209,8 +278,13 @@ function FormFiller() {
     // past empty margins, so the fields flow into however many columns the
     // screen affords and the page gets shorter instead of narrower.
     <div style={{ padding: 'clamp(20px, 3vw, 40px)', width: '100%', boxSizing: 'border-box' }}>
-      <p className="eyebrow" style={{ margin: 0 }}>ISO Forms</p>
+      <p className="eyebrow" style={{ margin: 0 }}>ISO Forms{isEdit ? ' — Editing' : ''}</p>
       <h1 style={{ margin: '4px 0 8px', fontSize: 26, fontWeight: 800, color: '#14141c' }}>{template.name}</h1>
+      {isEdit && entry && entry.status !== 'pending' && (
+        <div style={{ background: '#fff7e6', border: '1px solid #ffe1a8', color: '#92660a', borderRadius: 12, padding: '12px 16px', marginBottom: 16, fontSize: 14 }}>
+          This form was already {entry.status}. Editing it changes the record that was decided on.
+        </div>
+      )}
       {template.description && <p style={{ margin: '0 0 24px', color: '#7a7a8c' }}>{template.description}</p>}
 
       {error && (
@@ -258,7 +332,21 @@ function FormFiller() {
               <label style={{ fontWeight: 600, fontSize: 14 }}>Attachments</label>
               <button type="button" className="ghost-btn small" onClick={addAttachment}>+ Add Attachment</button>
             </div>
-            {attachments.length === 0 ? (
+            {storedAttachments.map((file, index) => (
+              <div key={`stored-${index}`} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  📎 {file.file_name || file.file_path}
+                </span>
+                <button
+                  type="button"
+                  className="ghost-btn small"
+                  onClick={() => setStoredAttachments(prev => prev.filter((_, i) => i !== index))}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+            {attachments.length === 0 && storedAttachments.length === 0 ? (
               <p style={{ margin: 0, fontSize: 13, color: '#7a7a8c' }}>No attachments added yet.</p>
             ) : attachments.map((file, index) => (
               <div key={index} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
@@ -274,11 +362,13 @@ function FormFiller() {
         </div>
 
         <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-          <Link to={`${base}/entries`} style={{ textDecoration: 'none' }}>
+          <Link to={isEdit ? `${base}/entries/${entryId}` : `${base}/entries`} style={{ textDecoration: 'none' }}>
             <button type="button" className="ghost-btn">Cancel</button>
           </Link>
           <button type="submit" className="primary-btn" disabled={submitting}>
-            {submitting ? 'Submitting…' : 'Submit Form'}
+            {submitting
+              ? (isEdit ? 'Saving…' : 'Submitting…')
+              : (isEdit ? 'Save Changes' : 'Submit Form')}
           </button>
         </div>
       </form>

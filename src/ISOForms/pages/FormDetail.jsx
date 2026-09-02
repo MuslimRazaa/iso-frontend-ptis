@@ -135,6 +135,17 @@ function FormDetail() {
     entry?.status === 'pending' &&
     (isAdminOverride || (myEmployeeId && String(myEmployeeId) === String(entry?.related_employee_id)))
 
+  // Who may revise this form: its author while it is still pending, and an ISO
+  // Forms admin at any time. A decided form is the record that was signed off,
+  // so changing it is deliberately an admin-only act.
+  const canEdit = (() => {
+    if (!entry) return false
+    if (isAdminOverride) return true
+    if (entry.status !== 'pending') return false
+    const me = myEmployeeId || localStorage.getItem('userEmail')
+    return Boolean(me) && String(entry.created_by || '') === String(me)
+  })()
+
   const setApproverValue = (fieldId, val) => setApproverValues(prev => ({ ...prev, [fieldId]: val }))
 
   // The download is always the original uploaded PDF with values drawn onto
@@ -229,6 +240,11 @@ function FormDetail() {
           <button type="button" className="ghost-btn" disabled={downloading} onClick={handleDownloadPdf}>
             {downloading ? 'Preparing PDF…' : '⬇ Download PDF'}
           </button>
+          {canEdit && (
+            <Link to={`${base}/entries/${entry.id}/edit`} style={{ textDecoration: 'none' }}>
+              <button type="button" className="ghost-btn">✏ Edit Form</button>
+            </Link>
+          )}
           {isAdminOverride && (
             <button type="button" className="ghost-btn" onClick={handleDelete} style={{ color: '#b42318' }}>
               🗑 Delete Form

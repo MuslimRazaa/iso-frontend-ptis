@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Search, Calendar, X, Trash2 } from 'lucide-react'
+import { Search, Calendar, X, Trash2, Pencil } from 'lucide-react'
 import { API_ENDPOINTS } from '../../config/api'
 import { getCurrentEmployeeId } from '../utils/currentEmployee'
 import { getOfflineEntries, deleteOfflineEntry } from '../utils/offlineStore'
@@ -93,6 +93,16 @@ function FormEntriesList() {
 
   // Unique option lists for filter dropdowns
   const templateOptions = useMemo(() => [...new Set(entries.map(e => e.template_name).filter(Boolean))], [entries])
+  // Who may revise a submitted form: its author while it is still pending, and
+  // an ISO Forms admin at any time. A decided form is the record that was
+  // signed off, so changing it is deliberately an admin-only act.
+  const canEdit = (entry) => {
+    if (isAdmin) return true
+    if (entry.status !== 'pending') return false
+    const me = myEmployeeId || localStorage.getItem('userEmail')
+    return Boolean(me) && String(entry.created_by || '') === String(me)
+  }
+
   const createdByOptions = useMemo(() => [...new Set(entries.map(e => e.created_by_name || e.created_by).filter(Boolean))], [entries])
   const relatedToOptions = useMemo(() => [...new Set(entries.map(e => e.related_employee_name || e.related_employee_id).filter(Boolean))], [entries])
 
@@ -321,6 +331,13 @@ function FormEntriesList() {
                       <Link to={`${base}/entries/${entry.id}`} style={{ textDecoration: 'none' }}>
                         <button type="button" className="ghost-btn small">View</button>
                       </Link>
+                      {canEdit(entry) && (
+                        <Link to={`${base}/entries/${entry.id}/edit`} style={{ textDecoration: 'none' }}>
+                          <button type="button" title="Edit form" className="ghost-btn small">
+                            <Pencil size={15} />
+                          </button>
+                        </Link>
+                      )}
                       {isAdmin && (
                         <button
                           type="button"
