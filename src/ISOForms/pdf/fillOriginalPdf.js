@@ -246,6 +246,36 @@ export async function fillOriginalPdf(base64, fields, formValues, approverValues
     if (setAcroValue(field, rawVal)) { usedAcroFields++; continue }
 
     const coords = normalizePdfCoords(field.pdfCoords)
+
+    // Choice fields whose printed options have been located get a tick next to
+    // each selected option — the form already prints the option text, so
+    // writing it again would just overlap it. These marks carry their own
+    // positions, so they work even for a field with no value box of its own.
+    const optionMarks = Array.isArray(field.pdfCoords?.optionMarks) ? field.pdfCoords.optionMarks : null
+    if (optionMarks?.length && (field.type === 'checkbox-group' || field.type === 'dropdown')) {
+      const markPage = pages[Number.isFinite(field.pdfCoords?.page) ? field.pdfCoords.page : (coords?.page ?? 0)]
+      const selected = Array.isArray(rawVal) ? rawVal : (rawVal ? [rawVal] : [])
+      if (!markPage || !selected.length) continue
+      const wanted = new Set(selected.map(v => String(v).trim().toLowerCase()))
+      for (const mark of optionMarks) {
+        if (!wanted.has(String(mark.label).trim().toLowerCase())) continue
+        if (mark.box) {
+          // The form draws a real tick box here — mark inside it.
+          drawCheckMark(markPage, mark.box)
+        } else {
+          // No drawn box for this option: sit the tick beside the printed word,
+          // on the side this form puts its marks. Records written before the
+          // side was known carry none and keep the original left placement.
+          const size = Math.min(9, mark.height || 9)
+          const x = mark.side === 'after'
+            ? mark.x + (mark.width || 0) + 3
+            : mark.x - size - 3
+          drawCheckMark(markPage, { x, y: mark.y - 1, width: size, height: size })
+        }
+      }
+      continue
+    }
+
     if (!coords) {
       if (displayValue(field, rawVal)) skipped.push(field.label || field.id)
       continue
@@ -258,27 +288,6 @@ export async function fillOriginalPdf(base64, fields, formValues, approverValues
     // the form's own checkbox cell instead of writing the word "Yes" over it.
     if (field.type === 'checkbox') {
       if (rawVal) drawCheckMark(page, coords)
-      continue
-    }
-
-    // Choice fields whose printed options were located at import time get a
-    // tick next to each selected option — the form already prints the option
-    // text, so writing it again would just overlap it.
-    if (coords.optionMarks && (field.type === 'checkbox-group' || field.type === 'dropdown')) {
-      const selected = Array.isArray(rawVal) ? rawVal : (rawVal ? [rawVal] : [])
-      if (!selected.length) continue
-      const wanted = new Set(selected.map(v => String(v).trim().toLowerCase()))
-      for (const mark of coords.optionMarks) {
-        if (!wanted.has(String(mark.label).trim().toLowerCase())) continue
-        if (mark.box) {
-          // The form draws a real tick box here — mark inside it.
-          drawCheckMark(page, mark.box)
-        } else {
-          // No drawn box: sit the tick just left of the printed option word.
-          const size = Math.min(9, mark.height || 9)
-          drawCheckMark(page, { x: mark.x - size - 3, y: mark.y - 1, width: size, height: size })
-        }
-      }
       continue
     }
 

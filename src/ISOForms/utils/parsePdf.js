@@ -5,6 +5,8 @@ import {
   extractPageGeometry,
   detectTables,
   squareBeforeText,
+  squareAfterText,
+  tickBoxNearText,
   valueBoxForLabel,
   detectInputRegions,
   labelForRegion,
@@ -145,32 +147,116 @@ const boxAfterLabel = (labelItem, nextItem) => {
  * across text runs ("Urgent" + "(Within same day)") or wrap it onto the next
  * line, so the search window covers a couple of lines below the label.
  */
-const findOptionMarks = (optionList, labelItem, allItems, geom) => {
+/**
+ * Comparable form of an option, for matching a stored option against the words
+ * the form actually prints.
+ *
+ * A form enumerates its choices ("a) Internal Audit") and spaces its
+ * punctuation to taste ("Vendor / Sub contracting"), while the template stores
+ * the plain choice ("Internal Audit", "Vendor/Sub Contracting"). Comparing the
+ * raw strings therefore missed every enumerated option — which is what left
+ * whole checkbox groups with no marks. Stripping the enumerator and reducing
+ * both sides to bare alphanumerics makes those the same string.
+ */
+const optionKey = (text) => String(text || '')
+  .toLowerCase()
+  .replace(/^\s*\(?\s*[a-z0-9]{1,2}\s*[).]\s*/, '')   // "a)" / "(b)" / "1."
+  .replace(/\(.*$/, '')                                 // trailing "(specify…)"
+  .replace(/[^a-z0-9]/g, '')
+
+// Options routinely wrap onto further lines under their label, so the search
+// reaches a few lines down rather than one. Only text that matches a declared
+// option is ever used, which is what keeps the wider window safe.
+const OPTION_SEARCH_DEPTH = 72
+
+/**
+ * How far into a printed text run the option itself reaches.
+ *
+ * A form writes its last choice as "g) Others : ______________", so the text
+ * item's full width is mostly trailing rule. Marking after that width puts the
+ * tick at the far edge of the page instead of beside the word, so the width is
+ * scaled to the part the option actually occupies.
+ */
+const optionWidthWithin = (hit, opt) => {
+  const raw = String(hit.text || '')
+  const plain = String(opt).replace(/\(.*$/, '').trim()
+  if (!raw.length || !plain.length || !hit.width) return hit.width || 0
+  const at = raw.toLowerCase().indexOf(plain.slice(0, 12).toLowerCase())
+  if (at < 0) return hit.width
+  return hit.width * Math.min(1, (at + plain.length) / raw.length)
+}
+
+const findOptionMarks = (optionList, labelItem, allItems, geom, depth = OPTION_SEARCH_DEPTH) => {
   const opts = String(optionList || '').split(',').map(s => s.trim()).filter(Boolean)
   if (opts.length < 2) return null
 
   const nearby = allItems.filter(it =>
     it.page === labelItem.page &&
     it.text.trim().length >= 3 &&
-    labelItem.pdfY - it.pdfY <= 40 &&      // same line or a little below
+    labelItem.pdfY - it.pdfY <= depth &&                 // same line or below
     it.pdfY - labelItem.pdfY <= 6)
 
-  const marks = []
+  // Pair each option with the text the form prints for it.
+  const hits = []
   for (const opt of opts) {
-    const head = opt.replace(/\(.*$/, '').trim().toLowerCase()
-    if (!head) continue
+    const head = optionKey(opt)
+    if (head.length < 3) continue
     const hit = nearby.find(it => {
-      const t = it.text.trim().toLowerCase()
-      return t.startsWith(head) || head.startsWith(t)
+      const t = optionKey(it.text)
+      return t.length >= 3 && (t.startsWith(head) || head.startsWith(t))
     })
-    if (!hit) continue
-    // Use the tick box the form draws, when it draws one.
-    const box = squareBeforeText(hit, geom?.squares || [])
-    marks.push(box
-      ? { label: opt, box: { x: box.x, y: box.y, width: box.w, height: box.h } }
-      : { label: opt, x: hit.x, y: hit.pdfY, height: Math.max(hit.height, 8) })
+    if (hit) hits.push({ opt, hit })
   }
-  return marks.length >= 2 ? marks : null
+  if (hits.length < 2) return null
+
+  const squares = geom?.squares || []
+  // Some forms draw a mark box that is wider than it is tall ("Accepted ▭")
+  // rather than a square. Those are only consulted when no square-shaped box
+  // was found for the group at all, because a short table cell can look just
+  // like one and must not out-rank a real tick box.
+  const wideBoxes = (geom?.rects || []).filter(r =>
+    r.h >= 5 && r.h <= 18 && r.w >= 5 && r.w <= 40)
+
+  // Which side of its printed choice this form draws the tick box on is a
+  // property of the GROUP, not of each option. Deciding per option gets it
+  // wrong on a form that boxes on the right: the box "before" option b is
+  // really option a's box, so every mark lands one option too early. Scoring
+  // both sides across the whole group and taking the better one avoids that.
+  const distinct = (boxes) => new Set(boxes.filter(Boolean).map(b => `${b.x},${b.y}`)).size
+  const pickSide = (candidates) => {
+    const boxesForSide = (side) => hits.map(({ hit }) =>
+      (side === 'before' ? squareBeforeText : squareAfterText)(hit, candidates))
+    const before = boxesForSide('before')
+    const after = boxesForSide('after')
+    // Ties keep the historic left-hand reading.
+    const side = distinct(after) > distinct(before) ? 'after' : 'before'
+    return { side, boxes: side === 'after' ? after : before }
+  }
+
+  let { side, boxes } = pickSide(squares)
+  if (!distinct(boxes) && wideBoxes.length) ({ side, boxes } = pickSide([...squares, ...wideBoxes]))
+
+  const used = new Set()
+  return hits.map(({ opt, hit }, i) => {
+    const box = boxes[i]
+    const key = box && `${box.x},${box.y}`
+    // One drawn box can only belong to one option; a second claim on it means
+    // the match is wrong, so that option falls back to its printed text.
+    if (box && !used.has(key)) {
+      used.add(key)
+      return { label: opt, box: { x: box.x, y: box.y, width: box.w, height: box.h } }
+    }
+    // No box of its own: remember the side so the tick still lands where this
+    // form puts its marks rather than always to the left of the word.
+    return {
+      label: opt,
+      x: hit.x,
+      y: hit.pdfY,
+      width: optionWidthWithin(hit, opt),
+      height: Math.max(hit.height, 8),
+      side,
+    }
+  })
 }
 
 /**
@@ -428,7 +514,7 @@ export async function parsePdf(file) {
       // the mark goes inside it.
       if (isChoice && optionItems.length >= 2) {
         coords.optionMarks = optionItems.map(r => {
-          const box = squareBeforeText(r, geom.squares)
+          const box = tickBoxNearText(r, geom.squares)
           return box
             ? { label: r.text.trim(), box: { x: box.x, y: box.y, width: box.w, height: box.h } }
             : { label: r.text.trim(), x: r.x, y: r.pdfY, height: Math.max(r.height, 8) }
@@ -709,6 +795,43 @@ export function enrichSeedFieldsWithCoords(
   }
 
   return out
+}
+
+/**
+ * Locates one choice field's tick boxes on an already-open pdfjs page.
+ *
+ * Import-time detection only ever runs when a template is (re-)imported, so a
+ * template saved before this could be improved had no way to pick up the fix
+ * short of re-importing and losing every hand-made edit. This runs the same
+ * detection against the template's own PDF for a single field, which is what
+ * the "find ticks" action in the position editor calls.
+ *
+ * Returns the marks, or null when fewer than two options could be located.
+ */
+export async function detectOptionMarksOnPage(page, field, pageIndex = 0) {
+  const geom = await extractPageGeometry(page, pdfjsLib.OPS)
+  const content = await page.getTextContent()
+  const items = content.items
+    .filter(i => i.str && i.str.trim())
+    .map(i => ({
+      text: i.str,
+      x: i.transform[4],
+      pdfY: i.transform[5],
+      width: i.width,
+      height: i.height,
+      page: pageIndex,
+    }))
+
+  const coords = field?.pdfCoords || {}
+  const y = Number(coords.y ?? coords.pdfY)
+  // A placed field searches down from its own row; an unplaced one has no row
+  // to search from, so it scans the page.
+  const anchor = Number.isFinite(y)
+    ? { page: pageIndex, x: Number(coords.x) || 0, pdfY: y }
+    : { page: pageIndex, x: 0, pdfY: page.getViewport({ scale: 1 }).height }
+  const depth = Number.isFinite(y) ? OPTION_SEARCH_DEPTH : Infinity
+
+  return findOptionMarks(field?.options, anchor, items, geom, depth)
 }
 
 /**

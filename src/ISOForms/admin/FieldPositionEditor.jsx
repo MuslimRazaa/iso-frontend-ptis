@@ -9,6 +9,7 @@ import {
   DEFAULT_BOX_HEIGHT,
 } from '../utils/pdfCoords'
 import { FIELD_TYPES, OWNERS, blankField, hasOptions } from '../utils/fieldTypes'
+import { detectOptionMarksOnPage } from '../utils/parsePdf'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Field position editor.
@@ -23,6 +24,10 @@ import { FIELD_TYPES, OWNERS, blankField, hasOptions } from '../utils/fieldTypes
 // ─────────────────────────────────────────────────────────────────────────────
 
 const RENDER_SCALE = 1.5
+
+// Side of a hand-placed tick box, in PDF points — about the size of the tick
+// boxes forms actually draw.
+const OPTION_MARK_SIZE = 12
 
 // Repeated table rows are named by number ("Item 3 — Description"), so a field
 // belongs to a "series" identified by its label with the number blanked out.
@@ -85,6 +90,10 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
   const [placingId, setPlacingId] = useState(null)
   const [loadError, setLoadError] = useState('')
   const [draft, setDraft] = useState(null)          // new-field form, null = closed
+  const [placingOption, setPlacingOption] = useState(null)   // { fieldId, label }
+  const [markNote, setMarkNote] = useState('')
+  const [autoNote, setAutoNote] = useState('')
+  const autoDetectedRef = useRef(false)
   // Fields born in this editor: only those may be deleted outright here, since
   // removing one that came from the template would be a silent template edit.
   const [createdIds, setCreatedIds] = useState(() => new Set())
@@ -157,6 +166,73 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
     }
   }, [view, pageIndex, patchCoords])
 
+  // ── Option ticks (choice fields) ───────────────────────────────────────────
+  // A selected choice is ticked on the form's own printed option rather than
+  // written out, so a choice field needs a position per option. Import-time
+  // detection finds most of them, but a template imported before that worked —
+  // or a form whose options it cannot see — needs fixing without re-importing
+  // and losing every hand-made position, which is what these controls are for.
+  const optionsOf = (field) =>
+    String(field?.options || '').split(',').map(o => o.trim()).filter(Boolean)
+  const marksOf = (field) =>
+    Array.isArray(field?.pdfCoords?.optionMarks) ? field.pdfCoords.optionMarks : []
+  const markFor = (field, label) =>
+    marksOf(field).find(m => String(m.label).trim().toLowerCase() === label.trim().toLowerCase())
+
+  const detectMarks = async (field) => {
+    if (!pdfDoc) return
+    const page = Number.isFinite(field.pdfCoords?.page) ? field.pdfCoords.page : pageIndex
+    setMarkNote('Looking for this form’s tick boxes…')
+    try {
+      const found = await detectOptionMarksOnPage(await pdfDoc.getPage(page + 1), field, page)
+      if (!found?.length) {
+        setMarkNote('No tick boxes found for these options on this page. Place them by hand below.')
+        return
+      }
+      patchCoords(field.id, { page, optionMarks: found })
+      setMarkNote(`Found ${found.length} of ${optionsOf(field).length} option(s).`)
+    } catch (err) {
+      console.error('Option tick detection failed:', err)
+      setMarkNote('Could not read the PDF to find tick boxes.')
+    }
+  }
+
+  // Opening the editor fills in tick positions for any choice field that has
+  // none. A template imported before the detection could read its form would
+  // otherwise need every option placed by hand, or a re-import that throws away
+  // all the positions already set. Nothing is written until the admin saves.
+  useEffect(() => {
+    if (!pdfDoc || autoDetectedRef.current) return
+    autoDetectedRef.current = true
+    let cancelled = false
+    ;(async () => {
+      const targets = localFields.filter(f =>
+        hasOptions(f.type) && optionsOf(f).length >= 2 && marksOf(f).length === 0)
+      let found = 0
+      for (const field of targets) {
+        const page = Number.isFinite(field.pdfCoords?.page) ? field.pdfCoords.page : 0
+        try {
+          const marks = await detectOptionMarksOnPage(await pdfDoc.getPage(page + 1), field, page)
+          if (cancelled) return
+          if (marks?.length) { patchCoords(field.id, { page, optionMarks: marks }); found++ }
+        } catch { /* leave this one to be placed by hand */ }
+      }
+      if (!cancelled && found) {
+        setAutoNote(`Found tick positions for ${found} choice field(s). Save to keep them.`)
+      }
+    })()
+    return () => { cancelled = true }
+    // Runs once per opened PDF; the ref keeps a field patch from re-triggering it.
+  }, [pdfDoc])   // eslint-disable-line react-hooks/exhaustive-deps
+
+  const placeOptionMark = (field, label, box) => {
+    const rest = marksOf(field).filter(m => String(m.label).trim().toLowerCase() !== label.trim().toLowerCase())
+    patchCoords(field.id, {
+      page: Number.isFinite(field.pdfCoords?.page) ? field.pdfCoords.page : pageIndex,
+      optionMarks: [...rest, { label, box }],
+    })
+  }
+
   const startDrag = (e, field, mode) => {
     e.preventDefault()
     e.stopPropagation()
@@ -168,8 +244,31 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
 
   // Click on the page while a field is armed → drop its box there.
   const handleSurfaceClick = (e) => {
-    if (!placingId || !view) return
+    if (!view) return
     const rect = surfaceRef.current.getBoundingClientRect()
+
+    // An armed option tick lands as a small box centred on the click, so the
+    // admin aims at the form's own checkbox rather than at a corner.
+    if (placingOption) {
+      const field = localFields.find(f => f.id === placingOption.fieldId)
+      if (field) {
+        const size = OPTION_MARK_SIZE * view.viewport.scale
+        const box = screenToPdf({
+          left: e.clientX - rect.left - size / 2,
+          top: e.clientY - rect.top - size / 2,
+          width: size,
+          height: size,
+        }, view.viewport, view.pageSize)
+        placeOptionMark(field, placingOption.label, {
+          x: box.x, y: box.y, width: box.width, height: box.height,
+        })
+      }
+      setPlacingOption(null)
+      setMarkNote('')
+      return
+    }
+
+    if (!placingId) return
     const box = {
       left: e.clientX - rect.left,
       top: e.clientY - rect.top,
@@ -399,10 +498,65 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
               </button>
             )}
 
+            {autoNote && (
+              <div style={S.hint}>
+                {autoNote}
+                <button type="button" onClick={() => setAutoNote('')} style={S.linkBtn}>dismiss</button>
+              </div>
+            )}
+
             {placingId && (
               <div style={S.hint}>
                 Click on the page to place <strong>{localFields.find(f => f.id === placingId)?.label}</strong>.
                 <button type="button" onClick={() => setPlacingId(null)} style={S.linkBtn}>cancel</button>
+              </div>
+            )}
+
+            {selected && hasOptions(selected.type) && (
+              <div style={S.panel}>
+                <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>
+                  Tick positions — {selected.label}
+                </div>
+                <div style={S.muted}>
+                  A chosen option is ticked on the form's own printed choice, so each
+                  option needs its own spot.
+                </div>
+                <div style={{ display: 'flex', gap: 6, margin: '8px 0' }}>
+                  <button type="button" onClick={() => detectMarks(selected)} style={S.smallGhostBtn}>
+                    Find on the form
+                  </button>
+                  {marksOf(selected).length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => { patchCoords(selected.id, { optionMarks: [] }); setMarkNote('') }}
+                      style={S.smallGhostBtn}
+                    >
+                      Clear all
+                    </button>
+                  )}
+                </div>
+                {markNote && <div style={{ ...S.muted, marginBottom: 6 }}>{markNote}</div>}
+                {optionsOf(selected).map(opt => {
+                  const mark = markFor(selected, opt)
+                  const arming = placingOption?.fieldId === selected.id && placingOption?.label === opt
+                  return (
+                    <button
+                      key={opt}
+                      type="button"
+                      title={mark ? 'Click to re-place this tick' : 'Click, then click the form'}
+                      onClick={() => {
+                        setPlacingOption(arming ? null : { fieldId: selected.id, label: opt })
+                        setMarkNote(arming ? '' : `Click where "${opt}" is ticked on the form.`)
+                      }}
+                      style={{ ...S.fieldRow, ...(arming ? S.fieldRowActive : null) }}
+                    >
+                      <span style={{ width: 14, color: mark ? '#1a7f37' : '#9a9aa8' }}>
+                        {mark ? '✓' : '•'}
+                      </span>
+                      <span style={S.ellipsis}>{opt}</span>
+                    </button>
+                  )
+                })}
               </div>
             )}
 
@@ -517,7 +671,7 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
               <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <button
                   type="button"
-                  onClick={() => setPlacingId(f.id)}
+                  onClick={() => { setSelectedId(f.id); setPlacingId(f.id) }}
                   style={{ ...S.fieldRow, minWidth: 0, ...(placingId === f.id ? S.fieldRowActive : null) }}
                 >
                   <Move size={13} /> <span style={S.ellipsis}>{f.label}</span>
@@ -575,9 +729,31 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
               <div
                 ref={surfaceRef}
                 onClick={handleSurfaceClick}
-                style={{ ...S.surface, cursor: placingId ? 'crosshair' : 'default' }}
+                style={{ ...S.surface, cursor: (placingId || placingOption) ? 'crosshair' : 'default' }}
               >
                 <canvas ref={canvasRef} style={{ display: 'block' }} />
+
+                {/* Tick boxes of the selected choice field, so their aim is visible. */}
+                {view && selected && hasOptions(selected.type) && marksOf(selected).map((m, i) => {
+                  if (!m.box) return null
+                  const box = pdfToScreen(m.box, view.viewport)
+                  if (!box) return null
+                  return (
+                    <div
+                      key={`${m.label}-${i}`}
+                      title={m.label}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        position: 'absolute',
+                        left: box.left, top: box.top, width: box.width, height: box.height,
+                        border: '2px solid #1a7f37',
+                        background: 'rgba(26,127,55,0.18)',
+                        borderRadius: 3,
+                        zIndex: 4,
+                      }}
+                    />
+                  )
+                })}
 
                 {view && onThisPage.map(f => {
                   const box = pdfToScreen(f.pdfCoords, view.viewport)

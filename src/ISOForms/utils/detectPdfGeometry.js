@@ -81,6 +81,30 @@ function addSegment(out, a, b, ctm) {
  * The current transform is tracked through save/restore/transform so boxes
  * come back in page coordinates regardless of how the producer nested them.
  */
+const isTickSized = (b) =>
+  b.w >= 5 && b.w <= 18 && b.h >= 5 && b.h <= 18 && Math.abs(b.w - b.h) <= 4
+
+// A box is routinely both stroked and filled, arriving twice.
+const dedupeBoxes = (list) => {
+  const seen = new Set()
+  return list.filter(b => {
+    const key = `${Math.round(b.x)},${Math.round(b.y)},${Math.round(b.w)},${Math.round(b.h)}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+/** A path's bounding box in page space, from the [x0,y0,x1,y1] pdfjs reports. */
+function pathBounds(minMax, ctm) {
+  if (!minMax || minMax.length < 4) return null
+  const [ax, ay] = apply(ctm, minMax[0], minMax[1])
+  const [bx, by] = apply(ctm, minMax[2], minMax[3])
+  const x = Math.min(ax, bx), y = Math.min(ay, by)
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null
+  return { x, y, w: Math.abs(bx - ax), h: Math.abs(by - ay) }
+}
+
 export async function extractPageGeometry(page, OPS) {
   let ops
   try {
@@ -92,6 +116,12 @@ export async function extractPageGeometry(page, OPS) {
   let ctm = IDENTITY.slice()
   const stack = []
   const boxes = []
+  // A stroked tick box is one path of four straight edges, so pathSegments
+  // returns it as four THIN segments and the square itself disappears — which
+  // is why forms that stroke their checkboxes ended up with no tick boxes at
+  // all. The path's own bounds are kept alongside the segments so such a box
+  // is still recognisable as a square.
+  const outlines = []
 
   for (let i = 0; i < ops.fnArray.length; i++) {
     const fn = ops.fnArray[i]
@@ -104,16 +134,13 @@ export async function extractPageGeometry(page, OPS) {
       // separator of a table inside ONE path, and its bounding box is then the
       // whole table — which loses every interior line and merges the columns.
       const segs = pathSegments(args?.[1], ctm)
-      if (segs.length) { boxes.push(...segs); continue }
-
-      const mm = args?.[2]
-      if (!mm || mm.length < 4) continue
-      const [ax, ay] = apply(ctm, mm[0], mm[1])
-      const [bx, by] = apply(ctm, mm[2], mm[3])
-      const x = Math.min(ax, bx), y = Math.min(ay, by)
-      const w = Math.abs(bx - ax), h = Math.abs(by - ay)
-      if (!Number.isFinite(x) || !Number.isFinite(y)) continue
-      boxes.push({ x, y, w, h })
+      const bounds = pathBounds(args?.[2], ctm)
+      if (segs.length) {
+        boxes.push(...segs)
+        if (bounds) outlines.push(bounds)
+        continue
+      }
+      if (bounds) boxes.push(bounds)
     }
   }
 
@@ -127,8 +154,7 @@ export async function extractPageGeometry(page, OPS) {
   return {
     hlines,
     vlines,
-    squares: boxes.filter(b =>
-      b.w >= 5 && b.w <= 18 && b.h >= 5 && b.h <= 18 && Math.abs(b.w - b.h) <= 4),
+    squares: dedupeBoxes([...boxes, ...outlines].filter(isTickSized)),
     // Cells the producer drew outright, plus those implied by a line grid.
     rects: [...drawnRects, ...cellsFromRules(hlines, vlines)],
   }
@@ -608,11 +634,40 @@ export function underlineAfterLabel(labelItem, hlines) {
 
 /** The tick box drawn immediately before a printed option word, if any. */
 export function squareBeforeText(textItem, squares) {
-  const hits = squares.filter(s =>
+  const hits = (squares || []).filter(s =>
     s.x + s.w <= textItem.x + 2 &&
     textItem.x - (s.x + s.w) <= 14 &&
-    Math.abs((s.y + s.h / 2) - (textItem.pdfY + 3)) <= 8)
+    onTextLine(s, textItem))
   if (!hits.length) return null
   hits.sort((a, b) => b.x - a.x)   // closest to the word
   return hits[0]
+}
+
+const onTextLine = (square, textItem) =>
+  Math.abs((square.y + square.h / 2) - (textItem.pdfY + 3)) <= 8
+
+/** The tick box drawn immediately after a printed option word, if any. */
+export function squareAfterText(textItem, squares) {
+  const right = textItem.x + (textItem.width || 0)
+  const hits = (squares || []).filter(s =>
+    s.x >= right - 2 &&
+    s.x - right <= 16 &&
+    onTextLine(s, textItem))
+  if (!hits.length) return null
+  hits.sort((a, b) => a.x - b.x)   // closest to the word
+  return hits[0]
+}
+
+/**
+ * The tick box belonging to a printed option, on whichever side the form draws
+ * it.
+ *
+ * Plenty of forms put the box AFTER the option ("Internal Audit O"), and
+ * looking only to the left found nothing for those — so their choice fields
+ * had no marks at all and the overlay fell back to writing the selected option
+ * text across the form's own printed options. The left side is still tried
+ * first, so forms that box their options on the left behave exactly as before.
+ */
+export function tickBoxNearText(textItem, squares) {
+  return squareBeforeText(textItem, squares) || squareAfterText(textItem, squares)
 }
