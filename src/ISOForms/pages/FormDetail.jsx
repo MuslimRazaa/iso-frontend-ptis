@@ -4,6 +4,7 @@ import API_BASE_URL, { API_ENDPOINTS } from '../../config/api'
 import { getCurrentEmployeeId } from '../utils/currentEmployee'
 import DynamicField from '../components/DynamicField'
 import { isFieldEmpty } from '../utils/fieldHelpers'
+import { resolveSignerName, stampSignature } from '../utils/signature'
 import { getOfflineEntry, updateOfflineEntry, deleteOfflineEntry, getOfflineTemplate } from '../utils/offlineStore'
 import { downloadFilledPdf } from '../pdf/fillOriginalPdf'
 import { SEED_EMPLOYEES } from '../seedTemplates'
@@ -160,6 +161,9 @@ function FormDetail() {
 
   const setApproverValue = (fieldId, val) => setApproverValues(prev => ({ ...prev, [fieldId]: val }))
 
+  // Who an approver signature signs as when its name is left blank.
+  const signerName = resolveSignerName({ employees, employeeId: myEmployeeId })
+
   // The download is always the original uploaded PDF with values drawn onto
   // it. There is deliberately no HTML/snapshot fallback: a fallback that
   // silently produced a rebuilt layout is exactly what made downloads stop
@@ -199,11 +203,22 @@ function FormDetail() {
     }
     setDeciding(true)
     setError('')
+
+    // Seal the approver's signature fields — the same stamp the requester's
+    // side of the form carries, for the part only the approver completes: the
+    // date is set now, and the name is whatever was typed, falling back to
+    // whoever is deciding.
+    const signedApproverValues = { ...approverValues }
+    for (const field of approverFields) {
+      if (field.type !== 'signature') continue
+      signedApproverValues[field.id] = stampSignature(signedApproverValues[field.id], signerName)
+    }
+
     try {
       const res = await fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}/${id}/decision`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status, remarks: remarks.trim(), approver_data: approverValues }),
+        body: JSON.stringify({ status, remarks: remarks.trim(), approver_data: signedApproverValues }),
       })
       if (!res.ok) throw new Error('decision failed')
     } catch {
@@ -211,7 +226,7 @@ function FormDetail() {
       updateOfflineEntry(id, {
         status,
         remarks: remarks.trim(),
-        approver_data: JSON.stringify(approverValues),
+        approver_data: JSON.stringify(signedApproverValues),
         decided_at: new Date().toISOString(),
       })
     } finally {
@@ -345,6 +360,7 @@ function FormDetail() {
                 onChange={(val) => setApproverValue(field.id, val)}
                 readOnly={!canDecide}
                 employees={employees}
+                signerName={signerName}
               />
             </div>
           ))}

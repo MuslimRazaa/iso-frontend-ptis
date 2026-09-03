@@ -6,7 +6,7 @@
 // with a stray `height - y` at each call site.
 
 export const DEFAULT_FONT_SIZE = 9
-export const DEFAULT_BOX_HEIGHT = 14
+export const DEFAULT_BOX_HEIGHT = 16
 export const DEFAULT_BOX_WIDTH = 140
 
 /**

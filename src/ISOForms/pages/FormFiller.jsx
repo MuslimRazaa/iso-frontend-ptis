@@ -6,6 +6,7 @@ import { isFieldEmpty } from '../utils/fieldHelpers'
 import { SEED_TEMPLATES, SEED_VERSION, SEED_EMPLOYEES } from '../seedTemplates'
 import { ensureSeeded, getOfflineTemplates, getOfflineTemplate, addOfflineEntry } from '../utils/offlineStore'
 import { getCurrentEmployeeId } from '../utils/currentEmployee'
+import { resolveSignerName, stampSignature } from '../utils/signature'
 import { fileToDataUrl } from '../utils/fileToDataUrl'
 
 // One column per ~340px of available width, so the same markup is a single
@@ -123,6 +124,12 @@ function FormFiller() {
       .catch(() => setEmployees(SEED_EMPLOYEES))
   }, [])
 
+  // Who a signature field signs as when its name is left blank. Resolved here
+  // so the field can offer it as a placeholder, and used again on submit.
+  const [myEmployeeId, setMyEmployeeId] = useState(null)
+  useEffect(() => { getCurrentEmployeeId().then(setMyEmployeeId) }, [])
+  const signerName = resolveSignerName({ employees, employeeId: myEmployeeId })
+
   const setFieldValue = (fieldId, val) => setValues(prev => ({ ...prev, [fieldId]: val }))
 
   const addAttachment = () => setAttachments(prev => [...prev, null])
@@ -151,7 +158,18 @@ function FormFiller() {
     // no auth session, so send these explicitly (it denormalizes template_name).
     const relatedEmployee = employees.find(emp => String(emp.id) === String(relatedEmployeeId))
     const relatedEmployeeName = relatedEmployee?.full_name || relatedEmployee?.name || ''
-    const myEmployeeId = await getCurrentEmployeeId()
+    const resolvedEmployeeId = await getCurrentEmployeeId()
+
+    // Seal the requester's signature fields: the date is stamped now, and the
+    // name is whatever was typed on the form, falling back to whoever is logged
+    // in. A signature that already carries a date is left alone — revising a
+    // form corrects what it says, it does not re-sign it under a later date.
+    const myName = resolveSignerName({ employees, employeeId: resolvedEmployeeId })
+    const signedValues = { ...values }
+    for (const field of template.fields) {
+      if (field.type !== 'signature') continue
+      signedValues[field.id] = stampSignature(signedValues[field.id], myName)
+    }
 
     // ── Revising an existing form ───────────────────────────────────────────
     // No offline fallback here: the form already exists on the server, so a
@@ -160,13 +178,13 @@ function FormFiller() {
     if (isEdit) {
       try {
         const body = new FormData()
-        body.append('form_data', JSON.stringify(values))
+        body.append('form_data', JSON.stringify(signedValues))
         body.append('related_employee_id', relatedEmployeeId)
         body.append('related_employee_name', relatedEmployeeName)
         body.append('keep_attachments', JSON.stringify(storedAttachments.map(a => a.file_path)))
         if (isAdmin) body.append('admin', '1')
-        if (myEmployeeId || localStorage.getItem('userEmail')) {
-          body.append('editor', myEmployeeId || localStorage.getItem('userEmail'))
+        if (resolvedEmployeeId || localStorage.getItem('userEmail')) {
+          body.append('editor', resolvedEmployeeId || localStorage.getItem('userEmail'))
         }
         attachments.forEach(file => { if (file) body.append('attachments', file) })
 
@@ -187,13 +205,13 @@ function FormFiller() {
       return
     }
 
-    const createdBy = myEmployeeId || localStorage.getItem('userEmail') || ''
+    const createdBy = resolvedEmployeeId || localStorage.getItem('userEmail') || ''
     const createdByName = localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || ''
     try {
       const formData = new FormData()
       formData.append('template_id', template.id)
       formData.append('template_name', template.name || '')
-      formData.append('form_data', JSON.stringify(values))
+      formData.append('form_data', JSON.stringify(signedValues))
       formData.append('related_employee_id', relatedEmployeeId)
       formData.append('related_employee_name', relatedEmployeeName)
       if (createdBy) formData.append('created_by', createdBy)
@@ -216,10 +234,10 @@ function FormFiller() {
         id: `local-${Date.now()}`,
         template_id: template.id,
         template_name: template.name,
-        form_data: JSON.stringify(values),
+        form_data: JSON.stringify(signedValues),
         related_employee_id: relatedEmployeeId,
         related_employee_name: relatedEmployee?.full_name || relatedEmployee?.name || '',
-        created_by: myEmployeeId || localStorage.getItem('userEmail') || '',
+        created_by: resolvedEmployeeId || localStorage.getItem('userEmail') || '',
         created_by_name: localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'You (demo)',
         status: 'pending',
         remarks: '',
@@ -302,7 +320,13 @@ function FormFiller() {
               <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, fontSize: 14 }}>
                 {field.label}{field.required && <span style={{ color: '#d7263d' }}> *</span>}
               </label>
-              <DynamicField field={field} value={values[field.id]} onChange={(val) => setFieldValue(field.id, val)} employees={employees} />
+              <DynamicField
+                field={field}
+                value={values[field.id]}
+                onChange={(val) => setFieldValue(field.id, val)}
+                employees={employees}
+                signerName={signerName}
+              />
             </div>
           ))}
         </article>

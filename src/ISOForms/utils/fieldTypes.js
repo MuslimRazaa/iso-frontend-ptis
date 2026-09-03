@@ -13,6 +13,10 @@ export const FIELD_TYPES = [
   { value: 'checkbox',       label: 'Checkbox (yes/no)' },
   { value: 'checkbox-group', label: 'Checkbox Group (multi-select)' },
   { value: 'employee',       label: 'Employee Picker (from Employee Management)' },
+  // Placed where the form asks for a signature. Nobody types it: the app stamps
+  // the name of whoever completed that part of the form and the time they did,
+  // which is what a controlled document needs in place of a written signature.
+  { value: 'signature',      label: 'Signature (name + date, filled automatically)' },
 ]
 
 export const OWNERS = [

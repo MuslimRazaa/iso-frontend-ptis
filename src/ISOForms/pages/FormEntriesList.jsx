@@ -66,10 +66,15 @@ function FormEntriesList() {
 
   useEffect(() => { getCurrentEmployeeId().then(setMyEmployeeId) }, [])
 
-  // A form is somebody's record, not a company noticeboard: everyone except an
-  // ISO Forms admin sees only what they submitted or have to decide on. The
-  // list used to fetch every entry for everyone, so one employee's submission
-  // was readable by all of them.
+  // A form is somebody's record, not a company noticeboard: the register shows
+  // an ISO Forms admin every form, and everyone else only the forms they
+  // submitted. The list used to fetch every entry for everyone, so one
+  // employee's submission was readable by all of them.
+  //
+  // Pending Approvals is the exception, and asks a different question — the
+  // forms awaiting this person's decision. Those are forms somebody else
+  // submitted, so the "only what I submitted" limit must not apply there or an
+  // approver would have nothing to approve.
   const myEmail = localStorage.getItem('userEmail') || ''
   const identityReady = isAdmin || Boolean(myEmployeeId) || Boolean(myEmail)
 
@@ -81,7 +86,7 @@ function FormEntriesList() {
     const params = new URLSearchParams()
     if (statusFilter) params.set('status', statusFilter)
     if (effectiveOnlyMine && myEmployeeId) params.set('relatedEmployeeId', myEmployeeId)
-    if (!isAdmin) {
+    if (!isAdmin && !effectiveOnlyMine) {
       if (myEmployeeId) params.set('employeeId', myEmployeeId)
       if (myEmail) params.set('email', myEmail)
     }
@@ -99,11 +104,9 @@ function FormEntriesList() {
         let rows = getOfflineEntries()
         if (statusFilter) rows = rows.filter(e => (e.status || 'pending') === statusFilter)
         if (effectiveOnlyMine && myEmployeeId) rows = rows.filter(e => String(e.related_employee_id) === String(myEmployeeId))
-        if (!isAdmin) {
+        if (!isAdmin && !effectiveOnlyMine) {
           const mine = [myEmployeeId, myEmail].filter(Boolean).map(String)
-          rows = rows.filter(e =>
-            mine.includes(String(e.created_by || '')) ||
-            mine.includes(String(e.related_employee_id || '')))
+          rows = rows.filter(e => mine.includes(String(e.created_by || '')))
         }
         setEntries(rows)
         setOffline(true)
@@ -282,8 +285,10 @@ function FormEntriesList() {
           />
         </div>
 
-        {/* Only mine toggle — non-admin, non-pending-mine view */}
-        {(!pendingMine || isAdmin) && (
+        {/* Narrows an admin's register to the forms routed to them. Everyone
+            else already sees only their own submissions, so for them the toggle
+            would only ever have taken things away. */}
+        {isAdmin && (
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: '#595966', whiteSpace: 'nowrap', cursor: 'pointer' }}>
             <input type="checkbox" checked={effectiveOnlyMine} onChange={e => setOnlyMine(e.target.checked)} />
             Only mine
