@@ -3,6 +3,7 @@ import { X, Move, Trash2, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { loadPdfDocument, renderPageToCanvas } from '../utils/renderPdfPage'
 import {
   normalizePdfCoords,
+  optionMarkBox,
   pdfToScreen,
   screenToPdf,
   DEFAULT_BOX_WIDTH,
@@ -197,29 +198,49 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
     }
   }
 
-  // Opening the editor fills in tick positions for any choice field that has
-  // none. A template imported before the detection could read its form would
-  // otherwise need every option placed by hand, or a re-import that throws away
-  // all the positions already set. Nothing is written until the admin saves.
+  // Opening the editor brings every choice field's tick positions up to date.
+  //
+  // Detection only ever ran at import, so a template imported earlier keeps
+  // whatever that version of it produced — including marks that are simply
+  // wrong: a form that boxes on the right had every mark attributed to the
+  // previous option, so ticks landed on the wrong choice. Re-importing would
+  // fix it only by discarding every position already set.
+  //
+  // A field is only rewritten when detection does strictly better (more options
+  // matched to a box the form actually draws), and never when a mark was placed
+  // by hand. Nothing is written to the template until the admin saves.
+  const boxCount = (marks) => marks.filter(m => m?.box).length
+
   useEffect(() => {
     if (!pdfDoc || autoDetectedRef.current) return
     autoDetectedRef.current = true
     let cancelled = false
     ;(async () => {
       const targets = localFields.filter(f =>
-        hasOptions(f.type) && optionsOf(f).length >= 2 && marksOf(f).length === 0)
-      let found = 0
+        hasOptions(f.type) && optionsOf(f).length >= 2 && !marksOf(f).some(m => m?.manual))
+      let added = 0
+      let corrected = 0
       for (const field of targets) {
         const page = Number.isFinite(field.pdfCoords?.page) ? field.pdfCoords.page : 0
         try {
           const marks = await detectOptionMarksOnPage(await pdfDoc.getPage(page + 1), field, page)
           if (cancelled) return
-          if (marks?.length) { patchCoords(field.id, { page, optionMarks: marks }); found++ }
+          if (!marks?.length) continue
+          const existing = marksOf(field)
+          if (!existing.length) {
+            patchCoords(field.id, { page, optionMarks: marks })
+            added++
+          } else if (boxCount(marks) > boxCount(existing)) {
+            patchCoords(field.id, { page, optionMarks: marks })
+            corrected++
+          }
         } catch { /* leave this one to be placed by hand */ }
       }
-      if (!cancelled && found) {
-        setAutoNote(`Found tick positions for ${found} choice field(s). Save to keep them.`)
-      }
+      if (cancelled || !(added + corrected)) return
+      const parts = []
+      if (added) parts.push(`found tick positions for ${added} choice field(s)`)
+      if (corrected) parts.push(`corrected ${corrected}`)
+      setAutoNote(`${parts.join(', ')}. Save to keep them.`)
     })()
     return () => { cancelled = true }
     // Runs once per opened PDF; the ref keeps a field patch from re-triggering it.
@@ -229,7 +250,8 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
     const rest = marksOf(field).filter(m => String(m.label).trim().toLowerCase() !== label.trim().toLowerCase())
     patchCoords(field.id, {
       page: Number.isFinite(field.pdfCoords?.page) ? field.pdfCoords.page : pageIndex,
-      optionMarks: [...rest, { label, box }],
+      // Tagged as hand-placed so the automatic pass never overwrites it.
+      optionMarks: [...rest, { label, box, manual: true }],
     })
   }
 
@@ -733,20 +755,23 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
               >
                 <canvas ref={canvasRef} style={{ display: 'block' }} />
 
-                {/* Tick boxes of the selected choice field, so their aim is visible. */}
+                {/* Where each selected option's tick will land. Marks with no box
+                    of their own are shown too — dashed, since their spot is
+                    derived from the printed word rather than from a box the form
+                    draws — because showing nothing reads as "detection failed"
+                    when in fact the tick is placed correctly. */}
                 {view && selected && hasOptions(selected.type) && marksOf(selected).map((m, i) => {
-                  if (!m.box) return null
-                  const box = pdfToScreen(m.box, view.viewport)
+                  const box = pdfToScreen(optionMarkBox(m), view.viewport)
                   if (!box) return null
                   return (
                     <div
                       key={`${m.label}-${i}`}
-                      title={m.label}
+                      title={m.box ? m.label : `${m.label} (no tick box on the form — placed beside the word)`}
                       onClick={(e) => e.stopPropagation()}
                       style={{
                         position: 'absolute',
                         left: box.left, top: box.top, width: box.width, height: box.height,
-                        border: '2px solid #1a7f37',
+                        border: m.box ? '2px solid #1a7f37' : '2px dashed #1a7f37',
                         background: 'rgba(26,127,55,0.18)',
                         borderRadius: 3,
                         zIndex: 4,

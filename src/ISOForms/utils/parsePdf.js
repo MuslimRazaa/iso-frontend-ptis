@@ -186,25 +186,64 @@ const optionWidthWithin = (hit, opt) => {
   return hit.width * Math.min(1, (at + plain.length) / raw.length)
 }
 
-const findOptionMarks = (optionList, labelItem, allItems, geom, depth = OPTION_SEARCH_DEPTH) => {
+/**
+ * A checkbox drawn as a character rather than as a path.
+ *
+ * Plenty of forms typeset their tick boxes in a symbol font — the follow-up
+ * columns here are a Wingdings box followed by the word — so there is no
+ * rectangle in the page's geometry to find. Such a glyph is short, carries no
+ * letters or digits, and is not ASCII punctuation (which would be the form's
+ * own dashes and colons).
+ */
+const isTickGlyph = (text) => {
+  const t = String(text || '').trim()
+  if (!t || t.length > 2) return false
+  if (/[A-Za-z0-9]/.test(t)) return false
+  return !/^[ -~]+$/.test(t)
+}
+
+const glyphTickBoxes = (allItems, pageIndex) => allItems
+  .filter(it => it.page === pageIndex && (it.width || 0) <= 14 && isTickGlyph(it.text))
+  .map(it => ({
+    x: it.x,
+    y: it.pdfY,
+    w: it.width || 8,
+    h: Math.max(it.height || 8, 8),
+  }))
+
+const findOptionMarks = (optionList, labelItem, allItems, geom, {
+  depthBelow = OPTION_SEARCH_DEPTH,
+  depthAbove = 6,
+  nearest = false,
+} = {}) => {
   const opts = String(optionList || '').split(',').map(s => s.trim()).filter(Boolean)
   if (opts.length < 2) return null
 
   const nearby = allItems.filter(it =>
     it.page === labelItem.page &&
     it.text.trim().length >= 3 &&
-    labelItem.pdfY - it.pdfY <= depth &&                 // same line or below
-    it.pdfY - labelItem.pdfY <= 6)
+    labelItem.pdfY - it.pdfY <= depthBelow &&
+    it.pdfY - labelItem.pdfY <= depthAbove)
 
-  // Pair each option with the text the form prints for it.
+  // Pair each option with the text the form prints for it. Searching from a
+  // placed field rather than from its printed label takes the closest match:
+  // a form with three identical follow-up columns prints "closed"/"pending"
+  // three times, and taking the first would tick the first column for all of
+  // them.
+  const distanceTo = (it) => Math.hypot(it.x - labelItem.x, it.pdfY - labelItem.pdfY)
   const hits = []
   for (const opt of opts) {
     const head = optionKey(opt)
     if (head.length < 3) continue
-    const hit = nearby.find(it => {
+    const matches = nearby.filter(it => {
       const t = optionKey(it.text)
       return t.length >= 3 && (t.startsWith(head) || head.startsWith(t))
     })
+    const hit = nearest
+      ? matches.reduce((best, it) =>
+        !best || distanceTo(it) < distanceTo(best) ? it : best
+      , null)
+      : matches[0]
     if (hit) hits.push({ opt, hit })
   }
   if (hits.length < 2) return null
@@ -234,6 +273,11 @@ const findOptionMarks = (optionList, labelItem, allItems, geom, depth = OPTION_S
   }
 
   let { side, boxes } = pickSide(squares)
+  if (!distinct(boxes)) {
+    // No drawn rectangle: the form may typeset its boxes as glyphs instead.
+    const glyphs = glyphTickBoxes(allItems, labelItem.page)
+    if (glyphs.length) ({ side, boxes } = pickSide([...squares, ...glyphs]))
+  }
   if (!distinct(boxes) && wideBoxes.length) ({ side, boxes } = pickSide([...squares, ...wideBoxes]))
 
   const used = new Set()
@@ -824,14 +868,20 @@ export async function detectOptionMarksOnPage(page, field, pageIndex = 0) {
 
   const coords = field?.pdfCoords || {}
   const y = Number(coords.y ?? coords.pdfY)
-  // A placed field searches down from its own row; an unplaced one has no row
-  // to search from, so it scans the page.
-  const anchor = Number.isFinite(y)
-    ? { page: pageIndex, x: Number(coords.x) || 0, pdfY: y }
-    : { page: pageIndex, x: 0, pdfY: page.getViewport({ scale: 1 }).height }
-  const depth = Number.isFinite(y) ? OPTION_SEARCH_DEPTH : Infinity
+  if (!Number.isFinite(y)) {
+    // Nothing to search around: scan the page and take the first match of each
+    // option, which is all an unplaced field can be given.
+    const top = page.getViewport({ scale: 1 }).height
+    return findOptionMarks(field?.options, { page: pageIndex, x: 0, pdfY: top }, items, geom,
+      { depthBelow: Infinity })
+  }
 
-  return findOptionMarks(field?.options, anchor, items, geom, depth)
+  // A field's box sits ON one of the option rows as often as above them (the
+  // box for this form's "Type of non-conformance" is on the second row), so the
+  // search reaches both ways around it and the closest match wins.
+  const anchor = { page: pageIndex, x: Number(coords.x) || 0, pdfY: y }
+  return findOptionMarks(field?.options, anchor, items, geom,
+    { depthBelow: 90, depthAbove: 60, nearest: true })
 }
 
 /**

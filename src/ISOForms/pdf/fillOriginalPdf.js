@@ -1,5 +1,5 @@
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
-import { normalizePdfCoords, DEFAULT_FONT_SIZE } from '../utils/pdfCoords'
+import { normalizePdfCoords, optionMarkBox, DEFAULT_FONT_SIZE } from '../utils/pdfCoords'
 import { base64ToBytes } from '../utils/base64'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -259,19 +259,8 @@ export async function fillOriginalPdf(base64, fields, formValues, approverValues
       const wanted = new Set(selected.map(v => String(v).trim().toLowerCase()))
       for (const mark of optionMarks) {
         if (!wanted.has(String(mark.label).trim().toLowerCase())) continue
-        if (mark.box) {
-          // The form draws a real tick box here — mark inside it.
-          drawCheckMark(markPage, mark.box)
-        } else {
-          // No drawn box for this option: sit the tick beside the printed word,
-          // on the side this form puts its marks. Records written before the
-          // side was known carry none and keep the original left placement.
-          const size = Math.min(9, mark.height || 9)
-          const x = mark.side === 'after'
-            ? mark.x + (mark.width || 0) + 3
-            : mark.x - size - 3
-          drawCheckMark(markPage, { x, y: mark.y - 1, width: size, height: size })
-        }
+        const box = optionMarkBox(mark)
+        if (box) drawCheckMark(markPage, box)
       }
       continue
     }

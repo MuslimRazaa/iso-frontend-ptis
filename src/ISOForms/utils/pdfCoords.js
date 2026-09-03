@@ -66,6 +66,32 @@ export function normalizePdfCoords(coords) {
   }
 }
 
+/**
+ * The rectangle a choice option's tick is drawn in.
+ *
+ * A mark either names the box the form draws (or typesets), or — when the form
+ * draws none — the printed word to sit beside, plus the side this form marks
+ * on. The overlay and the position editor both read the position from here, so
+ * the green box an admin aims with is exactly where the tick lands.
+ */
+export function optionMarkBox(mark) {
+  if (!mark) return null
+  if (mark.box) {
+    const { x, y, width, height } = mark.box
+    return [x, y, width, height].every(Number.isFinite) ? { x, y, width, height } : null
+  }
+  const x = Number(mark.x)
+  const y = Number(mark.y)
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null
+  const size = Math.min(9, Number(mark.height) || 9)
+  return {
+    x: mark.side === 'after' ? x + (Number(mark.width) || 0) + 3 : x - size - 3,
+    y: y - 1,
+    width: size,
+    height: size,
+  }
+}
+
 /** True when the field has a usable position on the original PDF. */
 export const isPlaced = (field) => normalizePdfCoords(field?.pdfCoords) !== null
 
