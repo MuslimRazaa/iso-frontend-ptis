@@ -186,6 +186,31 @@ const optionWidthWithin = (hit, opt) => {
   return hit.width * Math.min(1, (at + plain.length) / raw.length)
 }
 
+/**
+ * A checkbox drawn as a character rather than as a path.
+ *
+ * Plenty of forms typeset their tick boxes in a symbol font — the follow-up
+ * columns here are a Wingdings box followed by the word — so there is no
+ * rectangle in the page's geometry to find. Such a glyph is short, carries no
+ * letters or digits, and is not ASCII punctuation (which would be the form's
+ * own dashes and colons).
+ */
+const isTickGlyph = (text) => {
+  const t = String(text || '').trim()
+  if (!t || t.length > 2) return false
+  if (/[A-Za-z0-9]/.test(t)) return false
+  return !/^[ -~]+$/.test(t)
+}
+
+const glyphTickBoxes = (allItems, pageIndex) => allItems
+  .filter(it => it.page === pageIndex && (it.width || 0) <= 14 && isTickGlyph(it.text))
+  .map(it => ({
+    x: it.x,
+    y: it.pdfY,
+    w: it.width || 8,
+    h: Math.max(it.height || 8, 8),
+  }))
+
 const findOptionMarks = (optionList, labelItem, allItems, geom, {
   depthBelow = OPTION_SEARCH_DEPTH,
   depthAbove = 6,
@@ -246,6 +271,11 @@ const findOptionMarks = (optionList, labelItem, allItems, geom, {
   }
 
   let { side, boxes } = pickSide(squares)
+  if (!distinct(boxes)) {
+    // No drawn rectangle: the form may typeset its boxes as glyphs instead.
+    const glyphs = glyphTickBoxes(allItems, labelItem.page)
+    if (glyphs.length) ({ side, boxes } = pickSide([...squares, ...glyphs]))
+  }
   if (!distinct(boxes) && wideBoxes.length) ({ side, boxes } = pickSide([...squares, ...wideBoxes]))
 
   const used = new Set()

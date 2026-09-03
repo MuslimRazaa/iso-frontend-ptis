@@ -3,6 +3,7 @@ import { X, Move, Trash2, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { loadPdfDocument, renderPageToCanvas } from '../utils/renderPdfPage'
 import {
   normalizePdfCoords,
+  optionMarkBox,
   pdfToScreen,
   screenToPdf,
   DEFAULT_BOX_WIDTH,
@@ -754,20 +755,23 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
               >
                 <canvas ref={canvasRef} style={{ display: 'block' }} />
 
-                {/* Tick boxes of the selected choice field, so their aim is visible. */}
+                {/* Where each selected option's tick will land. Marks with no box
+                    of their own are shown too — dashed, since their spot is
+                    derived from the printed word rather than from a box the form
+                    draws — because showing nothing reads as "detection failed"
+                    when in fact the tick is placed correctly. */}
                 {view && selected && hasOptions(selected.type) && marksOf(selected).map((m, i) => {
-                  if (!m.box) return null
-                  const box = pdfToScreen(m.box, view.viewport)
+                  const box = pdfToScreen(optionMarkBox(m), view.viewport)
                   if (!box) return null
                   return (
                     <div
                       key={`${m.label}-${i}`}
-                      title={m.label}
+                      title={m.box ? m.label : `${m.label} (no tick box on the form — placed beside the word)`}
                       onClick={(e) => e.stopPropagation()}
                       style={{
                         position: 'absolute',
                         left: box.left, top: box.top, width: box.width, height: box.height,
-                        border: '2px solid #1a7f37',
+                        border: m.box ? '2px solid #1a7f37' : '2px dashed #1a7f37',
                         background: 'rgba(26,127,55,0.18)',
                         borderRadius: 3,
                         zIndex: 4,
