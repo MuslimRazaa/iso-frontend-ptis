@@ -240,7 +240,9 @@ const findOptionMarks = (optionList, labelItem, allItems, geom, {
       return t.length >= 3 && (t.startsWith(head) || head.startsWith(t))
     })
     const hit = nearest
-      ? matches.sort((a, b) => distanceTo(a) - distanceTo(b))[0]
+      ? matches.reduce((best, it) =>
+        !best || distanceTo(it) < distanceTo(best) ? it : best
+      , null)
       : matches[0]
     if (hit) hits.push({ opt, hit })
   }
