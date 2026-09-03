@@ -1508,18 +1508,18 @@ const CourseDetailUser = () => {
                             className="resource-open-btn"
                             onClick={() => handlePPTviewer(materialUrl)}
                           >
-                            Open fullscreen
+                            {isPdf ? 'Open PDF' : 'Open presentation'}
                           </button>
                         </div>
-                        {isPdf ? (
-                          <div className="material-viewer">
-                            <PdfViewer pdfUrl={course.pdf_path} />
-                          </div>
-                        ) : (
-                          <p className="material-note">
-                            Click “Open fullscreen” to view the presentation.
-                          </p>
-                        )}
+                        {/* The material opens in the reader rather than in a
+                            cramped inline frame. Reading time only counts while
+                            that reader is open, so this is also the path that
+                            records progress. */}
+                        <p className="material-note">
+                          {isPdf
+                            ? 'Opens the full reader — your reading time counts towards this course.'
+                            : 'Opens the full reader — your viewing time counts towards this course.'}
+                        </p>
                       </div>
                     );
                   })()}

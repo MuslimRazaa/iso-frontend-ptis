@@ -257,6 +257,12 @@ const textInside = (box, textItems) => textItems.filter(t =>
  * field. A box that carries only a caption on its top line still counts: the
  * space beneath the caption is the writable part.
  */
+// How much of a region another must cover before it counts as the same input.
+// Well below 1 so a border stroke that overshoots its cell by a point or two
+// is still recognised as that cell, and high enough that two genuinely
+// different boxes which merely touch both survive.
+const COVERED_ENOUGH = 0.7
+
 export function detectInputRegions(rects, hlines, textItems) {
   // Collapse borders that were drawn more than once.
   const seen = new Set()
@@ -316,11 +322,27 @@ export function detectInputRegions(rects, hlines, textItems) {
     regions.push({ x: l.x, y: l.y + 1, w: l.w, h: LINE, kind: 'rule' })
   }
 
-  // Drop regions swallowed by a bigger one that was also kept.
+  // Drop a region a bigger one already covers.
+  //
+  // Containment alone was not enough. A table cell is stroked with a border
+  // that pdfjs reports a couple of points wider than the cell itself, so the
+  // border came through as a separate "rule" region that stuck out past the
+  // cell and escaped every containment test — leaving TWO regions per row of
+  // an empty table. Numbered down the column, that is what put the entries of
+  // two rows onto one printed row.
+  const areaOf = (r) => Math.max(1, r.w * r.h)
+  const coveredFraction = (inner, outer) => {
+    const ox = Math.min(inner.x + inner.w, outer.x + outer.w) - Math.max(inner.x, outer.x)
+    const oy = Math.min(inner.y + inner.h, outer.y + outer.h) - Math.max(inner.y, outer.y)
+    if (ox <= 0 || oy <= 0) return 0
+    return (ox * oy) / areaOf(inner)
+  }
+  // Of two regions describing the same input the bigger one is kept; when they
+  // are the same size — a rule the producer stroked twice a point apart — the
+  // first one is, so exactly one survives either way.
+  const losesTo = (r, i, o, j) => (areaOf(o) === areaOf(r) ? j < i : areaOf(o) > areaOf(r))
   return regions.filter((r, i) => !regions.some((o, j) =>
-    j !== i && o.w * o.h > r.w * r.h &&
-    r.x >= o.x - 1 && r.x + r.w <= o.x + o.w + 1 &&
-    r.y >= o.y - 1 && r.y + r.h <= o.y + o.h + 1))
+    j !== i && coveredFraction(r, o) >= COVERED_ENOUGH && losesTo(r, i, o, j)))
 }
 
 /**

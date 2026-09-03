@@ -135,6 +135,18 @@ function FormDetail() {
     entry?.status === 'pending' &&
     (isAdminOverride || (myEmployeeId && String(myEmployeeId) === String(entry?.related_employee_id)))
 
+  // Who may open this form at all: its author, the person who has to decide on
+  // it, and an ISO Forms admin. Without this the list could scope what it shows
+  // while the form itself stayed readable to anyone who typed its URL.
+  const canView = (() => {
+    if (!entry) return true
+    if (isAdminOverride) return true
+    const me = [myEmployeeId, localStorage.getItem('userEmail')].filter(Boolean).map(String)
+    if (!me.length) return false
+    return me.includes(String(entry.created_by || '')) ||
+           me.includes(String(entry.related_employee_id || ''))
+  })()
+
   // Who may revise this form: its author while it is still pending, and an ISO
   // Forms admin at any time. A decided form is the record that was signed off,
   // so changing it is deliberately an admin-only act.
@@ -222,6 +234,16 @@ function FormDetail() {
   }
 
   if (loading) return <div style={{ padding: 40 }}>Loading form…</div>
+  if (entry && !canView) {
+    return (
+      <div style={{ padding: 40 }}>
+        <Link to={`${base}/entries`} style={{ fontSize: 13, color: '#7a7a8c', textDecoration: 'none' }}>← Back to All Forms</Link>
+        <div style={{ background: '#fdecea', border: '1px solid #f5c2c0', color: '#b42318', borderRadius: 12, padding: '14px 16px', marginTop: 16, fontSize: 14 }}>
+          This form belongs to someone else. You can only open forms you submitted or have to approve.
+        </div>
+      </div>
+    )
+  }
   if (error && !entry) return <div style={{ padding: 40, color: '#b42318' }}>{error}</div>
   if (!entry) return null
 

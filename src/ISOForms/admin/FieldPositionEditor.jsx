@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { X, Move, Trash2, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { loadPdfDocument, renderPageToCanvas } from '../utils/renderPdfPage'
 import {
@@ -97,7 +97,6 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
   const autoDetectedRef = useRef(false)
   // Fields born in this editor: only those may be deleted outright here, since
   // removing one that came from the template would be a silent template edit.
-  const [createdIds, setCreatedIds] = useState(() => new Set())
 
   // ── Load the PDF once ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -246,6 +245,71 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
     // Runs once per opened PDF; the ref keeps a field patch from re-triggering it.
   }, [pdfDoc])   // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Two fields sitting on the same spot mean one printed row carries the
+  // entries of two. Blank-table forms used to import that way: a cell and the
+  // border stroke around it both became a field. Import no longer does that,
+  // but a template saved before the fix still holds the extra fields, and this
+  // clears them without a re-import that would renumber every row.
+  const DUPLICATE_OVERLAP = 0.7
+
+  const duplicateIds = useMemo(() => {
+    const placedFields = localFields
+      .map(f => ({ f, c: normalizePdfCoords(f.pdfCoords) }))
+      .filter(x => x.c)
+    const area = (c) => Math.max(1, c.width * c.height)
+    const covered = (a, b) => {
+      const ox = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)
+      const oy = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y)
+      return ox <= 0 || oy <= 0 ? 0 : (ox * oy) / area(a)
+    }
+    const drop = new Set()
+    placedFields.forEach((x, i) => {
+      if (drop.has(x.f.id)) return
+      placedFields.forEach((y, j) => {
+        if (i === j || drop.has(y.f.id) || x.c.page !== y.c.page) return
+        if (covered(y.c, x.c) < DUPLICATE_OVERLAP) return
+        // Keep the larger box, and the earlier field when they match.
+        if (area(y.c) > area(x.c) || (area(y.c) === area(x.c) && j < i)) return
+        drop.add(y.f.id)
+      })
+    })
+    return drop
+    // Recomputed only when the fields change — it also runs during a drag.
+  }, [localFields])
+
+  // Row labels are renumbered after the removal, top to bottom within each
+  // column. Dropping "Row 5" out of a column otherwise leaves "Row 6 — S. No"
+  // printed on the same line as "Row 3 — Auditor Name", which is a puzzle for
+  // whoever fills the form. Values are keyed by field id, so the labels can be
+  // rewritten without touching anything already submitted.
+  const ROW_LABEL = /^Row (d+) — (.+)$/
+
+  const renumberRows = (fields) => {
+    const byColumn = new Map()
+    fields.forEach((f, index) => {
+      const m = String(f.label).match(ROW_LABEL)
+      const coords = normalizePdfCoords(f.pdfCoords)
+      if (!m || !coords) return
+      const key = m[2]
+      if (!byColumn.has(key)) byColumn.set(key, [])
+      byColumn.get(key).push({ index, coords })
+    })
+    const renamed = new Map()
+    for (const [caption, entries] of byColumn) {
+      entries
+        .sort((a, b) => a.coords.page - b.coords.page || b.coords.y - a.coords.y)
+        .forEach((entry, i) => renamed.set(entry.index, `Row ${i + 1} — ${caption}`))
+    }
+    return fields.map((f, index) => (renamed.has(index) ? { ...f, label: renamed.get(index) } : f))
+  }
+
+  const removeDuplicates = () => {
+    const removed = duplicateIds.size
+    setLocalFields(prev => renumberRows(prev.filter(f => !duplicateIds.has(f.id))))
+    setSelectedId(null)
+    setAutoNote(`Removed ${removed} overlapping field(s) and renumbered the rows. Save to keep this.`)
+  }
+
   const placeOptionMark = (field, label, box) => {
     const rest = marksOf(field).filter(m => String(m.label).trim().toLowerCase() !== label.trim().toLowerCase())
     patchCoords(field.id, {
@@ -354,7 +418,6 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
     if (!label) return
     const field = { ...blankField(), ...draft, label }
     setLocalFields(prev => [...prev, field])
-    setCreatedIds(prev => new Set(prev).add(field.id))
     setDraft(null)
     setSelectedId(field.id)
     setPlacingId(field.id)          // arm it: next click on the page drops its box
@@ -362,7 +425,6 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
 
   const deleteField = (fieldId) => {
     setLocalFields(prev => prev.filter(f => f.id !== fieldId))
-    setCreatedIds(prev => { const next = new Set(prev); next.delete(fieldId); return next })
     if (selectedId === fieldId) setSelectedId(null)
     if (placingId === fieldId) setPlacingId(null)
   }
@@ -518,6 +580,16 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
               <button type="button" onClick={() => setDraft(blankField())} style={S.addBtn}>
                 <Plus size={14} /> Add Field
               </button>
+            )}
+
+            {duplicateIds.size > 0 && (
+              <div style={S.hint}>
+                {duplicateIds.size} field(s) sit on top of another field, so one row
+                would print two entries.
+                <button type="button" onClick={removeDuplicates} style={S.linkBtn}>
+                  remove them
+                </button>
+              </div>
             )}
 
             {autoNote && (
@@ -679,11 +751,13 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
                 <button type="button" onClick={() => clearPosition(selected.id)} style={S.removeBtn}>
                   <Trash2 size={13} /> Remove position
                 </button>
-                {createdIds.has(selected.id) && (
-                  <button type="button" onClick={() => deleteField(selected.id)} style={S.removeBtn}>
-                    <Trash2 size={13} /> Delete field
-                  </button>
-                )}
+                {/* Deleting was limited to fields added here, so an entry the
+                    importer invented could only be dropped back on the template
+                    form — with no page to check it against. Any field can go
+                    from here now; nothing is written until the editor is saved. */}
+                <button type="button" onClick={() => deleteField(selected.id)} style={S.removeBtn}>
+                  <Trash2 size={13} /> Delete field
+                </button>
               </div>
             )}
 
@@ -698,17 +772,14 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
                 >
                   <Move size={13} /> <span style={S.ellipsis}>{f.label}</span>
                 </button>
-                {/* Only fields added here can be taken back here — see createdIds. */}
-                {createdIds.has(f.id) && (
-                  <button
-                    type="button"
-                    title="Delete field"
-                    onClick={() => deleteField(f.id)}
-                    style={S.rowDeleteBtn}
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  title="Delete field"
+                  onClick={() => deleteField(f.id)}
+                  style={S.rowDeleteBtn}
+                >
+                  <Trash2 size={13} />
+                </button>
               </div>
             ))}
 

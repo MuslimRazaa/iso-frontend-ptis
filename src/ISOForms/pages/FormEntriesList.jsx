@@ -66,10 +66,25 @@ function FormEntriesList() {
 
   useEffect(() => { getCurrentEmployeeId().then(setMyEmployeeId) }, [])
 
+  // A form is somebody's record, not a company noticeboard: everyone except an
+  // ISO Forms admin sees only what they submitted or have to decide on. The
+  // list used to fetch every entry for everyone, so one employee's submission
+  // was readable by all of them.
+  const myEmail = localStorage.getItem('userEmail') || ''
+  const identityReady = isAdmin || Boolean(myEmployeeId) || Boolean(myEmail)
+
   useEffect(() => {
+    // Waiting for the identity keeps the unscoped "everything" list from
+    // flashing up before the scope is known.
+    if (!identityReady) return
+
     const params = new URLSearchParams()
     if (statusFilter) params.set('status', statusFilter)
     if (effectiveOnlyMine && myEmployeeId) params.set('relatedEmployeeId', myEmployeeId)
+    if (!isAdmin) {
+      if (myEmployeeId) params.set('employeeId', myEmployeeId)
+      if (myEmail) params.set('email', myEmail)
+    }
 
     fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}?${params.toString()}`)
       .then(res => (res.ok ? res.json() : Promise.reject()))
@@ -84,12 +99,18 @@ function FormEntriesList() {
         let rows = getOfflineEntries()
         if (statusFilter) rows = rows.filter(e => (e.status || 'pending') === statusFilter)
         if (effectiveOnlyMine && myEmployeeId) rows = rows.filter(e => String(e.related_employee_id) === String(myEmployeeId))
+        if (!isAdmin) {
+          const mine = [myEmployeeId, myEmail].filter(Boolean).map(String)
+          rows = rows.filter(e =>
+            mine.includes(String(e.created_by || '')) ||
+            mine.includes(String(e.related_employee_id || '')))
+        }
         setEntries(rows)
         setOffline(true)
         setError('')
       })
       .finally(() => setLoading(false))
-  }, [statusFilter, effectiveOnlyMine, myEmployeeId])
+  }, [statusFilter, effectiveOnlyMine, myEmployeeId, identityReady])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Unique option lists for filter dropdowns
   const templateOptions = useMemo(() => [...new Set(entries.map(e => e.template_name).filter(Boolean))], [entries])

@@ -361,8 +361,14 @@ function TemplateBuilder() {
             const byId = new Map(updated.map(f => [f.id, f]))
             setFields(prev => {
               const known = new Set(prev.map(f => f.id))
+              // A field the editor was given and did not return was deleted
+              // there. Falling back to the original for every id meant a
+              // deletion silently undid itself on the way back.
+              const sentToEditor = new Set(prev.filter(f => f.label.trim()).map(f => f.id))
               return [
-                ...prev.map(f => byId.get(f.id) || f),
+                ...prev
+                  .filter(f => byId.has(f.id) || !sentToEditor.has(f.id))
+                  .map(f => byId.get(f.id) || f),
                 // Fields created inside the position editor have no row here
                 // yet — append them so they reach the payload on save.
                 ...updated.filter(f => !known.has(f.id)),

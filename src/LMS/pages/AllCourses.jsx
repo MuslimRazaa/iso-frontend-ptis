@@ -19,8 +19,13 @@ function AllCourses() {
     duration: 0,
     prerequisites: '',
     thumbnail: null,
+    thumbnailFile: null,
     videos: [],
+    standardId: null,
+    generalStandardId: null,
+    specificStandardId: null,
   })
+  const [saving, setSaving] = useState(false)
   const [showModal, setShowModal] = useState(false)
 
   // Fetch courses from backend
@@ -66,6 +71,11 @@ function AllCourses() {
           thumbnail: course.course_thumbnail ? `${API_BASE_URL}${course.course_thumbnail}` : dataAnalystThumb,
           prerequisites: course.prerequisites || 'None',
           videos: course.course_videos || [],
+          // Not shown in the table, but the update needs them: the standard is
+          // read-only while editing and the API rejects a course without one.
+          standardId: course.standard_id,
+          generalStandardId: course.general_standard_id,
+          specificStandardId: course.specific_standard_id,
         }
       })
 
@@ -102,7 +112,11 @@ function AllCourses() {
       duration: course.duration,
       prerequisites: course.prerequisites,
       thumbnail: course.thumbnail,
+      thumbnailFile: null,
       videos: course.videos || [],
+      standardId: course.standardId,
+      generalStandardId: course.generalStandardId,
+      specificStandardId: course.specificStandardId,
     })
     setShowModal(true)
   }
@@ -119,20 +133,52 @@ function AllCourses() {
       duration: 0,
       prerequisites: '',
       thumbnail: null,
+      thumbnailFile: null,
       videos: [],
+      standardId: null,
+      generalStandardId: null,
+      specificStandardId: null,
     })
     setShowModal(false)
   }
 
-  const saveEdit = () => {
-    setCourses(
-      courses.map((course) =>
-        course.id === editingId
-          ? { ...course, ...editForm, updated: 'Just now' }
-          : course
-      )
-    )
-    cancelEdit()
+  // Saving edited only the copy of the course held in this component, so every
+  // change vanished on the next load — the course was never sent to the server.
+  const saveEdit = async () => {
+    if (!editForm.title.trim()) {
+      alert('Course title is required')
+      return
+    }
+
+    const data = new FormData()
+    data.append('course_title', editForm.title)
+    data.append('course_description', editForm.description || '')
+    data.append('course_owner', editForm.owner || '')
+    data.append('course_category', editForm.category || '')
+    data.append('credit_hours', editForm.creditHours || 0)
+    data.append('duration_weeks', editForm.duration || 0)
+    data.append('prerequisites', editForm.prerequisites || '')
+    // The standard is read-only in this form; it is sent back unchanged because
+    // the API requires a course to keep one.
+    if (editForm.standardId) data.append('standard_id', editForm.standardId)
+    if (editForm.generalStandardId) data.append('general_standard_id', editForm.generalStandardId)
+    if (editForm.specificStandardId) data.append('specific_standard_id', editForm.specificStandardId)
+    // Videos are URLs here, not uploads, so they travel as JSON.
+    data.append('course_videos', JSON.stringify(editForm.videos.filter(v => String(v).trim())))
+    // Only a newly picked image is uploaded; otherwise the stored one stays.
+    if (editForm.thumbnailFile) data.append('course_thumbnail', editForm.thumbnailFile)
+
+    setSaving(true)
+    try {
+      await axios.put(`${API_ENDPOINTS.COURSES}/${editingId}`, data)
+      await fetchCourses()
+      cancelEdit()
+    } catch (error) {
+      console.error('Error updating course:', error)
+      alert(error.response?.data?.error || 'Failed to save the course')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const addVideoField = () => {
@@ -261,7 +307,9 @@ function AllCourses() {
                       if (file) {
                         const reader = new FileReader()
                         reader.onloadend = () => {
-                          setEditForm({ ...editForm, thumbnail: reader.result })
+                          // The data URL is the preview; the file itself is what
+                          // gets uploaded on save.
+                          setEditForm((prev) => ({ ...prev, thumbnail: reader.result, thumbnailFile: file }))
                         }
                         reader.readAsDataURL(file)
                       }
@@ -378,8 +426,8 @@ function AllCourses() {
                 <button type="button" className="ghost-btn" onClick={cancelEdit}>
                   Cancel
                 </button>
-                <button type="submit" className="primary-btn">
-                  Save Changes
+                <button type="submit" className="primary-btn" disabled={saving}>
+                  {saving ? 'Saving…' : 'Save Changes'}
                 </button>
               </div>
             </form>

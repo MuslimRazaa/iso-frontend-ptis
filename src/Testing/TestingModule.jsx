@@ -2689,8 +2689,10 @@ const TestingModule = () => {
     // ✅ Re-added: CSV export helper used by the button below
     const exportCsv = (rows) => {
       const headers = ['S.No.', 'Employee ID', 'Name', 'Standard', 'Total', 'Correct', 'Wrong', 'Score', 'Pass Criteria', 'Status', 'Date'];
+      // Numbered the way the table numbers them, so an exported row and the row
+      // on screen carry the same S.No.
       const data = rows.map((r, i) => [
-        i + 1,
+        rows.length - i,
         norm(r.ID),
         norm(r.NAME),
         norm(r.STANDARD),
@@ -2721,7 +2723,7 @@ const TestingModule = () => {
 
     // Apply filters
     const filteredResults = useMemo(() => {
-      return results.filter(r => {
+      const matching = results.filter(r => {
         const matchId = filterEmpId ? String(r.ID) === String(filterEmpId) : true;
         const matchName = filterEmpName ? normLower(r.NAME) === normLower(filterEmpName) : true;
         const matchEmployee = filterEmpId ? matchId : (filterEmpName ? matchName : true);
@@ -2732,6 +2734,16 @@ const TestingModule = () => {
         const matchTo = filterDateTo ? (dateKey && dateKey <= filterDateTo) : true;
         return matchEmployee && matchStatus && matchStd && matchFrom && matchTo;
       });
+
+      // Newest test first. The date is compared through toResultDateKey rather
+      // than as written, because the column holds both day-first and ISO text
+      // and comparing those as strings orders them by nothing at all. Dates
+      // often carry no time, so two results from the same day are settled by
+      // row_id — the order they were recorded in.
+      return matching
+        .map((r, index) => ({ r, index, key: toResultDateKey(r.DATE), at: Number(r.row_id) || 0 }))
+        .sort((a, b) => (b.key || '').localeCompare(a.key || '') || b.at - a.at || a.index - b.index)
+        .map(entry => entry.r);
     }, [results, filterEmpId, filterEmpName, filterStatus, filterStandard, filterDateFrom, filterDateTo, norm, normLower, toResultDateKey]);
 
     const paginatedResults = useMemo(() => {
@@ -3059,8 +3071,18 @@ const TestingModule = () => {
           return parsedDate.getTime();
         };
 
-        const isNewerResult = (candidate, current) =>
-          toSortableTimestamp(candidate?.DATE) >= toSortableTimestamp(current?.DATE);
+        // Which of two results for the same standard is the later one. Dates
+        // routinely carry no time, so results from the same day are settled by
+        // row_id — the order they were recorded in. Comparing dates alone made
+        // this depend on the order the rows arrived in, and simply listing them
+        // newest-first would then have picked the earlier of two same-day tests.
+        const recordedAt = (r) => Number(r?.row_id) || 0;
+        const isNewerResult = (candidate, current) => {
+          const a = toSortableTimestamp(candidate?.DATE);
+          const b = toSortableTimestamp(current?.DATE);
+          if (a !== b) return a > b;
+          return recordedAt(candidate) >= recordedAt(current);
+        };
         
         if (searchQuery) {
           if (searchType === 'id') {
@@ -3210,7 +3232,13 @@ const TestingModule = () => {
           // If only one of general/specific passed (without the other), don't show.
         });
 
-        return finalResults;
+        // Newest first, like the results table. A candidate row is dated by the
+        // test it was built from, so the most recently tested people are the
+        // ones a certificate is usually being issued for.
+        return finalResults
+          .map((r, index) => ({ r, index, at: toSortableTimestamp(r?.DATE) }))
+          .sort((a, b) => b.at - a.at || a.index - b.index)
+          .map(entry => entry.r);
       }, [searchType, searchQuery, isPass, norm, standards, results]);
 
       const totalCertificatePages = Math.ceil(filteredResults.length / certificateItemsPerPage);
@@ -4816,7 +4844,11 @@ const TestingModule = () => {
                                 borderBottom: `1px solid ${colors.border}`,
                                 backgroundColor: isDarkMode ? colors.tableRowBg : 'transparent'
                               }}>
-                                <td style={commonStyles.td}>{((resultsCurrentPage - 1) * resultsItemsPerPage + index + 1)}</td>
+                                {/* Counts down with the order: the newest result
+                                    is at the top and carries the highest number. */}
+                                <td style={commonStyles.td}>
+                                  {filteredResults.length - ((resultsCurrentPage - 1) * resultsItemsPerPage + index)}
+                                </td>
                                 <td style={commonStyles.td}>{norm(result.ID)}</td>
                                 <td style={commonStyles.td}>{norm(result.NAME)}</td>
                                 <td style={commonStyles.td}>{norm(result.STANDARD)}</td>

@@ -8,6 +8,15 @@ import {
   ExternalLink, FileText, Video, Smartphone, Infinity as InfinityIcon
 } from 'lucide-react'
 
+// Admin text fields (outcomes / syllabus) are stored as one item per line, the
+// same way the learner's page reads them — a course must not describe itself
+// differently depending on who is looking at it.
+const splitLines = (value) => (value || '')
+  .toString()
+  .split(/\r?\n/)
+  .map(s => s.replace(/^\s*[-•*]\s*/, '').trim())
+  .filter(Boolean)
+
 function CourseDetail() {
   const { courseId } = useParams()
   const navigate = useNavigate()
@@ -22,6 +31,7 @@ function CourseDetail() {
   const [error, setError] = useState(null)
   const [pptUrl, setPptUrl] = useState(null)
   const [showModal, setShowModal] = useState(false)
+  const [showPdfFull, setShowPdfFull] = useState(false)
   const [showStartModal, setShowStartModal] = useState(false)
   const [progressData, setProgressData] = useState(null) // from API
   const [taskInfo, setTaskInfo] = useState(null)
@@ -119,13 +129,11 @@ function CourseDetail() {
           rating: 4.5,
           totalRatings: 0,
           prerequisites: data.prerequisites || 'None',
-          learningOutcomes: [
-            'Complete the course objectives',
-            'Master the core concepts',
-            'Apply learned skills in real scenarios',
-            'Earn course completion certificate',
-          ],
-          syllabus: [],
+          // These were a hard-coded list and an empty array, so the admin page
+          // showed four invented outcomes and never showed the syllabus that
+          // was actually entered on the course.
+          learningOutcomes: splitLines(data.learning_outcomes),
+          syllabus: splitLines(data.syllabus),
           videos,
           pdf_path: data.pdf_path || null,
           resources: data.primary_ppt
@@ -503,11 +511,17 @@ function CourseDetail() {
                 <div className="overview-tab">
                   <section>
                     <h3>What You'll Learn</h3>
-                    <ul className="outcomes-list">
-                      {course.learningOutcomes.map((outcome, i) => (
-                        <li key={i}><span className="check-icon">✓</span>{outcome}</li>
-                      ))}
-                    </ul>
+                    {course.learningOutcomes.length > 0 ? (
+                      <ul className="outcomes-list">
+                        {course.learningOutcomes.map((outcome, i) => (
+                          <li key={i}><span className="check-icon">✓</span>{outcome}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p style={{ color: 'rgba(255,255,255,0.6)' }}>
+                        No learning outcomes were entered for this course.
+                      </p>
+                    )}
                   </section>
                   <section><h3>Prerequisites</h3><p className="prerequisites-text">{course.prerequisites}</p></section>
                   <section><h3>Course Description</h3><p>{course.description}</p></section>
@@ -517,18 +531,19 @@ function CourseDetail() {
               {activeTab === 'syllabus' && (
                 <div className="syllabus-tab">
                   <h3>Course Curriculum</h3>
-                  {course.syllabus && course.syllabus.length > 0 ? (
-                    <div className="syllabus-list">
-                      {course.syllabus.map((item, i) => (
-                        <div className="syllabus-item" key={i}>
-                          <div className="syllabus-header">
-                            <span className="week-badge">Week {item.week}</span>
-                            <h4>{item.title}</h4>
-                          </div>
-                          <ul className="topics-list">{item.topics.map((t, j) => <li key={j}>{t}</li>)}</ul>
-                        </div>
+                  {course.syllabus.length > 0 ? (
+                    // One topic per line, numbered — the shape the course form
+                    // captures and the learner's page already renders. The old
+                    // week/topics markup here described a structure the course
+                    // never had.
+                    <ol className="syllabus-topics">
+                      {course.syllabus.map((topic, i) => (
+                        <li className="syllabus-topic" key={i}>
+                          <span className="syllabus-topic-no">{i + 1}</span>
+                          <span className="syllabus-topic-text">{topic}</span>
+                        </li>
                       ))}
-                    </div>
+                    </ol>
                   ) : (
                     <div style={{ padding: '2rem', textAlign: 'center', color: 'rgba(255,255,255,0.6)' }}>
                       <p>Course curriculum will be available soon.</p>
@@ -541,7 +556,7 @@ function CourseDetail() {
                 <div className="resources-tab">
                   {course.pdf_path ? (
                     <>
-                      <PdfViewer pdfUrl={course.pdf_path} />
+                      <PdfViewer pdfUrl={course.pdf_path} onOpenFullscreen={() => setShowPdfFull(true)} />
                       {course.resources && course.resources.length > 0 && (
                         <div style={{ marginTop: '20px', padding: '20px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
                           <h3 style={{ marginBottom: '15px' }}>Additional Resources</h3>
@@ -651,6 +666,28 @@ function CourseDetail() {
           </div>
         </div>
       </div>
+
+      {/* Same document as the inline reader, given the whole window — the
+          compact frame is only good for a glance. */}
+      {showPdfFull && course.pdf_path && (
+        <div className="ppt-overlay">
+          <div
+            className="ppt-modal"
+            style={{ width: '97vw', height: '96vh', maxWidth: '97vw', maxHeight: '96vh', padding: 0, display: 'flex', flexDirection: 'column' }}
+          >
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '12px 20px', borderBottom: '1px solid #e8e8ee', flexShrink: 0,
+            }}>
+              <span style={{ fontWeight: 700, color: '#1f1f27', fontSize: 15 }}>Course Presentation</span>
+              <button className="close-btn" onClick={() => setShowPdfFull(false)}>✕</button>
+            </div>
+            <div style={{ flex: 1, minHeight: 0, overflow: 'auto', background: '#f4f5f7' }}>
+              <PdfViewer pdfUrl={course.pdf_path} variant="fullscreen" />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* PPT Modal */}
       {showModal && (
