@@ -1,5 +1,6 @@
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
 import { normalizePdfCoords, optionMarkBox, DEFAULT_FONT_SIZE } from '../utils/pdfCoords'
+import { signatureText } from '../utils/signature'
 import { base64ToBytes } from '../utils/base64'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -14,6 +15,8 @@ import { base64ToBytes } from '../utils/base64'
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TEXT_COLOR = rgb(0, 0, 0)
+// Grey, so the notice reads as a footer rather than as part of the form.
+const NOTICE_COLOR = rgb(0.35, 0.35, 0.4)
 const MIN_FONT_SIZE = 5
 const PAD_X = 2
 
@@ -43,6 +46,9 @@ const sanitize = (str) => {
 
 /** Maps a field value to the string that should appear on the PDF. */
 const displayValue = (field, value) => {
+  // Who signed on the first line, when on the second — the electronic
+  // equivalent of a signature over a dated line.
+  if (field.type === 'signature') return signatureText(value)
   if (field.type === 'checkbox') return value ? 'Yes' : ''
   if (field.type === 'checkbox-group') {
     if (!Array.isArray(value) || !value.length) return ''
@@ -167,6 +173,35 @@ const drawFieldValue = (page, coords, text, font) => {
   }
 }
 
+// Every completed form carries this: the record is the electronic one, and a
+// printout of it is not waiting on anybody's pen.
+const CONTROLLED_DOCUMENT_NOTICE =
+  'This is an electronically controlled document; therefore, it does not require a signature.'
+const NOTICE_FONT_SIZE = 9
+const NOTICE_MARGIN_BOTTOM = 14
+
+/**
+ * Prints the controlled-document notice along the foot of every page.
+ *
+ * Italic, in its own font: it is a statement ABOUT the document rather than
+ * part of what the form says, and setting it apart is what keeps it from
+ * reading as another filled-in value.
+ */
+const drawControlledDocumentNotice = (pages, font) => {
+  const text = sanitize(CONTROLLED_DOCUMENT_NOTICE)
+  for (const page of pages) {
+    const { width } = page.getSize()
+    const textWidth = font.widthOfTextAtSize(text, NOTICE_FONT_SIZE)
+    page.drawText(text, {
+      x: Math.max(4, (width - textWidth) / 2),
+      y: NOTICE_MARGIN_BOTTOM,
+      size: NOTICE_FONT_SIZE,
+      font,
+      color: NOTICE_COLOR,
+    })
+  }
+}
+
 /**
  * Overlays submitted values onto the original uploaded PDF.
  *
@@ -178,6 +213,7 @@ const drawFieldValue = (page, coords, text, font) => {
 export async function fillOriginalPdf(base64, fields, formValues, approverValues, employees = []) {
   const doc = await PDFDocument.load(base64ToBytes(base64))
   const font = await doc.embedFont(StandardFonts.Helvetica)
+  const italicFont = await doc.embedFont(StandardFonts.HelveticaOblique)
   const pages = doc.getPages()
 
   const resolveEmployeeName = (id) => {
@@ -285,6 +321,8 @@ export async function fillOriginalPdf(base64, fields, formValues, approverValues
 
     drawFieldValue(page, coords, text, font)
   }
+
+  drawControlledDocumentNotice(pages, italicFont)
 
   // Bake filled fields into the page so the download is a fixed record, not an
   // editable form. If flattening isn't possible the values still render — the

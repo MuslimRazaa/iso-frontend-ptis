@@ -24,7 +24,13 @@ import { detectOptionMarksOnPage } from '../utils/parsePdf'
 // PDF is always drawn onto the original bytes, never onto this raster.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// The page is rendered at this scale when it fits, and shrunk to the pane when
+// it does not — a landscape form at a fixed 1.5x is wider than the window.
 const RENDER_SCALE = 1.5
+// Below this the form is too small to aim at, so the pane scrolls instead.
+const MIN_RENDER_SCALE = 0.55
+// Matches S.canvasScroll's padding; the fit has to allow for it.
+const CANVAS_PADDING = 20
 
 // Side of a hand-placed tick box, in PDF points — about the size of the tick
 // boxes forms actually draw.
@@ -79,6 +85,7 @@ function NumInput({ value, onCommit, min, step = 1 }) {
 
 function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
   const canvasRef = useRef(null)
+  const canvasScrollRef = useRef(null)
   const surfaceRef = useRef(null)
   const dragRef = useRef(null)
 
@@ -122,7 +129,17 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
     let cancelled = false
     ;(async () => {
       try {
-        const result = await renderPageToCanvas(pdfDoc, pageIndex + 1, canvasRef.current, RENDER_SCALE)
+        // Fit the page to the pane rather than always rendering at 1.5x. A
+        // landscape form is 842pt wide, which at a fixed 1.5x comes out wider
+        // than the pane and left the page cut off at the sides.
+        const page = await pdfDoc.getPage(pageIndex + 1)
+        const pageWidth = page.getViewport({ scale: 1 }).width
+        const available = (canvasScrollRef.current?.clientWidth || 0) - CANVAS_PADDING * 2
+        const scale = available > 0 && pageWidth > 0
+          ? Math.min(RENDER_SCALE, Math.max(MIN_RENDER_SCALE, available / pageWidth))
+          : RENDER_SCALE
+
+        const result = await renderPageToCanvas(pdfDoc, pageIndex + 1, canvasRef.current, scale)
         if (!cancelled) setView(result)
       } catch (err) {
         console.error('Page render failed:', err)
@@ -818,7 +835,12 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
               ><ChevronRight size={16} /></button>
             </div>
 
-            <div style={S.canvasScroll}>
+            <div style={S.canvasScroll} ref={canvasScrollRef}>
+              {/* The page is centred by this inner block, not by the scroller.
+                  Centring the scroller's own content pushes half the overflow
+                  past its start edge, where scrolling cannot reach it — which is
+                  what cut the left of a wide form off. */}
+              <div style={S.canvasCenter}>
               <div
                 ref={surfaceRef}
                 onClick={handleSurfaceClick}
@@ -878,6 +900,7 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
                   )
                 })}
               </div>
+              </div>
             </div>
           </div>
         </div>
@@ -892,7 +915,10 @@ const S = {
     display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: 20,
   },
   modal: {
-    background: '#fff', borderRadius: 18, width: '100%', maxWidth: 1180,
+    // Wide enough for a landscape form at full render scale: 1180 left one
+    // squeezed into a pane narrower than the page, and the fit-to-pane scale
+    // would then shrink it to about two thirds the size of a portrait one.
+    background: '#fff', borderRadius: 18, width: '100%', maxWidth: 1600,
     height: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden',
   },
   header: {
@@ -980,7 +1006,10 @@ const S = {
     display: 'flex', alignItems: 'center', border: '1px solid #d8d8e0', background: '#fff',
     borderRadius: 7, padding: '4px 7px', cursor: 'pointer',
   },
-  canvasScroll: { flex: 1, overflow: 'auto', padding: 20, display: 'flex', justifyContent: 'center' },
+  canvasScroll: { flex: 1, overflow: 'auto', padding: 20 },
+  // fit-content keeps this block at least as wide as the page, so the page is
+  // centred when it fits and fully scrollable when it does not.
+  canvasCenter: { minWidth: 'fit-content', display: 'flex', justifyContent: 'center' },
   surface: {
     position: 'relative', alignSelf: 'flex-start',
     boxShadow: '0 3px 16px rgba(0,0,0,0.18)', background: '#fff',
