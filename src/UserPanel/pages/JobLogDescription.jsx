@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api'
 import { BsBriefcase, BsBoxSeam, BsWallet2, BsLaptop, BsClipboardData, BsPencilSquare } from 'react-icons/bs'
 import { MdOutlineHealthAndSafety } from 'react-icons/md'
@@ -376,6 +376,9 @@ const COL_GROUPS = [
 ]
 
 /* ── Badge components ───────────────────────────────────────── */
+// Status filter value for the Pending card: "pending" OR not set yet.
+const STATUS_PENDING_ANY = '__pending_or_blank__'
+
 function StatusBadge({ value }) {
   if (!value) return <span style={{ color: '#bbb', fontSize: 13 }}>—</span>
   const lower = value.toLowerCase()
@@ -842,6 +845,13 @@ function JobLogDescription() {
   const [modalState, setModalState] = useState(emptyEntry)
   const [editingId, setEditingId] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
+  // Arriving from a dashboard stat card: land already filtered to what it
+  // counted, same as the status dropdown would produce by hand. The dashboard
+  // sends a stable token ('closed', 'in_progress', 'pending') rather than a
+  // guessed spelling — this page is what knows how a status is actually
+  // spelled in the register, and resolves it once statusOptions is ready below.
+  const [searchParams] = useSearchParams()
+  const requestedStatusToken = searchParams.get('status')
   const [statusFilter, setStatusFilter] = useState('all')
   const [sourceFilter, setSourceFilter] = useState('all')
   const [sortBy, setSortBy] = useState('entryDesc') // entryDesc | entryAsc | sNoDesc | sNoAsc | clientAsc
@@ -1014,12 +1024,30 @@ function JobLogDescription() {
   }), [entries])
 
   const statusOptions = useMemo(() => [...new Set(entries.map(e => e.status).filter(Boolean))], [entries])
+  // Cards know a status by name; the rows spell it however it was entered.
+  const statusValueFor = useCallback(
+    (name) => statusOptions.find(s => s.toLowerCase() === name) || name,
+    [statusOptions])
+
+  // Apply a token from the URL once the real spellings are known — a
+  // dashboard link can arrive before statusOptions has anything in it.
+  useEffect(() => {
+    if (!requestedStatusToken) return
+    if (requestedStatusToken === 'pending') setStatusFilter(STATUS_PENDING_ANY)
+    else if (requestedStatusToken === 'all') setStatusFilter('all')
+    else setStatusFilter(statusValueFor(requestedStatusToken.replace('_', ' ')))
+    // Only on arrival — the admin's own choice from here must not be overridden
+    // by a URL that is now stale.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedStatusToken, statusOptions])
   const sourceOptions = useMemo(() => [...new Set(entries.map(e => e.source).filter(Boolean))], [entries])
 
   const filteredEntries = useMemo(() => {
     const q = searchTerm.trim().toLowerCase()
     const list = entries.filter(e => {
-      if (statusFilter !== 'all' && e.status !== statusFilter) return false
+      if (statusFilter === STATUS_PENDING_ANY) {
+        if (!['pending', ''].includes((e.status || '').toLowerCase())) return false
+      } else if (statusFilter !== 'all' && e.status !== statusFilter) return false
       if (sourceFilter !== 'all' && e.source !== sourceFilter) return false
       // Entry-date range filter (YYYY-MM-DD string compare is correct for ISO dates)
       if (dateFrom && (!e.entryDate || e.entryDate < dateFrom)) return false
@@ -1261,15 +1289,34 @@ function JobLogDescription() {
   const rv = v => v || '—'
 
   /* ── Theme-aware stat card ──────────────────────────────── */
-  const StatCard = ({ accent, label, value, Icon }) => (
-    <div style={{
+  // Clicking a card filters the table to what it counts, and clicking it again
+  // clears that filter. With one card picked the others grey out, so the bar
+  // shows what the table below is now listing.
+  const applyStatusFilter = (value) => {
+    setStatusFilter(prev => (prev === value ? 'all' : value))
+  }
+  const statusCardActive = (value) => statusFilter === value
+  const anyStatusPicked = statusFilter !== 'all'
+
+  const StatCard = ({ accent, label, value, Icon, filterValue }) => {
+    const clickable = filterValue !== undefined
+    const active = clickable && statusCardActive(filterValue)
+    const dimmed = clickable && anyStatusPicked && !active
+    return (
+    <div
+      onClick={clickable ? () => applyStatusFilter(filterValue) : undefined}
+      title={clickable ? `Show only ${label}` : undefined}
+      style={{
       flex: '1 1 140px',
       background: T.statCardBg,
-      border: T.statBorderFn(accent),
+      border: active ? `2px solid ${accent}` : T.statBorderFn(accent),
       borderRadius: 16,
       padding: '16px 20px',
       display: 'flex', flexDirection: 'column', gap: 4,
       boxShadow: T.statCardShadow(accent),
+      cursor: clickable ? 'pointer' : 'default',
+      transition: 'filter 0.25s ease, opacity 0.25s ease, border-color 0.2s ease',
+      ...(dimmed ? { filter: 'grayscale(1)', opacity: 0.45 } : null),
     }}>
       <span style={{
         fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
@@ -1278,7 +1325,8 @@ function JobLogDescription() {
       }}>{Icon && <Icon size={13} />}{label}</span>
       <span style={{ fontSize: 28, fontWeight: 800, color: accent }}>{value}</span>
     </div>
-  )
+    )
+  }
 
   /* ── Theme-aware input style ──────────────────────────────── */
   const inputStyle = {
@@ -1372,7 +1420,10 @@ function JobLogDescription() {
               <Upload size={16} /> Import CSV
             </button>
           )}
-          {(isAdminContext || jlrPerms?.full) && (
+          {/* Read-only, unlike Import/Delete: it downloads exactly what is
+              already on screen, so any user who can see the register — not
+              only admins / full JLR access — can export it. */}
+          {entries.length > 0 && (
             <button
               type="button"
               className="ghost-btn"
@@ -1444,10 +1495,10 @@ function JobLogDescription() {
         background: T.filtersBg,
         borderBottom: T.bannerBorder,
       }}>
-        <StatCard accent="#595966" Icon={ClipboardList} label="Total Jobs" value={stats.total} />
-        <StatCard accent="#1d814c" Icon={CheckCircle2} label="Closed" value={stats.closed} />
-        <StatCard accent="#c87e1c" Icon={Clock} label="In Progress" value={stats.inProgress} />
-        <StatCard accent="#7a7a8c" Icon={CircleDashed} label="Pending" value={stats.pending} />
+        <StatCard accent="#595966" Icon={ClipboardList} label="Total Jobs" value={stats.total} filterValue="all" />
+        <StatCard accent="#1d814c" Icon={CheckCircle2} label="Closed" value={stats.closed} filterValue={statusValueFor('closed')} />
+        <StatCard accent="#c87e1c" Icon={Clock} label="In Progress" value={stats.inProgress} filterValue={statusValueFor('in progress')} />
+        <StatCard accent="#7a7a8c" Icon={CircleDashed} label="Pending" value={stats.pending} filterValue={STATUS_PENDING_ANY} />
       </div>
 
       {/* ══ FILTERS ═══════════════════════════════════════════ */}
@@ -1481,6 +1532,7 @@ function JobLogDescription() {
           onBlur={() => handleSelectClose('status')}
         >
           <option value="all">All Status</option>
+          <option value={STATUS_PENDING_ANY}>Pending / not set</option>
           {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         {/* Region filter */}

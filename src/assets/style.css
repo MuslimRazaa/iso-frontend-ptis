@@ -5514,3 +5514,14 @@ a#ChromelessStatusBar\.Options-Small14 {
 span.cui-img-cont-float.cui-img-14by14 {
     display: none !important;
 }
+/* Recharts makes chart shapes keyboard-focusable, so clicking a bar or a slice
+   left the browser's focus ring on it — a stray black outline that reads as
+   part of the chart. The chart is still reachable by keyboard; only the ring
+   on a mouse click is suppressed. */
+.recharts-wrapper :focus:not(:focus-visible),
+.recharts-surface :focus:not(:focus-visible),
+.recharts-wrapper svg:focus,
+.recharts-sector:focus,
+.recharts-rectangle:focus {
+    outline: none;
+}

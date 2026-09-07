@@ -2,12 +2,13 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { API_ENDPOINTS, API_BASE_URL } from "../../config/api";
 import useLmsBase from "../useLmsBase";
+import { summarise, averageCompletion } from "../utils/courseProgressState";
 
 const defaultStatHighlights = [
-  { label: "Active Courses", value: "18", helper: "6 expiring this month", tone: "accent" },
-  { label: "Learners In Progress", value: "142", helper: "Across 11 departments", tone: "neutral" },
-  { label: "Average Completion", value: "84%", helper: "+6% vs last week", tone: "muted" },
-  { label: "Pending Approvals", value: "05", helper: "Awaiting QA sign-off", tone: "warning" },
+  { label: "Active Courses", value: "—", helper: "Published and open", tone: "accent" },
+  { label: "Learners In Progress", value: "—", helper: "Courses being worked on", tone: "neutral" },
+  { label: "Average Completion", value: "—", helper: "Across every enrolment", tone: "muted" },
+  { label: "Pending Approvals", value: "—", helper: "Course requests waiting", tone: "warning" },
 ];
 
 const learningTracks = [
@@ -85,22 +86,48 @@ function LmsHome() {
     const fetchStats = async () => {
       try {
         setLoadingStats(true);
-        const [coursesRes, employeesRes, standardsRes] = await Promise.all([
+        // "Learners In Progress" counted every employee in the company, and the
+        // last two cards were fixed text — 84% and 05 — that no data ever fed.
+        // All four come from the same sources as the pages they open, so the
+        // dashboard and those pages cannot disagree.
+        const [coursesRes, progressRes, requestsRes] = await Promise.all([
           fetch(API_ENDPOINTS.COURSES),
-          fetch(API_ENDPOINTS.EMPLOYEES),
-          fetch(API_ENDPOINTS.STANDARDS)
+          fetch(`${API_ENDPOINTS.COURSE_PROGRESS}/admin/all`),
+          fetch(API_ENDPOINTS.COURSE_REQUESTS),
         ]);
 
         const coursesData = coursesRes.ok ? await coursesRes.json() : [];
-        const employeesData = employeesRes.ok ? await employeesRes.json() : [];
+        const progressJson = progressRes.ok ? await progressRes.json() : null;
+        const progressRows = Array.isArray(progressJson?.data) ? progressJson.data : [];
+        const requestsJson = requestsRes.ok ? await requestsRes.json() : [];
+        const requests = Array.isArray(requestsJson) ? requestsJson : (requestsJson?.data || []);
 
         const activeCourses = coursesData.filter(c => c.is_published === true || c.is_published === 1).length;
+        const progress = summarise(progressRows);
+        const avgCompletion = averageCompletion(progressRows);
+        const pendingRequests = requests.filter(r => (r.status || 'pending') === 'pending').length;
 
         setStatHighlights([
-          { label: "Active Courses", value: activeCourses.toString(), helper: `${activeCourses} published courses`, tone: "accent" },
-          { label: "Learners In Progress", value: employeesData.length.toString(), helper: `Total employees enrolled`, tone: "neutral" },
-          { label: "Average Completion", value: "84%", helper: "+6% vs last week", tone: "muted" },
-          { label: "Pending Approvals", value: "05", helper: "Awaiting QA sign-off", tone: "warning" },
+          {
+            label: "Active Courses", value: activeCourses.toString(),
+            helper: `${activeCourses} published course${activeCourses === 1 ? '' : 's'}`,
+            tone: "accent", to: `${lmsBase}/all-courses`,
+          },
+          {
+            label: "Learners In Progress", value: progress.in_progress.toString(),
+            helper: `${progress.total} enrolment${progress.total === 1 ? '' : 's'} in total`,
+            tone: "neutral", to: `${lmsBase}/course-tracking?status=in_progress`,
+          },
+          {
+            label: "Average Completion", value: `${avgCompletion}%`,
+            helper: `Across ${progress.total} enrolment${progress.total === 1 ? '' : 's'}`,
+            tone: "muted", to: `${lmsBase}/course-tracking`,
+          },
+          {
+            label: "Pending Approvals", value: pendingRequests.toString(),
+            helper: pendingRequests ? "Course requests waiting" : "Nothing waiting",
+            tone: "warning", to: `${lmsBase}/task-allocation?tab=requests`,
+          },
         ]);
       } catch (error) {
         console.error('Error fetching stats:', error);
@@ -111,7 +138,7 @@ function LmsHome() {
 
     fetchCourses();
     fetchStats();
-  }, []);
+  }, [lmsBase]);
 
   const handleCardClick = (courseId) => {
     navigate(`${lmsBase}/course/${courseId}`);
@@ -166,13 +193,25 @@ function LmsHome() {
             <p>Loading stats...</p>
           </div>
         ) : (
-          statHighlights.map((stat) => (
-            <article key={stat.label} className={`stat-card ${stat.tone}`}>
-              <p>{stat.label}</p>
-              <h3>{stat.value}</h3>
-              <span>{stat.helper}</span>
-            </article>
-          ))
+          statHighlights.map((stat) => {
+            const card = (
+              <article
+                key={stat.label}
+                className={`stat-card ${stat.tone}`}
+                style={stat.to ? { cursor: 'pointer', height: '100%' } : undefined}
+                title={stat.to ? `Open ${stat.label}` : undefined}
+              >
+                <p>{stat.label}</p>
+                <h3>{stat.value}</h3>
+                <span>{stat.helper}</span>
+              </article>
+            );
+            // The card opens the page that lists what it counts, already
+            // filtered to it — the number and the list are then the same thing.
+            return stat.to
+              ? <Link key={stat.label} to={stat.to} style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>{card}</Link>
+              : card;
+          })
         )}
       </section>
 

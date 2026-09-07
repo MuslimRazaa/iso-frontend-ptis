@@ -16,11 +16,14 @@ const BORDER  = '#ececf0'
 const TILE_BG = '#fdf2f3'   // soft brand tint used for every icon tile
 
 /* ── Stat cards (values filled dynamically from the Job Log API) ── */
+// `status` is what the entries page filters by when a card is opened. It is
+// the wording the register itself uses, except for Pending, which also covers
+// rows whose status was never set — the same rows this card counts.
 const STAT_META = [
-  { key: 'total',      label: 'Total Jobs',  Icon: BsClipboardData },
-  { key: 'closed',     label: 'Closed',      Icon: BsCheckCircle },
-  { key: 'inProgress', label: 'In Progress', Icon: BsHourglassSplit },
-  { key: 'pending',    label: 'Pending',     Icon: BsClock },
+  { key: 'total',      label: 'Total Jobs',  Icon: BsClipboardData,   status: 'all' },
+  { key: 'closed',     label: 'Closed',      Icon: BsCheckCircle,     status: 'closed' },
+  { key: 'inProgress', label: 'In Progress', Icon: BsHourglassSplit,  status: 'in_progress' },
+  { key: 'pending',    label: 'Pending',     Icon: BsClock,           status: 'pending' },
 ]
 
 /* ── Module capability cards ─────────────────────────────── */
@@ -193,14 +196,21 @@ function JLRHome() {
           gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
           gap: 16,
         }}>
-          {STAT_META.map(({ key, label, Icon }) => (
-            <div key={key} style={{
+          {STAT_META.map(({ key, label, Icon, status }) => (
+            <Link
+              key={key}
+              to={`${base}/entries?status=${encodeURIComponent(status)}`}
+              title={`Open the job log filtered to ${label}`}
+              style={{ textDecoration: 'none', color: 'inherit' }}
+            >
+            <div style={{
               background: '#ffffff', border: `1px solid ${BORDER}`,
               borderRadius: 18, padding: '22px 24px',
               display: 'flex', alignItems: 'center', gap: 18,
               boxShadow: '0 2px 12px rgba(0,0,0,0.04)',
               transition: 'transform 0.2s, box-shadow 0.2s',
-              cursor: 'default',
+              cursor: 'pointer',
+              height: '100%', boxSizing: 'border-box',
             }}
               onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.09)' }}
               onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.04)' }}
@@ -225,6 +235,7 @@ function JLRHome() {
                 </div>
               </div>
             </div>
+            </Link>
           ))}
         </div>
       </div>

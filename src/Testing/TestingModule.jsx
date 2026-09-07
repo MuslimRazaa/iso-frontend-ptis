@@ -2150,6 +2150,18 @@ const TestingModule = () => {
       return Number.isFinite(n) ? n : 0;
     }, []);
 
+    // The score bands the histogram is drawn in. Defined once so a bar and the
+    // filter it sets can never disagree about where a band starts and ends.
+    const SCORE_RANGES = ['0-40%', '40-60%', '60-80%', '80-100%'];
+    const scoreRangeOf = useCallback((score) => {
+      if (score < 40) return SCORE_RANGES[0];
+      if (score < 60) return SCORE_RANGES[1];
+      if (score < 80) return SCORE_RANGES[2];
+      return SCORE_RANGES[3];
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    const inScoreRange = useCallback((score, range) => scoreRangeOf(score) === range, [scoreRangeOf]);
+
     // Build employee pairs exclusively from results (unique by ID)
     const employeePairs = useMemo(() => {
       const idToName = new Map();
@@ -2192,9 +2204,75 @@ const TestingModule = () => {
     const [filterEmpName, setFilterEmpName] = useState('');
     const [filterStatus, setFilterStatus] = useState('All');
     const [filterStandard, setFilterStandard] = useState('All');
+    // Set by clicking a bar of the score histogram, and from the filter row.
+    const [filterScoreRange, setFilterScoreRange] = useState('All');
     const [filterDateFrom, setFilterDateFrom] = useState('');
     const [filterDateTo, setFilterDateTo] = useState('');
     const [resultsCurrentPage, setResultsCurrentPage] = useState(1);
+    // Clicking a chart scrolls here, so the results it stands for are on screen.
+    const resultsTableRef = useRef(null);
+    const resultFiltersRef = useRef({});
+    resultFiltersRef.current = {
+      status: filterStatus,
+      standard: filterStandard,
+      scoreRange: filterScoreRange,
+      empId: filterEmpId,
+    };
+    // A chart on the Dashboard tab can only scroll to the results table once
+    // the Results tab has actually switched in and rendered it — the ref is
+    // null until then. This flag says "scroll as soon as it exists".
+    const pendingResultsScrollRef = useRef(false);
+    useEffect(() => {
+      if (adminActiveTab === 'results' && pendingResultsScrollRef.current) {
+        pendingResultsScrollRef.current = false;
+        // One frame so the table has actually painted before scrolling to it.
+        requestAnimationFrame(() => {
+          resultsTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      }
+    }, [adminActiveTab]);
+
+    // Reading a chart raises one question — which results are these? — so every
+    // series answers it by narrowing the filters above the results table and
+    // bringing that table on screen, switching to it first if it isn't the
+    // active tab. Clicking the part of a chart you are already looking at puts
+    // it back — the same click that selected it clears it, so there is nothing
+    // to hunt for once you are done.
+    const focusResults = (changes) => {
+      const active = resultFiltersRef.current;
+      let touched = false;
+      if (changes.status) {
+        setFilterStatus(active.status === changes.status ? 'All' : changes.status);
+        touched = true;
+      }
+      if (changes.standard) {
+        const sameCell = active.standard === changes.standard
+          && (!changes.status || active.status === changes.status)
+          && (!changes.empId || String(active.empId) === String(changes.empId));
+        setFilterStandard(sameCell ? 'All' : changes.standard);
+        touched = true;
+      }
+      if (changes.scoreRange) {
+        setFilterScoreRange(active.scoreRange === changes.scoreRange ? 'All' : changes.scoreRange);
+        touched = true;
+      }
+      if (changes.empId) {
+        const samePerson = String(active.empId) === String(changes.empId)
+          && (!changes.standard || active.standard === changes.standard);
+        setFilterEmpId(samePerson ? '' : changes.empId);
+        setFilterEmpName('');
+        touched = true;
+      }
+      if (!touched) return;
+      if (adminActiveTab === 'results') {
+        resultsTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        pendingResultsScrollRef.current = true;
+        setAdminActiveTab('results');
+      }
+    };
+    const chartClickable = { cursor: 'pointer' };
+    const clickedRow = (arg) => arg?.payload?.payload || arg?.payload || arg || {};
     const [resultsGoToPage, setResultsGoToPage] = useState('');
     const resultsItemsPerPage = 50;
     const [openSidebarMenus, setOpenSidebarMenus] = useState({});
@@ -2558,6 +2636,7 @@ const TestingModule = () => {
       setFilterEmpName('');
       setFilterStatus('All');
       setFilterStandard('All');
+      setFilterScoreRange('All');
       setFilterDateFrom('');
       setFilterDateTo('');
       setResultsCurrentPage(1);
@@ -2729,10 +2808,11 @@ const TestingModule = () => {
         const matchEmployee = filterEmpId ? matchId : (filterEmpName ? matchName : true);
         const matchStatus = filterStatus === 'All' ? true : normLower(r.STATUS) === normLower(filterStatus);
         const matchStd = filterStandard === 'All' ? true : norm(r.STANDARD) === norm(filterStandard);
+        const matchScore = filterScoreRange === 'All' ? true : inScoreRange(toPctNumber(r.PERCENTAGE), filterScoreRange);
         const dateKey = toResultDateKey(r.DATE);
         const matchFrom = filterDateFrom ? (dateKey && dateKey >= filterDateFrom) : true;
         const matchTo = filterDateTo ? (dateKey && dateKey <= filterDateTo) : true;
-        return matchEmployee && matchStatus && matchStd && matchFrom && matchTo;
+        return matchEmployee && matchStatus && matchStd && matchScore && matchFrom && matchTo;
       });
 
       // Newest test first. The date is compared through toResultDateKey rather
@@ -2744,7 +2824,24 @@ const TestingModule = () => {
         .map((r, index) => ({ r, index, key: toResultDateKey(r.DATE), at: Number(r.row_id) || 0 }))
         .sort((a, b) => (b.key || '').localeCompare(a.key || '') || b.at - a.at || a.index - b.index)
         .map(entry => entry.r);
-    }, [results, filterEmpId, filterEmpName, filterStatus, filterStandard, filterDateFrom, filterDateTo, norm, normLower, toResultDateKey]);
+    }, [results, filterEmpId, filterEmpName, filterStatus, filterStandard, filterScoreRange, filterDateFrom, filterDateTo, norm, normLower, toResultDateKey, inScoreRange, toPctNumber]);
+
+    // What the charts are drawn from.
+    //
+    // Deliberately NOT filteredResults: the charts set the status / standard /
+    // score filters themselves, so drawing them from a list those filters had
+    // already been applied to left a single bar and nothing to compare it with.
+    // Employee and date still apply — those narrow what you are looking at,
+    // rather than picking a part of it out.
+    const chartResults = useMemo(() => results.filter(r => {
+      const matchId = filterEmpId ? String(r.ID) === String(filterEmpId) : true;
+      const matchName = filterEmpName ? normLower(r.NAME) === normLower(filterEmpName) : true;
+      const matchEmployee = filterEmpId ? matchId : (filterEmpName ? matchName : true);
+      const dateKey = toResultDateKey(r.DATE);
+      const matchFrom = filterDateFrom ? (dateKey && dateKey >= filterDateFrom) : true;
+      const matchTo = filterDateTo ? (dateKey && dateKey <= filterDateTo) : true;
+      return matchEmployee && matchFrom && matchTo;
+    }), [results, filterEmpId, filterEmpName, filterDateFrom, filterDateTo, normLower, toResultDateKey]);
 
     const paginatedResults = useMemo(() => {
       const startIndex = (resultsCurrentPage - 1) * resultsItemsPerPage;
@@ -2756,7 +2853,7 @@ const TestingModule = () => {
 
     useEffect(() => {
       setResultsCurrentPage(1);
-    }, [filterEmpId, filterEmpName, filterStatus, filterStandard, filterDateFrom, filterDateTo]);
+    }, [filterEmpId, filterEmpName, filterStatus, filterStandard, filterScoreRange, filterDateFrom, filterDateTo]);
 
     useEffect(() => {
       if (totalResultPages > 0 && resultsCurrentPage > totalResultPages) {
@@ -4008,20 +4105,34 @@ const TestingModule = () => {
               });
               const barData = Object.values(standardStats);
 
-              const ranges = { '0-40%': 0, '40-60%': 0, '60-80%': 0, '80-100%': 0 };
-              chartData.forEach(r => {
-                const score = toPctNumber(r.PERCENTAGE);
-                if (score < 40) ranges['0-40%']++;
-                else if (score < 60) ranges['40-60%']++;
-                else if (score < 80) ranges['60-80%']++;
-                else ranges['80-100%']++;
-              });
+              const ranges = Object.fromEntries(SCORE_RANGES.map(range => [range, 0]));
+              chartData.forEach(r => { ranges[scoreRangeOf(toPctNumber(r.PERCENTAGE))]++; });
               const histData = Object.entries(ranges).map(([range, count]) => ({ range, count }));
 
-              const areaData = chartData.slice(-20).map((r, idx) => ({
+              // Each point carries the result behind it, so clicking one can
+              // open that person's results instead of only reading a score.
+              const areaData = chartData.slice(0, 20).reverse().map((r, idx) => ({
                 test: `T${idx + 1}`,
-                score: toPctNumber(r.PERCENTAGE)
+                score: toPctNumber(r.PERCENTAGE),
+                empId: norm(r.ID),
+                empName: norm(r.NAME),
+                standard: norm(r.STANDARD),
               }));
+
+              // Selection state for these charts, read from the same filters the
+              // Results tab uses — a click here always jumps there, so the two
+              // never need their own separate notion of "selected".
+              const statusPicked = filterStatus !== 'All';
+              const standardPicked = filterStandard !== 'All';
+              const scorePicked = filterScoreRange !== 'All';
+              const dimStyle = (selected) => ({
+                transition: 'filter 0.25s ease, opacity 0.25s ease',
+                ...(selected ? {} : { filter: 'grayscale(1)', opacity: 0.35 }),
+              });
+              const statusSelected = (status) => !statusPicked || filterStatus === status;
+              const standardBarSelected = (standard, status) =>
+                (!standardPicked || filterStandard === standard) && (!statusPicked || filterStatus === status);
+              const scoreBandSelected = (range) => !scorePicked || filterScoreRange === range;
 
               return (
                 <>
@@ -4054,9 +4165,14 @@ const TestingModule = () => {
                       {chartData.length === 0 ? <p style={{ color: '#9a9aaa' }}>No data available</p> : (
                         <ResponsiveContainer width="100%" height={280}>
                           <PieChart>
-                            <Pie data={[{ name: 'Passed', value: passedTests }, { name: 'Failed', value: failedTests }]} cx="50%" cy="50%" innerRadius={70} outerRadius={110} paddingAngle={2} dataKey="value">
-                              <Cell fill="#27ae60" />
-                              <Cell fill="#d7263d" />
+                            <Pie
+                              data={[{ name: 'Passed', value: passedTests }, { name: 'Failed', value: failedTests }]}
+                              cx="50%" cy="50%" innerRadius={70} outerRadius={110} paddingAngle={2} dataKey="value"
+                              style={chartClickable}
+                              onClick={(slice) => focusResults({ status: clickedRow(slice).name === 'Failed' ? 'Fail' : 'Pass' })}
+                            >
+                              <Cell fill="#27ae60" style={dimStyle(statusSelected('Pass'))} />
+                              <Cell fill="#d7263d" style={dimStyle(statusSelected('Fail'))} />
                             </Pie>
                             <Tooltip contentStyle={ttStyle} />
                             <Legend />
@@ -4075,8 +4191,24 @@ const TestingModule = () => {
                             <YAxis {...axStyle} />
                             <Tooltip contentStyle={ttStyle} />
                             <Legend />
-                            <Bar dataKey="passed" fill="#27ae60" name="Passed" radius={[6, 6, 0, 0]} />
-                            <Bar dataKey="failed" fill="#d7263d" name="Failed" radius={[6, 6, 0, 0]} />
+                            <Bar
+                              dataKey="passed" fill="#27ae60" name="Passed" radius={[6, 6, 0, 0]}
+                              style={chartClickable}
+                              onClick={(bar) => focusResults({ standard: clickedRow(bar).standard, status: 'Pass' })}
+                            >
+                              {barData.map((entry, index) => (
+                                <Cell key={`passed-${index}`} fill="#27ae60" style={dimStyle(standardBarSelected(entry.standard, 'Pass'))} />
+                              ))}
+                            </Bar>
+                            <Bar
+                              dataKey="failed" fill="#d7263d" name="Failed" radius={[6, 6, 0, 0]}
+                              style={chartClickable}
+                              onClick={(bar) => focusResults({ standard: clickedRow(bar).standard, status: 'Fail' })}
+                            >
+                              {barData.map((entry, index) => (
+                                <Cell key={`failed-${index}`} fill="#d7263d" style={dimStyle(standardBarSelected(entry.standard, 'Fail'))} />
+                              ))}
+                            </Bar>
                           </BarChart>
                         </ResponsiveContainer>
                       )}
@@ -4091,9 +4223,17 @@ const TestingModule = () => {
                             <XAxis dataKey="range" {...axStyle} />
                             <YAxis {...axStyle} />
                             <Tooltip contentStyle={ttStyle} />
-                            <Bar dataKey="count" name="Tests" radius={[6, 6, 0, 0]}>
+                            <Bar
+                              dataKey="count" name="Tests" radius={[6, 6, 0, 0]}
+                              style={chartClickable}
+                              onClick={(bar) => focusResults({ scoreRange: clickedRow(bar).range })}
+                            >
                               {histData.map((entry, index) => (
-                                <Cell key={index} fill={entry.range === '0-40%' ? '#d7263d' : entry.range === '40-60%' ? '#e67e22' : entry.range === '60-80%' ? '#f5a623' : '#27ae60'} />
+                                <Cell
+                                  key={index}
+                                  fill={entry.range === '0-40%' ? '#d7263d' : entry.range === '40-60%' ? '#e67e22' : entry.range === '60-80%' ? '#f5a623' : '#27ae60'}
+                                  style={dimStyle(scoreBandSelected(entry.range))}
+                                />
                               ))}
                             </Bar>
                           </BarChart>
@@ -4105,7 +4245,18 @@ const TestingModule = () => {
                       <h3 style={{ margin: '0 0 20px' }}>Performance Trend (Latest 20)</h3>
                       {chartData.length === 0 ? <p style={{ color: '#9a9aaa' }}>No data available</p> : (
                         <ResponsiveContainer width="100%" height={280}>
-                          <AreaChart data={areaData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                          <AreaChart
+                            data={areaData}
+                            margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+                            style={chartClickable}
+                            onClick={(state) => {
+                              const rawIndex = state?.activeTooltipIndex ?? state?.activeIndex;
+                              const index = rawIndex === null || rawIndex === undefined || rawIndex === ''
+                                ? NaN : Number(rawIndex);
+                              const hit = Number.isFinite(index) ? areaData[index] : null;
+                              if (hit?.empId) focusResults({ empId: hit.empId, standard: hit.standard });
+                            }}
+                          >
                             <defs>
                               <linearGradient id="areaScoreGradient" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="0%" stopColor="#d7263d" stopOpacity={0.35} />
@@ -4116,7 +4267,11 @@ const TestingModule = () => {
                             <XAxis dataKey="test" {...axStyle} />
                             <YAxis domain={[0, 100]} {...axStyle} />
                             <Tooltip contentStyle={ttStyle} />
-                            <Area type="monotone" dataKey="score" stroke="#d7263d" fill="url(#areaScoreGradient)" strokeWidth={2} name="Score (%)" />
+                            <Area
+                              type="monotone" dataKey="score" stroke="#d7263d"
+                              fill="url(#areaScoreGradient)" strokeWidth={2} name="Score (%)"
+                              activeDot={{ r: 6, cursor: 'pointer' }}
+                            />
                           </AreaChart>
                         </ResponsiveContainer>
                       )}
@@ -4400,6 +4555,52 @@ const TestingModule = () => {
                           marginBottom: 10,
                           fontWeight: '600',
                           color: theme.text.primary,
+                          fontSize: '13px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px'
+                        }}>
+                          <span style={{
+                            width: '6px',
+                            height: '6px',
+                            borderRadius: '50%',
+                            background: 'linear-gradient(135deg, #b91c3c, #d7263d)'
+                          }}></span>
+                          Score
+                        </label>
+                        <select
+                          value={filterScoreRange}
+                          onChange={e => setFilterScoreRange(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '12px 15px',
+                            fontSize: '14px',
+                            border: `2px solid ${theme.border.default}`,
+                            borderRadius: '16px',
+                            backgroundColor: theme.bg.input,
+                            color: theme.text.primary,
+                            fontWeight: '500',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            outline: 'none'
+                          }}
+                          onFocus={e => {
+                            e.target.style.borderColor = theme.text.primary;
+                            e.target.style.backgroundColor = theme.bg.secondary;
+                          }}
+                          onBlur={e => {
+                            e.target.style.borderColor = theme.border.default;
+                            e.target.style.backgroundColor = theme.bg.input;
+                          }}
+                        >
+                          {['All', ...SCORE_RANGES].map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{
+                          marginBottom: 10,
+                          fontWeight: '600',
+                          color: theme.text.primary,
                           fontSize: '0.9em',
                           letterSpacing: '0.3px',
                           display: 'flex',
@@ -4553,7 +4754,7 @@ const TestingModule = () => {
                         </button>
                         <button 
                           onClick={clearFilters}
-                          disabled={!filterEmpId && !filterEmpName && filterStatus === 'All' && filterStandard === 'All' && !filterDateFrom && !filterDateTo}
+                          disabled={!filterEmpId && !filterEmpName && filterStatus === 'All' && filterStandard === 'All' && filterScoreRange === 'All' && !filterDateFrom && !filterDateTo}
                           style={{ 
                             display: 'flex',
                             alignItems: 'center',
@@ -4563,14 +4764,14 @@ const TestingModule = () => {
                             color: colors.textMuted,
                             border: `2px solid ${colors.inputBorder}`,
                             borderRadius: '28px',
-                            cursor: (filterEmpId || filterEmpName || filterStatus !== 'All' || filterStandard !== 'All' || filterDateFrom || filterDateTo) ? 'pointer' : 'not-allowed',
+                            cursor: (filterEmpId || filterEmpName || filterStatus !== 'All' || filterStandard !== 'All' || filterScoreRange !== 'All' || filterDateFrom || filterDateTo) ? 'pointer' : 'not-allowed',
                             fontSize: '0.95em',
                             fontWeight: '500',
                             transition: 'all 0.2s ease',
-                            opacity: (filterEmpId || filterEmpName || filterStatus !== 'All' || filterStandard !== 'All' || filterDateFrom || filterDateTo) ? 1 : 0.5
+                            opacity: (filterEmpId || filterEmpName || filterStatus !== 'All' || filterStandard !== 'All' || filterScoreRange !== 'All' || filterDateFrom || filterDateTo) ? 1 : 0.5
                           }}
                           onMouseOver={e => {
-                            if (filterEmpId || filterEmpName || filterStatus !== 'All' || filterStandard !== 'All' || filterDateFrom || filterDateTo) {
+                            if (filterEmpId || filterEmpName || filterStatus !== 'All' || filterStandard !== 'All' || filterScoreRange !== 'All' || filterDateFrom || filterDateTo) {
                               e.currentTarget.classList.add('grad-hover-outline');
                             }
                           }}
@@ -4594,7 +4795,44 @@ const TestingModule = () => {
 
                 {/* Filtered Charts Section */}
                 {(() => {
-                  const rfData = filteredResults;
+                  const rfData = chartResults;
+                  const clickable = chartClickable;
+
+                  // With something selected, everything else goes grey, so the
+                  // chart shows what the table below is now listing.
+                  const statusPicked = filterStatus !== 'All';
+                  const standardPicked = filterStandard !== 'All';
+                  const scorePicked = filterScoreRange !== 'All';
+                  // Grey and faded, and eased so the change reads as the chart
+                  // responding rather than as a redraw.
+                  const dimStyle = (selected) => ({
+                    transition: 'filter 0.25s ease, opacity 0.25s ease',
+                    ...(selected ? {} : { filter: 'grayscale(1)', opacity: 0.35 }),
+                  });
+                  const statusSelected = (status) => !statusPicked || filterStatus === status;
+                  const trendDotSelected = (point) =>
+                    (!filterEmpId || String(filterEmpId) === String(point.empId)) &&
+                    (!standardPicked || filterStandard === point.standard);
+                  const renderTrendDot = (props) => {
+                    const { cx, cy, index, payload } = props;
+                    if (!Number.isFinite(cx) || !Number.isFinite(cy)) return null;
+                    const selected = trendDotSelected(payload || {});
+                    return (
+                      <circle
+                        key={`trend-dot-${index}`}
+                        cx={cx}
+                        cy={cy}
+                        r={selected ? 5 : 4}
+                        fill={selected ? '#d7263d' : '#c9ccd4'}
+                        stroke="#fff"
+                        strokeWidth={1.5}
+                        style={{ pointerEvents: 'none', transition: 'all 0.2s ease' }}
+                      />
+                    );
+                  };
+                  const standardBarSelected = (standard, status) =>
+                    (!standardPicked || filterStandard === standard) && (!statusPicked || filterStatus === status);
+                  const scoreBandSelected = (range) => !scorePicked || filterScoreRange === range;
                   const ttStyle = { background: '#fff', border: '1px solid #ececf0', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.08)', fontSize: 13 };
                   const axStyle = { axisLine: false, tickLine: false, tick: { fill: '#9a9aaa', fontSize: 11 } };
                   const fPassed = rfData.filter(r => isPass(r.STATUS)).length;
@@ -4607,19 +4845,18 @@ const TestingModule = () => {
                   });
                   const fBarData = Object.values(fStdStats);
 
-                  const fRanges = { '0-40%': 0, '40-60%': 0, '60-80%': 0, '80-100%': 0 };
-                  rfData.forEach(r => {
-                    const score = toPctNumber(r.PERCENTAGE);
-                    if (score < 40) fRanges['0-40%']++;
-                    else if (score < 60) fRanges['40-60%']++;
-                    else if (score < 80) fRanges['60-80%']++;
-                    else fRanges['80-100%']++;
-                  });
+                  const fRanges = Object.fromEntries(SCORE_RANGES.map(range => [range, 0]));
+                  rfData.forEach(r => { fRanges[scoreRangeOf(toPctNumber(r.PERCENTAGE))]++; });
                   const fHistData = Object.entries(fRanges).map(([range, count]) => ({ range, count }));
 
-                  const fAreaData = rfData.slice(-20).map((r, idx) => ({
+                  // Each point carries the result behind it, so clicking one can
+                  // open that person's results instead of only reading a score.
+                  const fAreaData = rfData.slice(0, 20).reverse().map((r, idx) => ({
                     test: `T${idx + 1}`,
-                    score: toPctNumber(r.PERCENTAGE)
+                    score: toPctNumber(r.PERCENTAGE),
+                    empId: norm(r.ID),
+                    empName: norm(r.NAME),
+                    standard: norm(r.STANDARD),
                   }));
 
                   return (
@@ -4629,9 +4866,14 @@ const TestingModule = () => {
                         {rfData.length === 0 ? <p style={{ color: '#9a9aaa' }}>No data available</p> : (
                           <ResponsiveContainer width="100%" height={280}>
                             <PieChart>
-                              <Pie data={[{ name: 'Passed', value: fPassed }, { name: 'Failed', value: fFailed }]} cx="50%" cy="50%" innerRadius={70} outerRadius={110} paddingAngle={2} dataKey="value">
-                                <Cell fill="#27ae60" />
-                                <Cell fill="#d7263d" />
+                              <Pie
+                                data={[{ name: 'Passed', value: fPassed }, { name: 'Failed', value: fFailed }]}
+                                cx="50%" cy="50%" innerRadius={70} outerRadius={110} paddingAngle={2} dataKey="value"
+                                style={clickable}
+                                onClick={(slice) => focusResults({ status: clickedRow(slice).name === 'Failed' ? 'Fail' : 'Pass' })}
+                              >
+                                <Cell fill="#27ae60" style={dimStyle(statusSelected('Pass'))} />
+                                <Cell fill="#d7263d" style={dimStyle(statusSelected('Fail'))} />
                               </Pie>
                               <Tooltip contentStyle={ttStyle} />
                               <Legend />
@@ -4650,8 +4892,24 @@ const TestingModule = () => {
                               <YAxis {...axStyle} />
                               <Tooltip contentStyle={ttStyle} />
                               <Legend />
-                              <Bar dataKey="passed" fill="#27ae60" name="Passed" radius={[6, 6, 0, 0]} />
-                              <Bar dataKey="failed" fill="#d7263d" name="Failed" radius={[6, 6, 0, 0]} />
+                              <Bar
+                                dataKey="passed" fill="#27ae60" name="Passed" radius={[6, 6, 0, 0]}
+                                style={clickable}
+                                onClick={(bar) => focusResults({ standard: clickedRow(bar).standard, status: 'Pass' })}
+                              >
+                                {fBarData.map((entry, index) => (
+                                  <Cell key={`passed-${index}`} fill="#27ae60" style={dimStyle(standardBarSelected(entry.standard, 'Pass'))} />
+                                ))}
+                              </Bar>
+                              <Bar
+                                dataKey="failed" fill="#d7263d" name="Failed" radius={[6, 6, 0, 0]}
+                                style={clickable}
+                                onClick={(bar) => focusResults({ standard: clickedRow(bar).standard, status: 'Fail' })}
+                              >
+                                {fBarData.map((entry, index) => (
+                                  <Cell key={`failed-${index}`} fill="#d7263d" style={dimStyle(standardBarSelected(entry.standard, 'Fail'))} />
+                                ))}
+                              </Bar>
                             </BarChart>
                           </ResponsiveContainer>
                         )}
@@ -4666,9 +4924,17 @@ const TestingModule = () => {
                               <XAxis dataKey="range" {...axStyle} />
                               <YAxis {...axStyle} />
                               <Tooltip contentStyle={ttStyle} />
-                              <Bar dataKey="count" name="Tests" radius={[6, 6, 0, 0]}>
+                              <Bar
+                                dataKey="count" name="Tests" radius={[6, 6, 0, 0]}
+                                style={clickable}
+                                onClick={(bar) => focusResults({ scoreRange: clickedRow(bar).range })}
+                              >
                                 {fHistData.map((entry, index) => (
-                                  <Cell key={index} fill={entry.range === '0-40%' ? '#d7263d' : entry.range === '40-60%' ? '#e67e22' : entry.range === '60-80%' ? '#f5a623' : '#27ae60'} />
+                                  <Cell
+                                    key={index}
+                                    fill={entry.range === '0-40%' ? '#d7263d' : entry.range === '40-60%' ? '#e67e22' : entry.range === '60-80%' ? '#f5a623' : '#27ae60'}
+                                    style={dimStyle(scoreBandSelected(entry.range))}
+                                  />
                                 ))}
                               </Bar>
                             </BarChart>
@@ -4680,7 +4946,21 @@ const TestingModule = () => {
                         <h3 style={{ margin: '0 0 20px' }}>Performance Trend (Latest 20)</h3>
                         {rfData.length === 0 ? <p style={{ color: '#9a9aaa' }}>No data available</p> : (
                           <ResponsiveContainer width="100%" height={280}>
-                            <AreaChart data={fAreaData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                            <AreaChart
+                              data={fAreaData}
+                              margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+                              style={clickable}
+                              onClick={(state) => {
+                                // No point under the cursor means no index at
+                                // all, and Number(null) is 0 — which would read
+                                // a click on blank chart as a click on T1.
+                                const rawIndex = state?.activeTooltipIndex ?? state?.activeIndex;
+                                const index = rawIndex === null || rawIndex === undefined || rawIndex === ''
+                                  ? NaN : Number(rawIndex);
+                                const hit = Number.isFinite(index) ? fAreaData[index] : null;
+                                if (hit?.empId) focusResults({ empId: hit.empId, standard: hit.standard });
+                              }}
+                            >
                               <defs>
                                 <linearGradient id="resultsAreaScoreGradient" x1="0" y1="0" x2="0" y2="1">
                                   <stop offset="0%" stopColor="#d7263d" stopOpacity={0.35} />
@@ -4691,7 +4971,12 @@ const TestingModule = () => {
                               <XAxis dataKey="test" {...axStyle} />
                               <YAxis domain={[0, 100]} {...axStyle} />
                               <Tooltip contentStyle={ttStyle} />
-                              <Area type="monotone" dataKey="score" stroke="#d7263d" fill="url(#resultsAreaScoreGradient)" strokeWidth={2} name="Score (%)" />
+                              <Area
+                                type="monotone" dataKey="score" stroke="#d7263d"
+                                fill="url(#resultsAreaScoreGradient)" strokeWidth={2} name="Score (%)"
+                                dot={renderTrendDot}
+                                activeDot={{ r: 6, cursor: 'pointer' }}
+                              />
                             </AreaChart>
                           </ResponsiveContainer>
                         )}
@@ -4701,7 +4986,7 @@ const TestingModule = () => {
                 })()}
 
                 {/* Results Table */}
-                <article className="panel" style={{ padding: 0, overflow: 'hidden' }}>
+                <article ref={resultsTableRef} className="panel" style={{ padding: 0, overflow: 'hidden' }}>
                   <header style={{
                     padding: '24px 28px',
                     borderBottom: '1px solid #ececf0',

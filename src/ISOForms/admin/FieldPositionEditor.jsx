@@ -99,6 +99,12 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
   const [loadError, setLoadError] = useState('')
   const [draft, setDraft] = useState(null)          // new-field form, null = closed
   const [placingOption, setPlacingOption] = useState(null)   // { fieldId, label }
+  // Which row is being dragged, and the row it is currently over. The order of
+  // the fields IS the order they are filled in on the form, so being able to
+  // rearrange them here saves leaving the page to nudge one field up a step at
+  // a time.
+  const [draggingId, setDraggingId] = useState(null)
+  const [dropTargetId, setDropTargetId] = useState(null)
   const [markNote, setMarkNote] = useState('')
   const [autoNote, setAutoNote] = useState('')
   const autoDetectedRef = useRef(false)
@@ -440,6 +446,48 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
     setPlacingId(field.id)          // arm it: next click on the page drops its box
   }
 
+  // Moves the dragged field to where it was dropped. Both sidebar lists are
+  // views of one array, so a drop anywhere lands the field next to the row it
+  // was dropped on, whichever list that row is in.
+  const moveFieldTo = (dragId, targetId) => {
+    if (!dragId || !targetId || dragId === targetId) return
+    setLocalFields(prev => {
+      const from = prev.findIndex(f => f.id === dragId)
+      const to = prev.findIndex(f => f.id === targetId)
+      if (from === -1 || to === -1) return prev
+      const next = [...prev]
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      return next
+    })
+  }
+
+  const dragHandlers = (field) => ({
+    draggable: true,
+    onDragStart: (e) => {
+      setDraggingId(field.id)
+      e.dataTransfer.effectAllowed = 'move'
+      // Firefox ignores a drag that carries nothing.
+      e.dataTransfer.setData('text/plain', field.id)
+    },
+    onDragOver: (e) => {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      if (dropTargetId !== field.id) setDropTargetId(field.id)
+    },
+    onDrop: (e) => {
+      e.preventDefault()
+      moveFieldTo(draggingId || e.dataTransfer.getData('text/plain'), field.id)
+      setDraggingId(null)
+      setDropTargetId(null)
+    },
+    onDragEnd: () => { setDraggingId(null); setDropTargetId(null) },
+    style: {
+      opacity: draggingId === field.id ? 0.45 : 1,
+      borderTop: dropTargetId === field.id && draggingId !== field.id ? '2px solid #1a73e8' : '2px solid transparent',
+    },
+  })
+
   const deleteField = (fieldId) => {
     setLocalFields(prev => prev.filter(f => f.id !== fieldId))
     if (selectedId === fieldId) setSelectedId(null)
@@ -778,10 +826,22 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
               </div>
             )}
 
+            <div style={S.sectionTitle}>Fields</div>
+            <div style={{ ...S.muted, marginBottom: 10 }}>
+              Drag a field up or down to change the order it is filled in on the form.
+            </div>
+
             <div style={S.sectionTitle}>Unplaced ({unplaced.length})</div>
             {unplaced.length === 0 && <div style={S.muted}>All fields are placed.</div>}
-            {unplaced.map(f => (
-              <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            {unplaced.map(f => {
+              const drag = dragHandlers(f)
+              return (
+              <div
+                key={f.id}
+                {...drag}
+                title="Drag to change where this field comes on the form"
+                style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'grab', ...drag.style }}
+              >
                 <button
                   type="button"
                   onClick={() => { setSelectedId(f.id); setPlacingId(f.id) }}
@@ -798,21 +858,29 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
                   <Trash2 size={13} />
                 </button>
               </div>
-            ))}
+              )
+            })}
 
             <div style={S.sectionTitle}>Placed ({placed.length})</div>
             {placed.map(f => {
               const c = normalizePdfCoords(f.pdfCoords)
+              const drag = dragHandlers(f)
               return (
-                <button
+                <div
                   key={f.id}
-                  type="button"
-                  onClick={() => { setPageIndex(c.page); setSelectedId(f.id) }}
-                  style={{ ...S.fieldRow, ...(selectedId === f.id ? S.fieldRowActive : null) }}
+                  {...drag}
+                  title="Drag to change where this field comes on the form"
+                  style={{ cursor: 'grab', ...drag.style }}
                 >
-                  <span style={S.pageTag}>p{c.page + 1}</span>
-                  <span style={S.ellipsis}>{f.label}</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => { setPageIndex(c.page); setSelectedId(f.id) }}
+                    style={{ ...S.fieldRow, ...(selectedId === f.id ? S.fieldRowActive : null) }}
+                  >
+                    <span style={S.pageTag}>p{c.page + 1}</span>
+                    <span style={S.ellipsis}>{f.label}</span>
+                  </button>
+                </div>
               )
             })}
           </div>
