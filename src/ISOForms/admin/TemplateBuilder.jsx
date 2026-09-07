@@ -356,23 +356,15 @@ function TemplateBuilder() {
           fields={fields.filter(f => f.label.trim())}
           onClose={() => setShowPositions(false)}
           onSave={(updated) => {
-            // Merge positions back by id; fields the editor didn't see
-            // (blank-label rows still being typed) are left untouched.
-            const byId = new Map(updated.map(f => [f.id, f]))
             setFields(prev => {
-              const known = new Set(prev.map(f => f.id))
-              // A field the editor was given and did not return was deleted
-              // there. Falling back to the original for every id meant a
-              // deletion silently undid itself on the way back.
+              // The editor holds every field it was given: what came back is
+              // the whole list, in the order it was left in there — including
+              // fields added and minus any deleted. Rebuilding from `prev`
+              // instead kept this page's order, so reordering fields in the
+              // editor quietly did nothing.
               const sentToEditor = new Set(prev.filter(f => f.label.trim()).map(f => f.id))
-              return [
-                ...prev
-                  .filter(f => byId.has(f.id) || !sentToEditor.has(f.id))
-                  .map(f => byId.get(f.id) || f),
-                // Fields created inside the position editor have no row here
-                // yet — append them so they reach the payload on save.
-                ...updated.filter(f => !known.has(f.id)),
-              ]
+              const neverSent = prev.filter(f => !sentToEditor.has(f.id))
+              return [...updated, ...neverSent]
             })
             setShowPositions(false)
           }}

@@ -3,7 +3,9 @@ import {
   Users, BookOpen, Clock, CheckCircle2, AlertTriangle,
   Search, RefreshCw, PlayCircle, Hourglass, CalendarDays, GraduationCap
 } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 import { API_ENDPOINTS } from '../../config/api'
+import { rowState } from '../utils/courseProgressState'
 
 // Expected total study time for a course (mirrors the learner-side logic):
 //  - credit hours  -> 15 study hours each (industry standard)
@@ -34,21 +36,8 @@ const fmtDate = (value) => {
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-const isOverdue = (row) => {
-  if (!row.deadline) return false
-  if (row.status === 'completed') return false
-  const due = new Date(row.deadline)
-  if (Number.isNaN(due.getTime())) return false
-  return due < new Date(new Date().toDateString())
-}
 
 // Visual state for a row (overdue takes priority over the stored status)
-const rowState = (row) => {
-  if (isOverdue(row)) return 'overdue'
-  if (row.status === 'completed') return 'completed'
-  if (row.status === 'in_progress') return 'in_progress'
-  return 'enrolled'
-}
 
 const STATE_META = {
   completed:   { label: 'Completed',   color: '#1d814c', bg: 'rgba(29,129,76,0.12)',  Icon: CheckCircle2 },
@@ -57,12 +46,19 @@ const STATE_META = {
   overdue:     { label: 'Overdue',     color: '#c0392b', bg: 'rgba(192,57,43,0.12)',  Icon: AlertTriangle },
 }
 
-function StatCard({ icon: Icon, label, value, color }) {
+function StatCard({ icon: Icon, label, value, color, onClick, active, dimmed }) {
   return (
-    <div style={{
+    <div
+      onClick={onClick}
+      title={onClick ? `Show only ${label}` : undefined}
+      style={{
       flex: '1 1 160px', minWidth: 160, background: '#fff', borderRadius: 16,
-      border: '1px solid #ececf1', padding: '18px 20px', display: 'flex',
-      alignItems: 'center', gap: 14, boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+      border: active ? `2px solid ${color}` : '1px solid #ececf1',
+      padding: '18px 20px', display: 'flex',
+      alignItems: 'center', gap: 14, boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+      cursor: onClick ? 'pointer' : 'default',
+      transition: 'filter 0.25s ease, opacity 0.25s ease, border-color 0.2s ease',
+      ...(dimmed ? { filter: 'grayscale(1)', opacity: 0.45 } : null),
     }}>
       <span style={{
         width: 44, height: 44, borderRadius: 12, display: 'grid', placeItems: 'center',
@@ -96,7 +92,11 @@ function CourseTracking() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [query, setQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
+  // Opened from a dashboard card: land on the state that card counted.
+  const [searchParams] = useSearchParams()
+  const requestedStatus = searchParams.get('status')
+  const [statusFilter, setStatusFilter] = useState(
+    ['in_progress', 'completed', 'enrolled', 'overdue'].includes(requestedStatus) ? requestedStatus : 'all')
 
   const fetchProgress = async () => {
     try {
@@ -128,6 +128,14 @@ function CourseTracking() {
     return s
   }, [rows])
 
+  // Clicking the card you are already looking at clears the filter again.
+  const pickStatus = (value) => setStatusFilter((prev) => (prev === value ? 'all' : value))
+  const cardProps = (value) => ({
+    onClick: () => pickStatus(value),
+    active: statusFilter === value,
+    dimmed: statusFilter !== 'all' && statusFilter !== value,
+  })
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     return rows.filter((r) => {
@@ -158,11 +166,11 @@ function CourseTracking() {
 
       {/* Summary cards */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, margin: '22px 0' }}>
-        <StatCard icon={Users}        label="Total Enrollments" value={stats.total}       color="#3d6fd6" />
-        <StatCard icon={PlayCircle}   label="In Progress"        value={stats.in_progress} color="#c87e1c" />
-        <StatCard icon={CheckCircle2} label="Completed"          value={stats.completed}   color="#1d814c" />
-        <StatCard icon={Hourglass}    label="Not Started"        value={stats.enrolled}    color="#5a6b8c" />
-        <StatCard icon={AlertTriangle} label="Overdue"           value={stats.overdue}     color="#c0392b" />
+        <StatCard icon={Users}        label="Total Enrollments" value={stats.total}       color="#3d6fd6" {...cardProps('all')} />
+        <StatCard icon={PlayCircle}   label="In Progress"        value={stats.in_progress} color="#c87e1c" {...cardProps('in_progress')} />
+        <StatCard icon={CheckCircle2} label="Completed"          value={stats.completed}   color="#1d814c" {...cardProps('completed')} />
+        <StatCard icon={Hourglass}    label="Not Started"        value={stats.enrolled}    color="#5a6b8c" {...cardProps('enrolled')} />
+        <StatCard icon={AlertTriangle} label="Overdue"           value={stats.overdue}     color="#c0392b" {...cardProps('overdue')} />
       </div>
 
       {/* Controls */}

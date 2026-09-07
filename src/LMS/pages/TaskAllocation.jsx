@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Video, FileText, Trash2, Inbox, Info, RotateCcw } from 'lucide-react'
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api'
 
@@ -10,7 +11,10 @@ function TaskAllocation() {
   const [resultsByEmail, setResultsByEmail] = useState({})
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
-  const [activeTab, setActiveTab] = useState('allocations') // 'allocations' | 'requests'
+  // ?tab=requests comes from the dashboard's "Pending Approvals" card.
+  const [searchParams] = useSearchParams()
+  const [activeTab, setActiveTab] = useState(
+    searchParams.get('tab') === 'requests' ? 'requests' : 'allocations') // 'allocations' | 'requests'
   const [courseRequests, setCourseRequests] = useState([])
   const [formData, setFormData] = useState({
     employee_id: '',
