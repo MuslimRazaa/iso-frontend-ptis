@@ -10,6 +10,7 @@ const iconPaths = {
   templates: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM13 3.5 18.5 9H13V3.5zM8 18v-2h8v2H8zm0-4v-2h8v2H8zm0-4V8h5v2H8z',
   entries:   'M5 4h14v2H5zm0 5h14v2H5zm0 5h9v2H5z',
   pending:   'M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 11h5v2h-7V7h2z',
+  audit:     'M9 12h6v2H9v-2zm0-4h6v2H9V8zm0 8h4v2H9v-2zM7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm0 2v16h10V4H7z',
 }
 
 const SidebarIcon = ({ id }) => (
@@ -107,6 +108,20 @@ function ISOFormsSidebar() {
             >
               <SidebarIcon id="templates" />
               <span className="menu-label">Form Templates</span>
+              <i aria-hidden="true" />
+            </NavLink>
+          </div>
+        )}
+
+        {/* Audit Log — admin only */}
+        {isAdminUser && (
+          <div className="menu-group">
+            <NavLink
+              to={`${base}/audit-log`}
+              className={({ isActive }) => `menu-trigger link${isActive ? ' active' : ''}`}
+            >
+              <SidebarIcon id="audit" />
+              <span className="menu-label">Audit Log</span>
               <i aria-hidden="true" />
             </NavLink>
           </div>

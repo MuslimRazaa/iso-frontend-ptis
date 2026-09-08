@@ -167,6 +167,12 @@ function TemplateBuilder() {
         formCode: formCode || undefined,
       }))
       body.append('pdf', base64ToBlob(originalPdfBase64), originalPdfName || 'template.pdf')
+      // For the audit trail — templates carry no "who is editing this" field
+      // of their own, unlike an entry's created_by.
+      const actorId = localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || ''
+      const actorName = localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin'
+      if (actorId) body.append('actorId', actorId)
+      body.append('actorName', actorName)
     } catch {
       setError('The attached PDF could not be read. Re-import it and try again.')
       setSaving(false)

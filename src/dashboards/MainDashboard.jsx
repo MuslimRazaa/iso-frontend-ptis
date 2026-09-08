@@ -3,8 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import "../assets/style.css";
 import ptisLogo from "/ptisLogo.png";
 import SystemMap from "../components/SystemMap";
-import ManageUserAccess from "../components/ManageUserAccess";
 import { API_ENDPOINTS, API_BASE_URL } from "../config/api";
+import { summarise, averageCompletion } from "../LMS/utils/courseProgressState";
 
 const dashboardTiles = [
   {
@@ -23,7 +23,7 @@ const dashboardTiles = [
     description: "Monitor training, compliance and renewal windows.",
     status: "sync",
     statusLabel: "Syncing",
-    metric: "87% trainings completed",
+    metric: "Loading…",
   },
   {
     id: "testing",
@@ -32,7 +32,7 @@ const dashboardTiles = [
     description: "Conduct standard-based tests and issue certificates.",
     status: "online",
     statusLabel: "Live",
-    metric: "Assessment portal",
+    metric: "Loading…",
   },
   {
     id: "cv-gen",
@@ -41,7 +41,7 @@ const dashboardTiles = [
     description: "Track inspection activities and field job entries.",
     status: "online",
     statusLabel: "Live",
-    metric: "12 CVs queued",
+    metric: "Loading…",
   },
   {
     id: "iso",
@@ -50,7 +50,19 @@ const dashboardTiles = [
     description: "Quick access to QA/QC controlled documentation.",
     status: "attention",
     statusLabel: "Review",
-    metric: "Form templates & approvals",
+    metric: "Loading…",
+  },
+  {
+    id: "premier-erp",
+    title: "Premier ERP",
+    // A separate application on its own domain, not a route inside this app —
+    // opened in a new tab rather than routed to internally.
+    link: "https://erp.ptis.co/",
+    external: true,
+    description: "Sales, procurement, HR/payroll and the full ISO compliance stack — CRM, audits, NCR/CAPA, risk and HSE in one system.",
+    status: "online",
+    statusLabel: "Live",
+    metric: "Company-wide operations & compliance",
   },
   // {
   //   id: "cv-bid",
@@ -138,6 +150,14 @@ const renderTileIcon = (type) => {
           <circle cx="24" cy="24" r="4.5" />
         </svg>
       );
+    case "premier-erp":
+      return (
+        <svg viewBox="0 0 48 48" role="img" aria-hidden="true">
+          <rect x="8" y="6" width="32" height="36" rx="4" />
+          <path d="M8 18h32M8 30h32" />
+          <path d="M17 24l4 4 8-8" />
+        </svg>
+      );
     default:
       return (
         <svg viewBox="0 0 48 48" role="img" aria-hidden="true">
@@ -151,12 +171,12 @@ const renderTileIcon = (type) => {
 
 function MainDashboard() {
   const [showSystemMap, setShowSystemMap] = useState(false);
-  const [showUserManagement, setShowUserManagement] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [courses, setCourses] = useState([]);
   const [quickStats, setQuickStats] = useState(defaultQuickStats);
   const [loadingCourses, setLoadingCourses] = useState(true);
   const [loadingStats, setLoadingStats] = useState(true);
+  const [tileMetrics, setTileMetrics] = useState({});
   const navigate = useNavigate();
 
   // Fetch courses from API
@@ -207,18 +227,78 @@ function MainDashboard() {
       }
     };
 
+    // Each module card's line above "Enter Dashboard" reports real numbers
+    // from that module's own data — the same sources its own pages use —
+    // instead of fixed text no data ever fed.
+    const fetchTileMetrics = async () => {
+      try {
+        const [progressRes, jobLogRes, testingRes, standardsRes, isoTemplatesRes, isoPendingRes] = await Promise.all([
+          fetch(`${API_ENDPOINTS.COURSE_PROGRESS}/admin/all`),
+          fetch(API_ENDPOINTS.JOB_LOG),
+          fetch(`${API_BASE_URL}/api/test-results/legacy`),
+          fetch(API_ENDPOINTS.STANDARDS),
+          fetch(API_ENDPOINTS.ISO_FORMS_TEMPLATES),
+          fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}/pending-count?admin=1`),
+        ]);
+
+        const progressJson = progressRes.ok ? await progressRes.json() : null;
+        const progressRows = Array.isArray(progressJson?.data) ? progressJson.data : [];
+        const progress = summarise(progressRows);
+        const avgCompletion = averageCompletion(progressRows);
+        const lmsMetric = progress.total
+          ? `${avgCompletion}% average completion · ${progress.total} enrolment${progress.total === 1 ? '' : 's'}`
+          : "No enrolments yet";
+
+        const jobLogJson = jobLogRes.ok ? await jobLogRes.json() : null;
+        const jobLogRows = Array.isArray(jobLogJson?.data) ? jobLogJson.data : (Array.isArray(jobLogJson) ? jobLogJson : []);
+        const norm = (s) => (s || '').toString().toLowerCase();
+        const pendingJobs = jobLogRows.filter(e => ['pending', ''].includes(norm(e.status))).length;
+        const jobLogMetric = jobLogRows.length
+          ? `${pendingJobs} pending · ${jobLogRows.length} total entries`
+          : "No job entries yet";
+
+        const testingRows = testingRes.ok ? await testingRes.json() : [];
+        const testingList = Array.isArray(testingRows) ? testingRows : [];
+        const standardsData = standardsRes.ok ? await standardsRes.json() : [];
+        const testingMetric = (Array.isArray(standardsData) ? standardsData.length : 0) || testingList.length
+          ? `${Array.isArray(standardsData) ? standardsData.length : 0} standards · ${testingList.length} assessments recorded`
+          : "No assessments recorded yet";
+
+        const isoTemplatesJson = isoTemplatesRes.ok ? await isoTemplatesRes.json() : null;
+        const isoTemplates = Array.isArray(isoTemplatesJson?.data) ? isoTemplatesJson.data : [];
+        const isoPendingJson = isoPendingRes.ok ? await isoPendingRes.json() : null;
+        const isoPending = isoPendingJson?.count ?? 0;
+        const isoMetric = isoTemplates.length
+          ? `${isoTemplates.length} template${isoTemplates.length === 1 ? '' : 's'} · ${isoPending} awaiting approval`
+          : "No form templates yet";
+
+        setTileMetrics({ lms: lmsMetric, "cv-gen": jobLogMetric, testing: testingMetric, iso: isoMetric });
+      } catch (error) {
+        console.error('Error fetching tile metrics:', error);
+      }
+    };
+
     fetchCourses();
     fetchStats();
+    fetchTileMetrics();
   }, []);
 
   const handleSystemMapToggle = () => setShowSystemMap((prev) => !prev);
   const handleModuleClick = (moduleId) => {
     const selected = dashboardTiles.find((tile) => tile.id === moduleId);
-    if (selected?.link) {
-      navigate(selected.link);
+    if (!selected?.link) {
+      console.log(`Launchpad selected: ${moduleId}`);
       return;
     }
-    console.log(`Launchpad selected: ${moduleId}`);
+    // An external tile points at a whole separate application on its own
+    // domain — navigate() would try to route to it as if it were a path
+    // inside this app, which is wrong for an absolute URL. It opens in a new
+    // tab instead, so this dashboard is never navigated away from.
+    if (selected.external) {
+      window.open(selected.link, "_blank", "noopener,noreferrer");
+      return;
+    }
+    navigate(selected.link);
   };
   const toggleUserMenu = () => setShowUserMenu((prev) => !prev);
   const handleLogout = () => {
@@ -326,123 +406,36 @@ function MainDashboard() {
                   <p>{tile.description}</p>
                 </div>
                <div className="module-footer">
-                  <span className="module-metric">{tile.metric}</span>
-                   <Link to={tile.link} ><span className="module-link">
-                    Enter Dashboard
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M5 12h14M13 6l6 6-6 6" />
-                    </svg>
-                  </span></Link>
+                  <span className="module-metric">{tileMetrics[tile.id] || tile.metric}</span>
+                  {tile.external ? (
+                    // The card's own onClick already opens this in a new tab;
+                    // without stopping the click here it would bubble up and
+                    // open a second one.
+                    <a
+                      href={tile.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span className="module-link">
+                        Open in New Window
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M5 12h14M13 6l6 6-6 6" />
+                        </svg>
+                      </span>
+                    </a>
+                  ) : (
+                    <Link to={tile.link}><span className="module-link">
+                      Enter Dashboard
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M5 12h14M13 6l6 6-6 6" />
+                      </svg>
+                    </span></Link>
+                  )}
                 </div>
               </button>
             ))}
           </div>
-        </section>
-
-        {/* User Management Section */}
-        <section>
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Administration</p>
-              <h2>User & Access Management</h2>
-            </div>
-            <button 
-              className="ghost-btn"
-              onClick={() => setShowUserManagement(!showUserManagement)}
-            >
-              {showUserManagement ? 'Hide' : 'Show'} Management Panel
-            </button>
-          </div>
-
-          {showUserManagement && (
-            <div style={{ marginTop: '20px' }}>
-              <ManageUserAccess />
-            </div>
-          )}
-
-          {!showUserManagement && (
-            <div style={{
-              marginTop: '20px',
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-              gap: '20px'
-            }}>
-              {/* User Access */}
-              <div style={{
-                padding: '40px',
-                background: 'radial-gradient(circle at 20% 20%, #2a2b36 0%, transparent 45%),    radial-gradient(circle at 80% 0%, rgba(255, 0, 0, 0.15) 0%, transparent 40%),    #0e0f14',
-                borderRadius: '16px',
-                border: '1px solid',
-                color: 'white',
-                textAlign: 'center'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <rect x="3" y="11" width="18" height="11" rx="2" />
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                    <circle cx="12" cy="16" r="1.5" />
-                  </svg>
-                </div>
-                <h3 style={{ marginBottom: '8px' }}>Assign Portal Access to Users</h3>
-                <p style={{ opacity: 0.9, marginBottom: '20px' }}>
-                  Manage employee permissions and control which modules they can access
-                </p>
-                <button
-                  onClick={() => setShowUserManagement(true)}
-                  style={{
-                    padding: '12px 32px',
-                    background: 'white',
-                    color: '#667eea',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    fontSize: '16px'
-                  }}
-                >
-                  Manage User Access →
-                </button>
-              </div>
-
-              {/* Employee Management (moved out of LMS) */}
-              <div style={{
-                padding: '40px',
-                background: 'radial-gradient(circle at 20% 20%, #2a2b36 0%, transparent 45%),    radial-gradient(circle at 80% 0%, rgba(0, 120, 255, 0.15) 0%, transparent 40%),    #0e0f14',
-                borderRadius: '16px',
-                border: '1px solid',
-                color: 'white',
-                textAlign: 'center'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                    <circle cx="9" cy="7" r="4" />
-                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                  </svg>
-                </div>
-                <h3 style={{ marginBottom: '8px' }}>Employee Management</h3>
-                <p style={{ opacity: 0.9, marginBottom: '20px' }}>
-                  Add, edit and view employees, departments and locations
-                </p>
-                <button
-                  onClick={() => navigate('/employees')}
-                  style={{
-                    padding: '12px 32px',
-                    background: 'white',
-                    color: '#1f6feb',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    fontSize: '16px'
-                  }}
-                >
-                  Manage Employees →
-                </button>
-              </div>
-            </div>
-          )}
         </section>
 
         {/* <section>
