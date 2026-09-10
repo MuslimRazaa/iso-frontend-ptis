@@ -41,6 +41,10 @@ import ptisLogo from './assets/ptisLogo.png';
 import './LoginPage.css';
 import { addToast, removeToast, subscribeToasts, getToastsSnapshot } from './utils/toastStore';
 import { API_BASE_URL as HOST_API_BASE_URL } from '../config/api';
+import PaginationBar from '../components/PaginationBar';
+import AuditLogView from '../components/AuditLogView';
+import StyledSelect from '../components/StyledSelect';
+import SearchableSelect from '../components/SearchableSelect';
 
 // Toast Notification Component
 const Toast = ({ message, type = 'info', onClose, isDarkMode }) => {
@@ -1417,14 +1421,20 @@ const TestingModule = () => {
     const resp = await fetch(`${API_BASE_URL}/api/employees/legacy`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ID, Name })
+      body: JSON.stringify({
+        ID, Name,
+        actorId: localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || '',
+        actorName: localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin'
+      })
     });
     if (!resp.ok) throw new Error(await resp.text());
     return resp.json();
   };
 
   const deleteEmployee = async (ID) => {
-    const resp = await fetch(`${API_BASE_URL}/api/employees/legacy/${encodeURIComponent(ID)}`, {
+    const actorId = localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || '';
+    const actorName = localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin';
+    const resp = await fetch(`${API_BASE_URL}/api/employees/legacy/${encodeURIComponent(ID)}?actorId=${encodeURIComponent(actorId)}&actorName=${encodeURIComponent(actorName)}`, {
       method: 'DELETE'
     });
     if (!resp.ok) throw new Error(await resp.text());
@@ -2273,8 +2283,7 @@ const TestingModule = () => {
     };
     const chartClickable = { cursor: 'pointer' };
     const clickedRow = (arg) => arg?.payload?.payload || arg?.payload || arg || {};
-    const [resultsGoToPage, setResultsGoToPage] = useState('');
-    const resultsItemsPerPage = 50;
+    const resultsItemsPerPage = 100;
     const [openSidebarMenus, setOpenSidebarMenus] = useState({});
     const sidebarRef = useRef(null);
     const handleSidebarEnter = () => { sidebarRef.current?.classList.replace('collapsed', 'expanded'); };
@@ -2717,7 +2726,9 @@ const TestingModule = () => {
         STANDARD: resolvedStandard,
         DATE: composedDateTime,
         answers: {},
-        questions: []
+        questions: [],
+        actorId: localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || '',
+        actorName: localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin'
       };
 
       if (resultEditMode && resultEditTarget?.DATE) {
@@ -2926,6 +2937,7 @@ const TestingModule = () => {
       standards: "M5 6h14v2H5zm0 5h14v2H5zm0 5h9v2H5z",
       questions: "M12 3a9 9 0 1 0 9 9 9 9 0 0 0-9-9zm0 13h-2v-2h2zm1.94-5.06-.99.95A3 3 0 0 0 12 14h-2v-.38a4.64 4.64 0 0 1 1.31-3.31l1.12-1.16A1.31 1.31 0 0 0 11.83 7 1.51 1.51 0 0 0 10 8.5H8a3.5 3.5 0 0 1 6.75-1.31 3 3 0 0 1-.81 3.75z",
       certificates: "M12 2 9.5 7 4 7.5 8 11l-1 5 5-2.5 5 2.5-1-5 4-3.5-5.5-.5z",
+      auditlog: "M9 12h6v2H9v-2zm0-4h6v2H9V8zm0 8h4v2H9v-2zM7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm0 2v16h10V4H7z",
     };
     const goTo = (tab, btnId) => {
       setAdminActiveTab(tab);
@@ -2954,6 +2966,9 @@ const TestingModule = () => {
       { id: 'certificates', label: 'Certificates', children: [
         { label: 'View Certificates', action: () => goTo('certificates') },
       ]},
+      { id: 'auditlog', label: 'Audit Log', children: [
+        { label: 'View Audit Log', action: () => goTo('auditlog') },
+      ]},
     ];
 
     // Certificate Management Page Component - Memoized to prevent re-renders on parent state changes
@@ -2970,13 +2985,12 @@ const TestingModule = () => {
         const [searchType, setSearchType] = useState('id'); // 'id' or 'name'
         const [searchQuery, setSearchQuery] = useState('');
         const [certificateCurrentPage, setCertificateCurrentPage] = useState(1);
-        const [certificateGoToPage, setCertificateGoToPage] = useState('');
         const [certTypes, setCertTypes] = useState({}); // key: stable certificate row id, value: 'New' or 'Recertification'
         const [previousCertNumbers, setPreviousCertNumbers] = useState({}); // key: stable certificate row id, value: manual previous certificate no
         const [certExtras, setCertExtras] = useState({}); // key: stable certificate row id, value: { near_vision, color_vision, training_hours, education, photo }
         const [certModal, setCertModal] = useState(null); // { rowKey, result, selectedCertType, previousCertNo } while the Vision/Photo modal is open
         const [certGenerating, setCertGenerating] = useState(false);
-        const certificateItemsPerPage = 25;
+        const certificateItemsPerPage = 100;
 
         const handleGenerateCertificateSubmit = async () => {
           if (!certModal) return;
@@ -3095,6 +3109,8 @@ const TestingModule = () => {
             if (extras.photo) {
               formData.append('photo', extras.photo);
             }
+            formData.append('actorId', localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || '');
+            formData.append('actorName', localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin');
 
             // Call backend API to generate certificate
             const response = await fetch(`${API_BASE_URL}/api/certificates/legacy/generate`, {
@@ -3394,9 +3410,11 @@ const TestingModule = () => {
               flexWrap: 'wrap'
             }}>
             <div style={{ minWidth: isMobile ? '100%' : '180px' }}>
-              <select
+              <StyledSelect
                 value={searchType}
-                onChange={(e) => setSearchType(e.target.value)}
+                onChange={setSearchType}
+                options={[]}
+                extraOptions={[{ value: 'id', label: 'Employee ID' }, { value: 'name', label: 'Employee Name' }]}
                 style={{
                   width: '100%',
                   padding: '10px 15px',
@@ -3409,10 +3427,7 @@ const TestingModule = () => {
                   color: theme.text.primary,
                   cursor: 'pointer'
                 }}
-              >
-                <option value="id">Employee ID</option>
-                <option value="name">Employee Name</option>
-              </select>
+              />
             </div>
             <div style={{ flex: '1', minWidth: isMobile ? '100%' : '250px' }}>
               <input
@@ -3493,7 +3508,7 @@ const TestingModule = () => {
                 </p>
               </div>
             ) : (
-              <div style={{ overflowX: 'auto' }}>
+              <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #ececf0' }}>
@@ -3541,10 +3556,11 @@ const TestingModule = () => {
                         </td>
                         <td style={{ padding: '16px 20px', textAlign: 'center', minWidth: '260px' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                            <select
+                            <StyledSelect
                               value={selectedCertType}
-                              onChange={async (e) => {
-                                const nextType = e.target.value;
+                              options={[]}
+                              extraOptions={[{ value: 'New', label: 'New' }, { value: 'Recertification', label: 'Re-Certification' }]}
+                              onChange={async (nextType) => {
                                 setCertTypes(prev => ({ ...prev, [rowKey]: nextType }));
 
                                 if (nextType !== 'Recertification') {
@@ -3586,20 +3602,17 @@ const TestingModule = () => {
                               }}
                               style={{
                                 padding: '8px 12px',
-                                border: selectedCertType === 'Recertification' ? '2px solid #16213e' : '2px solid #16a085',
+                                border: '2px solid #d7263d',
                                 borderRadius: '8px',
                                 fontSize: '14px',
                                 fontWeight: '600',
-                                backgroundColor: selectedCertType === 'Recertification' ? '#16213e' : '#16a085',
+                                backgroundColor: '#d7263d',
                                 color: 'white',
                                 cursor: 'pointer',
                                 outline: 'none',
                                 transition: 'all 0.2s ease'
                               }}
-                            >
-                              <option value="New" style={{ backgroundColor: theme.bg.input, color: theme.text.primary }}>New</option>
-                              <option value="Recertification" style={{ backgroundColor: theme.bg.input, color: theme.text.primary }}>Re-Certification</option>
-                            </select>
+                            />
 
                             {selectedCertType === 'Recertification' && (
                               <input
@@ -3633,14 +3646,14 @@ const TestingModule = () => {
                             }}
                             style={{
                               padding: '10px 16px',
-                              backgroundColor: '#16a085',
+                              backgroundColor: '#d7263d',
                               color: 'white',
-                              border: '2px solid #16a085',
+                              border: '2px solid #d7263d',
                               borderRadius: '28px',
                               cursor: 'pointer',
                               fontSize: '13px',
                               fontWeight: '600',
-                              boxShadow: '0 3px 10px rgba(22, 160, 133, 0.3)',
+                              boxShadow: '0 3px 10px rgba(215, 38, 61, 0.3)',
                               transition: 'all 0.2s ease',
                               display: 'inline-flex',
                               alignItems: 'center',
@@ -3648,19 +3661,19 @@ const TestingModule = () => {
                               whiteSpace: 'nowrap'
                             }}
                             onMouseOver={e => {
-                              e.currentTarget.style.backgroundColor = '#f5f5f5';
-                              e.currentTarget.style.color = '#16a085';
-                              e.currentTarget.style.border = '2px solid #16a085';
+                              e.currentTarget.style.backgroundColor = '#ffffff';
+                              e.currentTarget.style.color = '#d7263d';
+                              e.currentTarget.style.border = '2px solid #d7263d';
                               e.currentTarget.style.transform = 'translateY(-2px)';
-                              e.currentTarget.style.boxShadow = '0 5px 15px rgba(22, 160, 133, 0.4)';
-                              e.currentTarget.querySelector('svg').style.color = '#16a085';
+                              e.currentTarget.style.boxShadow = '0 5px 15px rgba(215, 38, 61, 0.4)';
+                              e.currentTarget.querySelector('svg').style.color = '#d7263d';
                             }}
                             onMouseOut={e => {
-                              e.currentTarget.style.backgroundColor = '#16a085';
+                              e.currentTarget.style.backgroundColor = '#d7263d';
                               e.currentTarget.style.color = 'white';
-                              e.currentTarget.style.border = '2px solid #16a085';
+                              e.currentTarget.style.border = '2px solid #d7263d';
                               e.currentTarget.style.transform = 'translateY(0)';
-                              e.currentTarget.style.boxShadow = '0 3px 10px rgba(22, 160, 133, 0.3)';
+                              e.currentTarget.style.boxShadow = '0 3px 10px rgba(215, 38, 61, 0.3)';
                               e.currentTarget.querySelector('svg').style.color = 'white';
                             }}
                             title="Generate Certificate"
@@ -3676,111 +3689,14 @@ const TestingModule = () => {
               </div>
             )}
 
-            {totalCertificatePages > 1 && (
-              <div style={{
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                gap: '10px',
-                flexWrap: 'wrap',
-                padding: '14px 16px',
-                backgroundColor: colors.cardBg,
-                borderTop: `1px solid ${colors.border}`
-              }}>
-                <button
-                  onClick={() => setCertificateCurrentPage(prev => Math.max(1, prev - 1))}
-                  disabled={certificateCurrentPage === 1}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: certificateCurrentPage === 1 ? colors.border : '#1a1a2e',
-                    color: certificateCurrentPage === 1 ? colors.textMuted : 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: certificateCurrentPage === 1 ? 'not-allowed' : 'pointer',
-                    fontWeight: '600',
-                    fontSize: '14px',
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  Previous
-                </button>
-
-                <span style={{
-                  color: colors.text,
-                  fontWeight: '600',
-                  fontSize: '14px',
-                  padding: '0 10px'
-                }}>
-                  Page {certificateCurrentPage} of {totalCertificatePages} ({filteredResults.length} candidates)
-                </span>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ color: colors.textMuted, fontWeight: '600', fontSize: '12px' }}>Go to</span>
-                  <input
-                    type="number"
-                    min="1"
-                    max={totalCertificatePages}
-                    value={certificateGoToPage}
-                    onChange={(e) => setCertificateGoToPage(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key !== 'Enter') return;
-                      const nextPage = parseInt(certificateGoToPage, 10);
-                      if (!Number.isFinite(nextPage)) return;
-                      setCertificateCurrentPage(Math.min(totalCertificatePages, Math.max(1, nextPage)));
-                      setCertificateGoToPage('');
-                    }}
-                    style={{
-                      width: '70px',
-                      padding: '6px 10px',
-                      border: `1px solid ${colors.border}`,
-                      borderRadius: '8px',
-                      fontSize: '14px',
-                      textAlign: 'center',
-                      backgroundColor: colors.cardAltBg,
-                      color: colors.text
-                    }}
-                  />
-                  <button
-                    onClick={() => {
-                      const nextPage = parseInt(certificateGoToPage, 10);
-                      if (!Number.isFinite(nextPage)) return;
-                      setCertificateCurrentPage(Math.min(totalCertificatePages, Math.max(1, nextPage)));
-                      setCertificateGoToPage('');
-                    }}
-                    style={{
-                      padding: '6px 12px',
-                      backgroundColor: '#1a1a2e',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      fontWeight: '600',
-                      fontSize: '13px'
-                    }}
-                  >
-                    Go
-                  </button>
-                </div>
-
-                <button
-                  onClick={() => setCertificateCurrentPage(prev => Math.min(totalCertificatePages, prev + 1))}
-                  disabled={certificateCurrentPage === totalCertificatePages}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: certificateCurrentPage === totalCertificatePages ? colors.border : '#1a1a2e',
-                    color: certificateCurrentPage === totalCertificatePages ? colors.textMuted : 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: certificateCurrentPage === totalCertificatePages ? 'not-allowed' : 'pointer',
-                    fontWeight: '600',
-                    fontSize: '14px',
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  Next
-                </button>
-              </div>
-            )}
+            <PaginationBar
+              page={certificateCurrentPage}
+              totalPages={totalCertificatePages}
+              totalItems={filteredResults.length}
+              pageSize={certificateItemsPerPage}
+              onPageChange={setCertificateCurrentPage}
+              itemLabel="candidates"
+            />
           </article>
 
           {/* Vision Examination + Photo modal (opens before certificate generation) */}
@@ -3815,7 +3731,7 @@ const TestingModule = () => {
                   justifyContent: 'space-between',
                   alignItems: 'center',
                   marginBottom: '25px',
-                  borderBottom: '3px solid #16a085',
+                  borderBottom: '3px solid #d7263d',
                   paddingBottom: '15px'
                 }}>
                   <h3 style={{ margin: 0, color: theme.text.primary, fontSize: '1.4em', fontWeight: '600' }}>
@@ -3927,9 +3843,9 @@ const TestingModule = () => {
                     disabled={certGenerating}
                     style={{
                       padding: '10px 20px',
-                      backgroundColor: '#16a085',
+                      backgroundColor: '#d7263d',
                       color: 'white',
-                      border: '2px solid #16a085',
+                      border: '2px solid #d7263d',
                       borderRadius: '28px',
                       cursor: certGenerating ? 'not-allowed' : 'pointer',
                       fontSize: '14px',
@@ -4034,10 +3950,11 @@ const TestingModule = () => {
                 {adminActiveTab === 'certificates' && <>Certificate <span>Management</span></>}
                 {adminActiveTab === 'employees' && <>Employee <span>Management</span></>}
                 {adminActiveTab === 'practical' && <>Practical Test <span>Management</span></>}
+                {adminActiveTab === 'auditlog' && <>Audit <span>Log</span></>}
               </h1>
             </div>
             <div className="lms-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              {!(adminActiveTab === 'dashboard' || adminActiveTab === 'certificates') && (
+              {!(adminActiveTab === 'dashboard' || adminActiveTab === 'certificates' || adminActiveTab === 'auditlog') && (
                 <button
                   style={{
                     display: 'flex',
@@ -4134,29 +4051,31 @@ const TestingModule = () => {
                 (!standardPicked || filterStandard === standard) && (!statusPicked || filterStatus === status);
               const scoreBandSelected = (range) => !scorePicked || filterScoreRange === range;
 
+              // Same card design (and now the same hover) as the LMS stats
+              // row — clicking one jumps to Results filtered to it, the same
+              // way focusResults() already drives the charts just below.
+              const TESTING_STAT_META = [
+                { key: 'total', label: 'Total Tests', tone: '', value: totalTests, helper: 'All time', onClick: () => {} },
+                { key: 'passed', label: 'Passed', tone: '', value: passedTests, helper: `${totalTests > 0 ? ((passedTests / totalTests) * 100).toFixed(0) : 0}% pass rate`, onClick: () => focusResults({ status: 'Pass' }) },
+                { key: 'failed', label: 'Failed', tone: 'accent', value: failedTests, helper: 'Needs review', onClick: () => focusResults({ status: 'Fail' }) },
+                { key: 'avg', label: 'Avg Score', tone: 'warning', value: `${averageScore.toFixed(1)}%`, helper: 'Across all tests', onClick: () => {} },
+              ];
+
               return (
                 <>
                   <section className="lms-stat-grid" style={{ marginBottom: 32 }}>
-                    <article className="stat-card">
-                      <p>Total Tests</p>
-                      <h3>{totalTests}</h3>
-                      <span>All time</span>
-                    </article>
-                    <article className="stat-card">
-                      <p>Passed</p>
-                      <h3>{passedTests}</h3>
-                      <span>{totalTests > 0 ? ((passedTests / totalTests) * 100).toFixed(0) : 0}% pass rate</span>
-                    </article>
-                    <article className="stat-card accent">
-                      <p>Failed</p>
-                      <h3>{failedTests}</h3>
-                      <span>Needs review</span>
-                    </article>
-                    <article className="stat-card warning">
-                      <p>Avg Score</p>
-                      <h3>{averageScore.toFixed(1)}%</h3>
-                      <span>Across all tests</span>
-                    </article>
+                    {TESTING_STAT_META.map(({ key, label, tone, value, helper, onClick }) => (
+                      <article
+                        key={key}
+                        className={`stat-card ${tone}`}
+                        title={`Open ${label} in Results`}
+                        onClick={() => { setAdminActiveTab('results'); onClick(); }}
+                      >
+                        <p>{label}</p>
+                        <h3>{value}</h3>
+                        <span>{helper}</span>
+                      </article>
+                    ))}
                   </section>
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: 24, marginBottom: 32 }}>
@@ -4285,7 +4204,7 @@ const TestingModule = () => {
                     {results.length === 0 ? (
                       <div style={{ padding: 40, textAlign: 'center', color: '#9a9aaa' }}>No Test Results Available</div>
                     ) : (
-                      <div style={{ overflowX: 'auto' }}>
+                      <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                           <thead>
                             <tr>
@@ -4382,9 +4301,12 @@ const TestingModule = () => {
                           }}></span>
                           Employee ID
                         </label>
-                        <select
+                        <SearchableSelect
                           value={filterEmpId}
-                          onChange={e => onChangeEmpId(e.target.value)}
+                          onChange={onChangeEmpId}
+                          options={employeeIdOptions}
+                          emptyOptionLabel="All Employees"
+                          placeholder="Type to search…"
                           style={{
                             width: '100%',
                             padding: '12px 15px',
@@ -4394,22 +4316,12 @@ const TestingModule = () => {
                             backgroundColor: theme.bg.input,
                             color: theme.text.primary,
                             fontWeight: '500',
-                            cursor: 'pointer',
+                            cursor: 'text',
                             transition: 'all 0.2s ease',
-                            outline: 'none'
+                            outline: 'none',
+                            boxSizing: 'border-box'
                           }}
-                          onFocus={e => {
-                            e.target.style.borderColor = theme.text.primary;
-                            e.target.style.backgroundColor = theme.bg.secondary;
-                          }}
-                          onBlur={e => {
-                            e.target.style.borderColor = theme.border.default;
-                            e.target.style.backgroundColor = theme.bg.input;
-                          }}
-                        >
-                          <option value="">All Employees</option>
-                          {employeeIdOptions.map(id => <option key={id} value={id}>{id}</option>)}
-                        </select>
+                        />
                       </div>
                       <div>
                         <label style={{
@@ -4429,9 +4341,12 @@ const TestingModule = () => {
                           }}></span>
                           Employee Name
                         </label>
-                        <select
+                        <SearchableSelect
                           value={filterEmpName}
-                          onChange={e => onChangeEmpName(e.target.value)}
+                          onChange={onChangeEmpName}
+                          options={employeeNameOptions}
+                          emptyOptionLabel="All Names"
+                          placeholder="Type to search…"
                           style={{
                             width: '100%',
                             padding: '12px 15px',
@@ -4441,22 +4356,12 @@ const TestingModule = () => {
                             backgroundColor: theme.bg.input,
                             color: theme.text.primary,
                             fontWeight: '500',
-                            cursor: 'pointer',
+                            cursor: 'text',
                             transition: 'all 0.2s ease',
-                            outline: 'none'
+                            outline: 'none',
+                            boxSizing: 'border-box'
                           }}
-                          onFocus={e => {
-                            e.target.style.borderColor = theme.text.primary;
-                            e.target.style.backgroundColor = theme.bg.secondary;
-                          }}
-                          onBlur={e => {
-                            e.target.style.borderColor = theme.border.default;
-                            e.target.style.backgroundColor = theme.bg.input;
-                          }}
-                        >
-                          <option value="">All Names</option>
-                          {employeeNameOptions.map(name => <option key={name} value={name}>{name}</option>)}
-                        </select>
+                        />
                       </div>
                       <div>
                         <label style={{
@@ -4476,9 +4381,10 @@ const TestingModule = () => {
                           }}></span>
                           Status
                         </label>
-                        <select
+                        <StyledSelect
                           value={filterStatus}
-                          onChange={e => setFilterStatus(e.target.value)}
+                          onChange={setFilterStatus}
+                          options={['All', 'Pass', 'Fail']}
                           style={{
                             width: '100%',
                             padding: '12px 15px',
@@ -4492,17 +4398,7 @@ const TestingModule = () => {
                             transition: 'all 0.2s ease',
                             outline: 'none'
                           }}
-                          onFocus={e => {
-                            e.target.style.borderColor = theme.text.primary;
-                            e.target.style.backgroundColor = theme.bg.secondary;
-                          }}
-                          onBlur={e => {
-                            e.target.style.borderColor = theme.border.default;
-                            e.target.style.backgroundColor = theme.bg.input;
-                          }}
-                        >
-                          {['All', 'Pass', 'Fail'].map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
+                        />
                       </div>
                       <div>
                         <label style={{
@@ -4522,9 +4418,13 @@ const TestingModule = () => {
                           }}></span>
                           Standard
                         </label>
-                        <select
+                        <SearchableSelect
                           value={filterStandard}
-                          onChange={e => setFilterStandard(e.target.value)}
+                          onChange={setFilterStandard}
+                          options={standardOptions.filter(s => s !== 'All')}
+                          emptyOptionLabel="All Standards"
+                          emptyOptionValue="All"
+                          placeholder="Type to search…"
                           style={{
                             width: '100%',
                             padding: '12px 15px',
@@ -4534,21 +4434,12 @@ const TestingModule = () => {
                             backgroundColor: theme.bg.input,
                             color: theme.text.primary,
                             fontWeight: '500',
-                            cursor: 'pointer',
+                            cursor: 'text',
                             transition: 'all 0.2s ease',
-                            outline: 'none'
+                            outline: 'none',
+                            boxSizing: 'border-box'
                           }}
-                          onFocus={e => {
-                            e.target.style.borderColor = theme.text.primary;
-                            e.target.style.backgroundColor = theme.bg.secondary;
-                          }}
-                          onBlur={e => {
-                            e.target.style.borderColor = theme.border.default;
-                            e.target.style.backgroundColor = theme.bg.input;
-                          }}
-                        >
-                          {standardOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
+                        />
                       </div>
                       <div>
                         <label style={{
@@ -4568,9 +4459,10 @@ const TestingModule = () => {
                           }}></span>
                           Score
                         </label>
-                        <select
+                        <StyledSelect
                           value={filterScoreRange}
-                          onChange={e => setFilterScoreRange(e.target.value)}
+                          onChange={setFilterScoreRange}
+                          options={['All', ...SCORE_RANGES]}
                           style={{
                             width: '100%',
                             padding: '12px 15px',
@@ -4584,17 +4476,7 @@ const TestingModule = () => {
                             transition: 'all 0.2s ease',
                             outline: 'none'
                           }}
-                          onFocus={e => {
-                            e.target.style.borderColor = theme.text.primary;
-                            e.target.style.backgroundColor = theme.bg.secondary;
-                          }}
-                          onBlur={e => {
-                            e.target.style.borderColor = theme.border.default;
-                            e.target.style.backgroundColor = theme.bg.input;
-                          }}
-                        >
-                          {['All', ...SCORE_RANGES].map(r => <option key={r} value={r}>{r}</option>)}
-                        </select>
+                        />
                       </div>
                       <div>
                         <label style={{
@@ -5001,7 +4883,7 @@ const TestingModule = () => {
                       </p>
                     </div>
                   </header>
-                  <div style={{ overflowX: 'auto' }}>
+                  <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
                     {adminLoading ? (
                       <div style={commonStyles.loading}>
                         <Loader size={24} /> Loading results...
@@ -5036,8 +4918,10 @@ const TestingModule = () => {
                             const handleDeleteResult = async () => {
                               if (!window.confirm(`Are you sure you want to delete this test result for ${result.NAME}?`)) return;
                               try {
+                                const actorId = localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || '';
+                                const actorName = localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin';
                                 const response = await fetch(
-                                  `${API_BASE_URL}/api/test-results/legacy/${encodeURIComponent(result.ID)}/${encodeURIComponent(result.STANDARD)}/${encodeURIComponent(result.DATE)}`,
+                                  `${API_BASE_URL}/api/test-results/legacy/${encodeURIComponent(result.ID)}/${encodeURIComponent(result.STANDARD)}/${encodeURIComponent(result.DATE)}?actorId=${encodeURIComponent(actorId)}&actorName=${encodeURIComponent(actorName)}`,
                                   { method: 'DELETE' }
                                 );
                                 if (!response.ok) throw new Error('Delete failed');
@@ -5265,111 +5149,14 @@ const TestingModule = () => {
                   </div>
 
                   {/* Pagination Controls */}
-                  {totalResultPages > 1 && (
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                      gap: '10px',
-                      flexWrap: 'wrap',
-                      padding: '14px 16px',
-                      backgroundColor: colors.cardBg,
-                      borderTop: `1px solid ${colors.border}`
-                    }}>
-                      <button
-                        onClick={() => setResultsCurrentPage(prev => Math.max(1, prev - 1))}
-                        disabled={resultsCurrentPage === 1}
-                        style={{
-                          padding: '8px 16px',
-                          backgroundColor: resultsCurrentPage === 1 ? colors.border : '#1a1a2e',
-                          color: resultsCurrentPage === 1 ? colors.textMuted : 'white',
-                          border: 'none',
-                          borderRadius: '8px',
-                          cursor: resultsCurrentPage === 1 ? 'not-allowed' : 'pointer',
-                          fontWeight: '600',
-                          fontSize: '14px',
-                          transition: 'all 0.2s ease'
-                        }}
-                      >
-                        Previous
-                      </button>
-
-                      <span style={{
-                        color: colors.text,
-                        fontWeight: '600',
-                        fontSize: '14px',
-                        padding: '0 10px'
-                      }}>
-                        Page {resultsCurrentPage} of {totalResultPages} ({filteredResults.length} results)
-                      </span>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ color: colors.textMuted, fontWeight: '600', fontSize: '12px' }}>Go to</span>
-                        <input
-                          type="number"
-                          min="1"
-                          max={totalResultPages}
-                          value={resultsGoToPage}
-                          onChange={(e) => setResultsGoToPage(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key !== 'Enter') return;
-                            const nextPage = parseInt(resultsGoToPage, 10);
-                            if (!Number.isFinite(nextPage)) return;
-                            setResultsCurrentPage(Math.min(totalResultPages, Math.max(1, nextPage)));
-                            setResultsGoToPage('');
-                          }}
-                          style={{
-                            width: '70px',
-                            padding: '6px 10px',
-                            border: `1px solid ${colors.border}`,
-                            borderRadius: '8px',
-                            fontSize: '14px',
-                            textAlign: 'center',
-                            backgroundColor: colors.cardAltBg,
-                            color: colors.text
-                          }}
-                        />
-                        <button
-                          onClick={() => {
-                            const nextPage = parseInt(resultsGoToPage, 10);
-                            if (!Number.isFinite(nextPage)) return;
-                            setResultsCurrentPage(Math.min(totalResultPages, Math.max(1, nextPage)));
-                            setResultsGoToPage('');
-                          }}
-                          style={{
-                            padding: '6px 12px',
-                            backgroundColor: '#1a1a2e',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            fontWeight: '600',
-                            fontSize: '13px'
-                          }}
-                        >
-                          Go
-                        </button>
-                      </div>
-
-                      <button
-                        onClick={() => setResultsCurrentPage(prev => Math.min(totalResultPages, prev + 1))}
-                        disabled={resultsCurrentPage === totalResultPages}
-                        style={{
-                          padding: '8px 16px',
-                          backgroundColor: resultsCurrentPage === totalResultPages ? colors.border : '#1a1a2e',
-                          color: resultsCurrentPage === totalResultPages ? colors.textMuted : 'white',
-                          border: 'none',
-                          borderRadius: '8px',
-                          cursor: resultsCurrentPage === totalResultPages ? 'not-allowed' : 'pointer',
-                          fontWeight: '600',
-                          fontSize: '14px',
-                          transition: 'all 0.2s ease'
-                        }}
-                      >
-                        Next
-                      </button>
-                    </div>
-                  )}
+                  <PaginationBar
+                    page={resultsCurrentPage}
+                    totalPages={totalResultPages}
+                    totalItems={filteredResults.length}
+                    pageSize={resultsItemsPerPage}
+                    onPageChange={setResultsCurrentPage}
+                    itemLabel="results"
+                  />
                 </article>
 
                 {/* Add Result Modal */}
@@ -5438,11 +5225,13 @@ const TestingModule = () => {
                             }}>
                               Employee ID:
                             </label>
-                            <select
+                            <SearchableSelect
                               value={resultFormData.employeeId}
                               disabled={resultEditMode}
-                              onChange={(e) => {
-                                const selectedId = e.target.value;
+                              required
+                              options={resultEmployeeIdOptions}
+                              placeholder="Type to search…"
+                              onChange={(selectedId) => {
                                 const selectedEmployee = employees.find(emp => String(emp.ID) === String(selectedId));
                                 setResultFormData({
                                   ...resultFormData,
@@ -5450,7 +5239,6 @@ const TestingModule = () => {
                                   employeeName: selectedEmployee ? String(selectedEmployee.Name || '') : ''
                                 });
                               }}
-                              required
                               style={{
                                 width: '100%',
                                 padding: '12px 15px',
@@ -5462,18 +5250,9 @@ const TestingModule = () => {
                                 boxSizing: 'border-box',
                                 backgroundColor: resultEditMode ? colors.cardAltBg : colors.inputBg,
                                 color: colors.text,
-                                cursor: resultEditMode ? 'not-allowed' : 'pointer'
+                                cursor: resultEditMode ? 'not-allowed' : 'text'
                               }}
-                              onFocus={e => (e.target.style.borderColor = '#1a1a2e')}
-                              onBlur={e => (e.target.style.borderColor = colors.inputBorder)}
-                            >
-                              <option value="">Select ID</option>
-                              {resultEmployeeIdOptions.map(empId => (
-                                <option key={empId} value={empId}>
-                                  {empId}
-                                </option>
-                              ))}
-                            </select>
+                            />
                           </div>
                           <div>
                             <label style={{
@@ -5485,11 +5264,13 @@ const TestingModule = () => {
                             }}>
                               Employee Name:
                             </label>
-                            <select
+                            <SearchableSelect
                               value={resultFormData.employeeName}
                               disabled={resultEditMode}
-                              onChange={(e) => {
-                                const selectedName = e.target.value;
+                              required
+                              options={resultEmployeeNameOptions}
+                              placeholder="Type to search…"
+                              onChange={(selectedName) => {
                                 const selectedEmployee = employees.find(emp => String(emp.Name || '') === selectedName);
                                 setResultFormData({
                                   ...resultFormData,
@@ -5497,7 +5278,6 @@ const TestingModule = () => {
                                   employeeId: selectedEmployee ? String(selectedEmployee.ID || '') : ''
                                 });
                               }}
-                              required
                               style={{
                                 width: '100%',
                                 padding: '12px 15px',
@@ -5509,18 +5289,9 @@ const TestingModule = () => {
                                 boxSizing: 'border-box',
                                 backgroundColor: resultEditMode ? colors.cardAltBg : colors.inputBg,
                                 color: colors.text,
-                                cursor: resultEditMode ? 'not-allowed' : 'pointer'
+                                cursor: resultEditMode ? 'not-allowed' : 'text'
                               }}
-                              onFocus={e => (e.target.style.borderColor = '#1a1a2e')}
-                              onBlur={e => (e.target.style.borderColor = colors.inputBorder)}
-                            >
-                              <option value="">Select Name</option>
-                              {resultEmployeeNameOptions.map(empName => (
-                                <option key={empName} value={empName}>
-                                  {empName}
-                                </option>
-                              ))}
-                            </select>
+                            />
                           </div>
                         </div>
 
@@ -5534,11 +5305,13 @@ const TestingModule = () => {
                           }}>
                             Standard:
                           </label>
-                          <select
+                          <SearchableSelect
                             value={resultFormData.standard}
                             disabled={resultEditMode}
-                            onChange={async (e) => {
-                              const newStandard = e.target.value;
+                            required
+                            options={resultStandardOptions}
+                            placeholder="Type to search…"
+                            onChange={async (newStandard) => {
                               setIsResultPercentageManuallyEdited(false);
                               setResultFormData(prev => ({ ...prev, standard: newStandard }));
 
@@ -5559,7 +5332,6 @@ const TestingModule = () => {
                                 console.warn('Failed to auto-fill standard info:', err);
                               }
                             }}
-                            required
                             style={{
                               width: '100%',
                               padding: '12px 15px',
@@ -5571,18 +5343,9 @@ const TestingModule = () => {
                               boxSizing: 'border-box',
                               backgroundColor: resultEditMode ? colors.cardAltBg : colors.inputBg,
                               color: colors.text,
-                              cursor: resultEditMode ? 'not-allowed' : 'pointer'
+                              cursor: resultEditMode ? 'not-allowed' : 'text'
                             }}
-                            onFocus={e => (e.target.style.borderColor = '#1a1a2e')}
-                            onBlur={e => (e.target.style.borderColor = colors.inputBorder)}
-                          >
-                            <option value="">Select Standard</option>
-                            {resultStandardOptions.map(stdName => (
-                              <option key={stdName} value={stdName}>
-                                {stdName}
-                              </option>
-                            ))}
-                          </select>
+                          />
                         </div>
 
                         <div style={{ display: 'grid', gridTemplateColumns: twoColumnGrid, gap: '15px', marginBottom: '22px' }}>
@@ -6034,6 +5797,16 @@ const TestingModule = () => {
             {adminActiveTab === 'employees' && (
               <EmployeesAdminPage onBack={() => setAdminActiveTab('dashboard')} />
             )}
+
+            {/* Audit Log Tab */}
+            {adminActiveTab === 'auditlog' && (
+              <AuditLogView
+                module="testing"
+                title="Testing & Certification Audit Log"
+                subtitle="Every result, standard, question, certificate and employee change recorded across this module."
+                actions={['create', 'update', 'delete']}
+              />
+            )}
           </section>
         </div>
         </div>
@@ -6402,11 +6175,9 @@ const TestingModule = () => {
     }, [formData.employeeId, formData.standard, eligibleEmployees, practicalStandards]);
 
     const [eligibleCurrentPage, setEligibleCurrentPage] = useState(1);
-    const [eligibleGoToPage, setEligibleGoToPage] = useState('');
     const [practicalCurrentPage, setPracticalCurrentPage] = useState(1);
-    const [practicalGoToPage, setPracticalGoToPage] = useState('');
-    const eligibleItemsPerPage = 50;
-    const practicalItemsPerPage = 50;
+    const eligibleItemsPerPage = 100;
+    const practicalItemsPerPage = 100;
 
     const totalEligiblePages = Math.ceil(eligibleEmployees.length / eligibleItemsPerPage);
     const totalPracticalPages = Math.ceil(practicalResults.length / practicalItemsPerPage);
@@ -6525,7 +6296,9 @@ const TestingModule = () => {
         STANDARD: formData.standard, // Already contains "(Practical)" from dropdown
         DATE: editMode ? currentResult.DATE : getPakistanDateTime(),
         answers: {},
-        questions: []
+        questions: [],
+        actorId: localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || '',
+        actorName: localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin'
       };
 
       try {
@@ -6597,8 +6370,10 @@ const TestingModule = () => {
       }
 
       try {
+        const actorId = localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || '';
+        const actorName = localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin';
         const response = await fetch(
-          `${API_BASE_URL}/api/test-results/legacy/${result.ID}/${encodeURIComponent(result.STANDARD)}/${encodeURIComponent(result.DATE)}`,
+          `${API_BASE_URL}/api/test-results/legacy/${result.ID}/${encodeURIComponent(result.STANDARD)}/${encodeURIComponent(result.DATE)}?actorId=${encodeURIComponent(actorId)}&actorName=${encodeURIComponent(actorName)}`,
           { method: 'DELETE' }
         );
 
@@ -6653,9 +6428,11 @@ const TestingModule = () => {
             flexWrap: 'wrap'
           }}>
             <div style={{ minWidth: isMobile ? '100%' : '180px' }}>
-              <select
+              <StyledSelect
                 value={searchType}
-                onChange={(e) => setSearchType(e.target.value)}
+                onChange={setSearchType}
+                options={[]}
+                extraOptions={[{ value: 'id', label: 'Employee ID' }, { value: 'name', label: 'Employee Name' }]}
                 style={{
                   width: '100%',
                   padding: '10px 15px',
@@ -6668,10 +6445,7 @@ const TestingModule = () => {
                   color: colors.text,
                   cursor: 'pointer'
                 }}
-              >
-                <option value="id">Employee ID</option>
-                <option value="name">Employee Name</option>
-              </select>
+              />
             </div>
             <div style={{ flex: '1', minWidth: isMobile ? '100%' : '250px' }}>
               <input
@@ -6808,7 +6582,7 @@ const TestingModule = () => {
                 No eligible employees found for practical tests yet.
               </div>
             ) : (
-              <div style={{ overflowX: 'auto' }}>
+              <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ backgroundColor: colors.cardAltBg }}>
@@ -6872,118 +6646,21 @@ const TestingModule = () => {
               </div>
             )}
 
-            {totalEligiblePages > 1 && (
-              <div style={{
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                gap: '10px',
-                flexWrap: 'wrap',
-                padding: '14px 16px',
-                backgroundColor: colors.cardBg,
-                borderTop: `1px solid ${colors.border}`
-              }}>
-                <button
-                  onClick={() => setEligibleCurrentPage(prev => Math.max(1, prev - 1))}
-                  disabled={eligibleCurrentPage === 1}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: eligibleCurrentPage === 1 ? colors.border : '#1a1a2e',
-                    color: eligibleCurrentPage === 1 ? colors.textMuted : 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: eligibleCurrentPage === 1 ? 'not-allowed' : 'pointer',
-                    fontWeight: '600',
-                    fontSize: '14px',
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  Previous
-                </button>
-
-                <span style={{
-                  color: colors.text,
-                  fontWeight: '600',
-                  fontSize: '14px',
-                  padding: '0 10px'
-                }}>
-                  Page {eligibleCurrentPage} of {totalEligiblePages} ({eligibleEmployees.length} employees)
-                </span>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ color: colors.textMuted, fontWeight: '600', fontSize: '12px' }}>Go to</span>
-                  <input
-                    type="number"
-                    min="1"
-                    max={totalEligiblePages}
-                    value={eligibleGoToPage}
-                    onChange={(e) => setEligibleGoToPage(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key !== 'Enter') return;
-                      const nextPage = parseInt(eligibleGoToPage, 10);
-                      if (!Number.isFinite(nextPage)) return;
-                      setEligibleCurrentPage(Math.min(totalEligiblePages, Math.max(1, nextPage)));
-                      setEligibleGoToPage('');
-                    }}
-                    style={{
-                      width: '70px',
-                      padding: '6px 10px',
-                      border: `1px solid ${colors.border}`,
-                      borderRadius: '8px',
-                      fontSize: '14px',
-                      textAlign: 'center',
-                      backgroundColor: colors.cardAltBg,
-                      color: colors.text
-                    }}
-                  />
-                  <button
-                    onClick={() => {
-                      const nextPage = parseInt(eligibleGoToPage, 10);
-                      if (!Number.isFinite(nextPage)) return;
-                      setEligibleCurrentPage(Math.min(totalEligiblePages, Math.max(1, nextPage)));
-                      setEligibleGoToPage('');
-                    }}
-                    style={{
-                      padding: '6px 12px',
-                      backgroundColor: '#1a1a2e',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      fontWeight: '600',
-                      fontSize: '13px'
-                    }}
-                  >
-                    Go
-                  </button>
-                </div>
-
-                <button
-                  onClick={() => setEligibleCurrentPage(prev => Math.min(totalEligiblePages, prev + 1))}
-                  disabled={eligibleCurrentPage === totalEligiblePages}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: eligibleCurrentPage === totalEligiblePages ? colors.border : '#1a1a2e',
-                    color: eligibleCurrentPage === totalEligiblePages ? colors.textMuted : 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: eligibleCurrentPage === totalEligiblePages ? 'not-allowed' : 'pointer',
-                    fontWeight: '600',
-                    fontSize: '14px',
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  Next
-                </button>
-              </div>
-            )}
+            <PaginationBar
+              page={eligibleCurrentPage}
+              totalPages={totalEligiblePages}
+              totalItems={eligibleEmployees.length}
+              pageSize={eligibleItemsPerPage}
+              onPageChange={setEligibleCurrentPage}
+              itemLabel="employees"
+            />
           </article>
         )}
 
         {/* Practical Results Table */}
         {practicalActiveTable === 'results' && (
           <article className="panel" style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ overflowX: 'auto' }}>
+            <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #ececf0' }}>
@@ -7128,111 +6805,14 @@ const TestingModule = () => {
               </table>
             </div>
 
-            {totalPracticalPages > 1 && (
-              <div style={{
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                gap: '10px',
-                flexWrap: 'wrap',
-                padding: '14px 16px',
-                backgroundColor: colors.cardBg,
-                borderTop: `1px solid ${colors.border}`
-              }}>
-                <button
-                  onClick={() => setPracticalCurrentPage(prev => Math.max(1, prev - 1))}
-                  disabled={practicalCurrentPage === 1}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: practicalCurrentPage === 1 ? colors.border : '#1a1a2e',
-                    color: practicalCurrentPage === 1 ? colors.textMuted : 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: practicalCurrentPage === 1 ? 'not-allowed' : 'pointer',
-                    fontWeight: '600',
-                    fontSize: '14px',
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  Previous
-                </button>
-
-                <span style={{
-                  color: colors.text,
-                  fontWeight: '600',
-                  fontSize: '14px',
-                  padding: '0 10px'
-                }}>
-                  Page {practicalCurrentPage} of {totalPracticalPages} ({practicalResults.length} results)
-                </span>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ color: colors.textMuted, fontWeight: '600', fontSize: '12px' }}>Go to</span>
-                  <input
-                    type="number"
-                    min="1"
-                    max={totalPracticalPages}
-                    value={practicalGoToPage}
-                    onChange={(e) => setPracticalGoToPage(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key !== 'Enter') return;
-                      const nextPage = parseInt(practicalGoToPage, 10);
-                      if (!Number.isFinite(nextPage)) return;
-                      setPracticalCurrentPage(Math.min(totalPracticalPages, Math.max(1, nextPage)));
-                      setPracticalGoToPage('');
-                    }}
-                    style={{
-                      width: '70px',
-                      padding: '6px 10px',
-                      border: `1px solid ${colors.border}`,
-                      borderRadius: '8px',
-                      fontSize: '14px',
-                      textAlign: 'center',
-                      backgroundColor: colors.cardAltBg,
-                      color: colors.text
-                    }}
-                  />
-                  <button
-                    onClick={() => {
-                      const nextPage = parseInt(practicalGoToPage, 10);
-                      if (!Number.isFinite(nextPage)) return;
-                      setPracticalCurrentPage(Math.min(totalPracticalPages, Math.max(1, nextPage)));
-                      setPracticalGoToPage('');
-                    }}
-                    style={{
-                      padding: '6px 12px',
-                      backgroundColor: '#1a1a2e',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      fontWeight: '600',
-                      fontSize: '13px'
-                    }}
-                  >
-                    Go
-                  </button>
-                </div>
-
-                <button
-                  onClick={() => setPracticalCurrentPage(prev => Math.min(totalPracticalPages, prev + 1))}
-                  disabled={practicalCurrentPage === totalPracticalPages}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: practicalCurrentPage === totalPracticalPages ? colors.border : '#1a1a2e',
-                    color: practicalCurrentPage === totalPracticalPages ? colors.textMuted : 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: practicalCurrentPage === totalPracticalPages ? 'not-allowed' : 'pointer',
-                    fontWeight: '600',
-                    fontSize: '14px',
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  Next
-                </button>
-              </div>
-            )}
+            <PaginationBar
+              page={practicalCurrentPage}
+              totalPages={totalPracticalPages}
+              totalItems={practicalResults.length}
+              pageSize={practicalItemsPerPage}
+              onPageChange={setPracticalCurrentPage}
+              itemLabel="results"
+            />
           </article>
         )}
 
@@ -7309,10 +6889,13 @@ const TestingModule = () => {
                     }}>
                       Employee ID:
                     </label>
-                    <select
+                    <SearchableSelect
                       value={formData.employeeId}
-                      onChange={(e) => {
-                        const selectedId = e.target.value;
+                      required
+                      disabled={editMode}
+                      options={eligibleEmployeeIds}
+                      placeholder="Type to search…"
+                      onChange={(selectedId) => {
                         const selectedEmp = eligibleEmployees.find(emp => String(emp.empId) === String(selectedId));
                         setFormData({
                           ...formData,
@@ -7321,8 +6904,6 @@ const TestingModule = () => {
                           standard: '' // reset — standards depend on the selected employee
                         });
                       }}
-                      required
-                      disabled={editMode}
                       style={{
                         width: '100%',
                         padding: '12px 15px',
@@ -7334,19 +6915,10 @@ const TestingModule = () => {
                         boxSizing: 'border-box',
                         backgroundColor: editMode ? colors.cardAltBg : colors.inputBg,
                         color: colors.text,
-                        cursor: editMode ? 'not-allowed' : 'pointer',
+                        cursor: editMode ? 'not-allowed' : 'text',
                         opacity: editMode ? 0.7 : 1
                       }}
-                      onFocus={e => !editMode && (e.target.style.borderColor = '#1a1a2e')}
-                      onBlur={e => !editMode && (e.target.style.borderColor = colors.inputBorder)}
-                    >
-                      <option value="">Select ID</option>
-                      {eligibleEmployeeIds.map(empId => (
-                        <option key={empId} value={empId}>
-                          {empId}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </div>
                   <div>
                     <label style={{ 
@@ -7358,10 +6930,13 @@ const TestingModule = () => {
                     }}>
                       Employee Name:
                     </label>
-                    <select
+                    <SearchableSelect
                       value={formData.employeeName || ''}
-                      onChange={(e) => {
-                        const selectedName = e.target.value;
+                      required
+                      disabled={editMode}
+                      options={eligibleEmployeeNames}
+                      placeholder="Type to search…"
+                      onChange={(selectedName) => {
                         const selectedEmp = eligibleEmployees.find(emp => emp.empName === selectedName);
                         setFormData({
                           ...formData,
@@ -7370,8 +6945,6 @@ const TestingModule = () => {
                           standard: '' // reset — standards depend on the selected employee
                         });
                       }}
-                      required
-                      disabled={editMode}
                       style={{
                         width: '100%',
                         padding: '12px 15px',
@@ -7383,19 +6956,10 @@ const TestingModule = () => {
                         boxSizing: 'border-box',
                         backgroundColor: editMode ? colors.cardAltBg : colors.inputBg,
                         color: colors.text,
-                        cursor: editMode ? 'not-allowed' : 'pointer',
+                        cursor: editMode ? 'not-allowed' : 'text',
                         opacity: editMode ? 0.7 : 1
                       }}
-                      onFocus={e => !editMode && (e.target.style.borderColor = '#1a1a2e')}
-                      onBlur={e => !editMode && (e.target.style.borderColor = colors.inputBorder)}
-                    >
-                      <option value="">Select Name</option>
-                      {eligibleEmployeeNames.map(empName => (
-                        <option key={empName} value={empName}>
-                          {empName}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </div>
                 </div>
 
@@ -7409,11 +6973,17 @@ const TestingModule = () => {
                   }}>
                     Standard:
                   </label>
-                  <select
+                  <SearchableSelect
                     value={formData.standard}
-                    onChange={(e) => setFormData({ ...formData, standard: e.target.value })}
+                    onChange={(v) => setFormData({ ...formData, standard: v })}
                     required
-                    disabled={editMode}
+                    disabled={editMode || availableStandardsForEmployee.length === 0}
+                    options={availableStandardsForEmployee}
+                    placeholder={
+                      !formData.employeeId
+                        ? 'Select employee first'
+                        : (availableStandardsForEmployee.length === 0 ? 'No pending standards' : 'Type to search…')
+                    }
                     style={{
                       width: '100%',
                       padding: '12px 15px',
@@ -7425,23 +6995,10 @@ const TestingModule = () => {
                       boxSizing: 'border-box',
                       backgroundColor: editMode ? colors.cardAltBg : colors.inputBg,
                       color: colors.text,
-                      cursor: editMode ? 'not-allowed' : 'pointer',
+                      cursor: editMode ? 'not-allowed' : 'text',
                       opacity: editMode ? 0.7 : 1
                     }}
-                    onFocus={e => !editMode && (e.target.style.borderColor = '#1a1a2e')}
-                    onBlur={e => !editMode && (e.target.style.borderColor = colors.inputBorder)}
-                  >
-                    <option value="">
-                      {!formData.employeeId
-                        ? 'Select employee first'
-                        : (availableStandardsForEmployee.length === 0 ? 'No pending standards' : 'Select Standard')}
-                    </option>
-                    {availableStandardsForEmployee.map(stdName => (
-                      <option key={stdName} value={stdName}>
-                        {stdName}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: twoColumnGrid, gap: '15px', marginBottom: '22px' }}>
@@ -7780,8 +7337,7 @@ const TestingModule = () => {
     const [searchType, setSearchType] = useState('id'); // 'id' or 'name'
     const [searchQuery, setSearchQuery] = useState('');
     const [employeeCurrentPage, setEmployeeCurrentPage] = useState(1);
-    const [employeeGoToPage, setEmployeeGoToPage] = useState('');
-    const employeeItemsPerPage = 50;
+    const employeeItemsPerPage = 100;
 
     useEffect(() => setLocalEmployees(employees), [employees]);
 
@@ -7965,9 +7521,11 @@ const TestingModule = () => {
               flexWrap: 'wrap'
             }}>
             <div style={{ minWidth: isMobile ? '100%' : '180px' }}>
-              <select
+              <StyledSelect
                 value={searchType}
-                onChange={(e) => setSearchType(e.target.value)}
+                onChange={setSearchType}
+                options={[]}
+                extraOptions={[{ value: 'id', label: 'Employee ID' }, { value: 'name', label: 'Employee Name' }]}
                 style={{
                   width: '100%',
                   padding: '10px 15px',
@@ -7980,10 +7538,7 @@ const TestingModule = () => {
                   color: colors.text,
                   cursor: 'pointer'
                 }}
-              >
-                <option value="id">Employee ID</option>
-                <option value="name">Employee Name</option>
-              </select>
+              />
             </div>
             <div style={{ flex: '1', minWidth: isMobile ? '100%' : '250px' }}>
               <input
@@ -8062,7 +7617,7 @@ const TestingModule = () => {
             boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
             border: `1px solid ${colors.border}`
           }}>
-            <div style={{ overflowX: 'auto' }}>
+            <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
               <table style={commonStyles.table}>
                 <thead>
                   <tr style={{ backgroundColor: colors.tableHeaderBg, color: 'white' }}>
@@ -8149,111 +7704,14 @@ const TestingModule = () => {
             </table>
             </div>
 
-            {totalEmployeePages > 1 && (
-              <div style={{
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                gap: '10px',
-                flexWrap: 'wrap',
-                padding: '14px 16px',
-                backgroundColor: colors.cardBg,
-                borderTop: `1px solid ${colors.border}`
-              }}>
-                <button
-                  onClick={() => setEmployeeCurrentPage(prev => Math.max(1, prev - 1))}
-                  disabled={employeeCurrentPage === 1}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: employeeCurrentPage === 1 ? colors.border : '#1a1a2e',
-                    color: employeeCurrentPage === 1 ? colors.textMuted : 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: employeeCurrentPage === 1 ? 'not-allowed' : 'pointer',
-                    fontWeight: '600',
-                    fontSize: '14px',
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  Previous
-                </button>
-
-                <span style={{
-                  color: colors.text,
-                  fontWeight: '600',
-                  fontSize: '14px',
-                  padding: '0 10px'
-                }}>
-                  Page {employeeCurrentPage} of {totalEmployeePages} ({filteredEmployees.length} employees)
-                </span>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ color: colors.textMuted, fontWeight: '600', fontSize: '12px' }}>Go to</span>
-                  <input
-                    type="number"
-                    min="1"
-                    max={totalEmployeePages}
-                    value={employeeGoToPage}
-                    onChange={(e) => setEmployeeGoToPage(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key !== 'Enter') return;
-                      const nextPage = parseInt(employeeGoToPage, 10);
-                      if (!Number.isFinite(nextPage)) return;
-                      setEmployeeCurrentPage(Math.min(totalEmployeePages, Math.max(1, nextPage)));
-                      setEmployeeGoToPage('');
-                    }}
-                    style={{
-                      width: '70px',
-                      padding: '6px 10px',
-                      border: `1px solid ${colors.border}`,
-                      borderRadius: '8px',
-                      fontSize: '14px',
-                      textAlign: 'center',
-                      backgroundColor: colors.cardAltBg,
-                      color: colors.text
-                    }}
-                  />
-                  <button
-                    onClick={() => {
-                      const nextPage = parseInt(employeeGoToPage, 10);
-                      if (!Number.isFinite(nextPage)) return;
-                      setEmployeeCurrentPage(Math.min(totalEmployeePages, Math.max(1, nextPage)));
-                      setEmployeeGoToPage('');
-                    }}
-                    style={{
-                      padding: '6px 12px',
-                      backgroundColor: '#1a1a2e',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      fontWeight: '600',
-                      fontSize: '13px'
-                    }}
-                  >
-                    Go
-                  </button>
-                </div>
-
-                <button
-                  onClick={() => setEmployeeCurrentPage(prev => Math.min(totalEmployeePages, prev + 1))}
-                  disabled={employeeCurrentPage === totalEmployeePages}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: employeeCurrentPage === totalEmployeePages ? colors.border : '#1a1a2e',
-                    color: employeeCurrentPage === totalEmployeePages ? colors.textMuted : 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: employeeCurrentPage === totalEmployeePages ? 'not-allowed' : 'pointer',
-                    fontWeight: '600',
-                    fontSize: '14px',
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  Next
-                </button>
-              </div>
-            )}
+            <PaginationBar
+              page={employeeCurrentPage}
+              totalPages={totalEmployeePages}
+              totalItems={filteredEmployees.length}
+              pageSize={employeeItemsPerPage}
+              onPageChange={setEmployeeCurrentPage}
+              itemLabel="employees"
+            />
           </div>
 
         {showModal && (

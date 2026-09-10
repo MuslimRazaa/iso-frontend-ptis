@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { BsCalendar2Date, BsClipboardData, BsCheckCircle, BsHourglassSplit, BsClock } from "react-icons/bs"
+import { BsCalendar2Date, BsClipboardData } from "react-icons/bs"
 import { LuUserRoundCheck } from "react-icons/lu"
 import { IoStatsChartSharp, IoMapOutline } from "react-icons/io5"
 import { MdOutlineHealthAndSafety } from "react-icons/md"
@@ -20,10 +20,10 @@ const TILE_BG = '#fdf2f3'   // soft brand tint used for every icon tile
 // the wording the register itself uses, except for Pending, which also covers
 // rows whose status was never set — the same rows this card counts.
 const STAT_META = [
-  { key: 'total',      label: 'Total Jobs',  Icon: BsClipboardData,   status: 'all' },
-  { key: 'closed',     label: 'Closed',      Icon: BsCheckCircle,     status: 'closed' },
-  { key: 'inProgress', label: 'In Progress', Icon: BsHourglassSplit,  status: 'in_progress' },
-  { key: 'pending',    label: 'Pending',     Icon: BsClock,           status: 'pending' },
+  { key: 'total',      label: 'Total Jobs',  status: 'all',         helper: 'All entries',       tone: '' },
+  { key: 'closed',     label: 'Closed',      status: 'closed',      helper: 'Completed jobs',    tone: '' },
+  { key: 'inProgress', label: 'In Progress', status: 'in_progress', helper: 'Currently active',  tone: '' },
+  { key: 'pending',    label: 'Pending',     status: 'pending',     helper: 'Needs action',      tone: 'warning' },
 ]
 
 /* ── Module capability cards ─────────────────────────────── */
@@ -191,53 +191,21 @@ function JLRHome() {
           margin: '0 0 16px', fontSize: 11, fontWeight: 700,
           textTransform: 'uppercase', letterSpacing: '0.15em', color: SUBTLE,
         }}>Quick Stats</p>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-          gap: 16,
-        }}>
-          {STAT_META.map(({ key, label, Icon, status }) => (
+        <section className="lms-stat-grid">
+          {STAT_META.map(({ key, label, status, helper, tone }) => (
             <Link
               key={key}
               to={`${base}/entries?status=${encodeURIComponent(status)}`}
               title={`Open the job log filtered to ${label}`}
+              className={`stat-card ${tone || ''}`}
               style={{ textDecoration: 'none', color: 'inherit' }}
             >
-            <div style={{
-              background: '#ffffff', border: `1px solid ${BORDER}`,
-              borderRadius: 18, padding: '22px 24px',
-              display: 'flex', alignItems: 'center', gap: 18,
-              boxShadow: '0 2px 12px rgba(0,0,0,0.04)',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-              cursor: 'pointer',
-              height: '100%', boxSizing: 'border-box',
-            }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.09)' }}
-              onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.04)' }}
-            >
-              <div style={{
-                width: 48, height: 48, borderRadius: 13, flexShrink: 0,
-                background: TILE_BG, color: BRAND,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 22,
-              }}>
-                <Icon />
-              </div>
-              <div>
-                <div style={{ fontSize: 30, fontWeight: 800, color: INK, lineHeight: 1 }}>
-                  {loading ? '—' : fmt(counts[key])}
-                </div>
-                <div style={{
-                  fontSize: 11, fontWeight: 700, color: MUTED, marginTop: 5,
-                  textTransform: 'uppercase', letterSpacing: '0.1em',
-                }}>
-                  {label}
-                </div>
-              </div>
-            </div>
+              <p>{label}</p>
+              <h3>{loading ? '—' : fmt(counts[key])}</h3>
+              <span>{helper}</span>
             </Link>
           ))}
-        </div>
+        </section>
       </div>
 
       {/* ══ FEATURES GRID ════════════════════════════════════ */}

@@ -11,6 +11,7 @@ import {
 } from '../utils/pdfCoords'
 import { FIELD_TYPES, OWNERS, blankField, hasOptions } from '../utils/fieldTypes'
 import { detectOptionMarksOnPage } from '../utils/parsePdf'
+import StyledSelect from '../../components/StyledSelect'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Field position editor.
@@ -590,13 +591,13 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
                 />
 
                 <label style={S.label}>Type</label>
-                <select
+                <StyledSelect
                   value={draft.type}
-                  onChange={(e) => setDraft(d => ({ ...d, type: e.target.value }))}
+                  onChange={(v) => setDraft(d => ({ ...d, type: v }))}
+                  options={[]}
+                  extraOptions={FIELD_TYPES}
                   style={S.input}
-                >
-                  {FIELD_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </select>
+                />
 
                 {hasOptions(draft.type) && (
                   <>
@@ -612,13 +613,13 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
                 )}
 
                 <label style={S.label}>Filled by</label>
-                <select
+                <StyledSelect
                   value={draft.owner}
-                  onChange={(e) => setDraft(d => ({ ...d, owner: e.target.value }))}
+                  onChange={(v) => setDraft(d => ({ ...d, owner: v }))}
+                  options={[]}
+                  extraOptions={OWNERS}
                   style={S.input}
-                >
-                  {OWNERS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
+                />
 
                 <label style={{ ...S.label, display: 'flex', alignItems: 'center', gap: 6, textTransform: 'none' }}>
                   <input
@@ -734,15 +735,17 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
                   style={S.input}
                 />
                 <label style={S.label}>Alignment</label>
-                <select
+                <StyledSelect
                   value={selectedCoords.align}
-                  onChange={(e) => patchCoords(selected.id, { align: e.target.value })}
+                  onChange={(v) => patchCoords(selected.id, { align: v })}
+                  options={[]}
+                  extraOptions={[
+                    { value: 'left', label: 'Left' },
+                    { value: 'center', label: 'Center' },
+                    { value: 'right', label: 'Right' },
+                  ]}
                   style={S.input}
-                >
-                  <option value="left">Left</option>
-                  <option value="center">Center</option>
-                  <option value="right">Right</option>
-                </select>
+                />
 
                 <label style={S.label}>Box size &amp; position (pt)</label>
                 <div style={S.geomGrid}>

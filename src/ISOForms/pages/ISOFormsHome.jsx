@@ -68,10 +68,10 @@ function ISOFormsHome() {
   ), [entries])
 
   const STAT_META = [
-    { key: 'total',    label: 'Total Forms' },
-    { key: 'pending',  label: 'Pending' },
-    { key: 'approved', label: 'Approved' },
-    { key: 'rejected', label: 'Rejected' },
+    { key: 'total',    label: 'Total Forms', status: null,       helper: 'All submissions', tone: '' },
+    { key: 'pending',  label: 'Pending',     status: 'pending',  helper: 'Awaiting decision', tone: 'warning' },
+    { key: 'approved', label: 'Approved',    status: 'approved', helper: 'Signed off',       tone: '' },
+    { key: 'rejected', label: 'Rejected',    status: 'rejected', helper: 'Sent back',        tone: 'accent' },
   ]
 
   return (
@@ -121,17 +121,21 @@ function ISOFormsHome() {
       {/* ══ STATS ROW ════════════════════════════════════════ */}
       <div>
         <p style={{ margin: '0 0 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.15em', color: SUBTLE }}>Quick Stats</p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
-          {STAT_META.map(({ key, label }) => (
-            <div key={key} style={{
-              background: '#ffffff', border: `1px solid ${BORDER}`, borderRadius: 18,
-              padding: '22px 24px', boxShadow: '0 2px 12px rgba(0,0,0,0.04)',
-            }}>
-              <div style={{ fontSize: 30, fontWeight: 800, color: INK, lineHeight: 1 }}>{loading ? '—' : fmt(counts[key])}</div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, marginTop: 5, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{label}</div>
-            </div>
+        <section className="lms-stat-grid">
+          {STAT_META.map(({ key, label, status, helper, tone }) => (
+            <Link
+              key={key}
+              to={status ? `${base}/entries?status=${encodeURIComponent(status)}` : `${base}/entries`}
+              title={`Open ${label} forms`}
+              className={`stat-card ${tone || ''}`}
+              style={{ textDecoration: 'none', color: 'inherit' }}
+            >
+              <p>{label}</p>
+              <h3>{loading ? '—' : fmt(counts[key])}</h3>
+              <span>{helper}</span>
+            </Link>
           ))}
-        </div>
+        </section>
       </div>
 
       {/* ══ RECENT ACTIVITY ══════════════════════════════════ */}

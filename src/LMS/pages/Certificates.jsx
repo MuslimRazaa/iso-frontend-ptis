@@ -1,5 +1,12 @@
 import React, { useState } from 'react'
 import { FileText } from 'lucide-react'
+import SearchableSelect from '../../components/SearchableSelect'
+
+const formSelectStyle = {
+  border: '1px solid #dcdce3', borderRadius: 14, padding: '12px 14px',
+  background: '#f9f9fb', color: '#14141c', fontFamily: 'inherit', fontSize: 14,
+  cursor: 'pointer', width: '100%', boxSizing: 'border-box',
+}
 
 const initialPassedTests = [
   {
@@ -282,14 +289,14 @@ function Certificates() {
             <div className="form-row">
               <label>
                 <span>Select Employee *</span>
-                <select value={uploadForm.employeeId} onChange={(e) => handleUploadChange('employeeId', e.target.value)} required>
-                  <option value="">Choose employee</option>
-                  {employeeOptions.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.name} ({emp.id})
-                    </option>
-                  ))}
-                </select>
+                <SearchableSelect
+                  value={uploadForm.employeeId}
+                  onChange={(v) => handleUploadChange('employeeId', v)}
+                  options={employeeOptions.map((emp) => ({ value: emp.id, label: `${emp.name} (${emp.id})` }))}
+                  emptyOptionLabel="Choose employee"
+                  placeholder="Type to search…"
+                  style={formSelectStyle}
+                />
               </label>
               <label>
                 <span>Certificate Name *</span>

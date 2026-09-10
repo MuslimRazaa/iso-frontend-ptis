@@ -1,7 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Search, Calendar, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, Calendar, X } from 'lucide-react'
 import { API_ENDPOINTS } from '../config/api'
+import PaginationBar from './PaginationBar'
+import StyledSelect from './StyledSelect'
+import SearchableSelect from './SearchableSelect'
 
 // One viewer, reused by JLR and ISO Forms: an audit row is the same shape
 // (who, did what, to what, when) regardless of which module it came from, and
@@ -47,6 +50,8 @@ function summariseDetails(row) {
 
 const ENTITY_LABEL = {
   entry: 'Form', template: 'Template', job_log_entry: 'Job Log Entry',
+  standard: 'Standard', question: 'Question', result: 'Test Result',
+  certificate: 'Certificate', employee: 'Employee',
 }
 
 function AuditLogView({ module, title, subtitle, actions, backTo }) {
@@ -55,28 +60,39 @@ function AuditLogView({ module, title, subtitle, actions, backTo }) {
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const limit = 50
+  const limit = 100
 
   const [action, setAction] = useState('')
   const [actorName, setActorName] = useState('')
+  const [actorOptions, setActorOptions] = useState([])
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [search, setSearch] = useState('')
 
-  // Changing a filter that affects the server fetch (action / date range /
-  // search) goes back to page 1 — set right in the handler that changes the
-  // filter (an event handler, not an effect), so there is nothing to
-  // synchronize after the fact. `actorName` filters only the page already on
-  // screen, so it does not touch pagination.
+  // Changing any filter that affects the server fetch goes back to page 1 —
+  // set right in the handler that changes the filter (an event handler, not
+  // an effect), so there is nothing to synchronize after the fact.
   const setFilterAndResetPage = (setter) => (value) => { setter(value); setPage(1) }
   const onActionChange = setFilterAndResetPage(setAction)
+  const onActorNameChange = setFilterAndResetPage(setActorName)
   const onDateFromChange = setFilterAndResetPage(setDateFrom)
   const onDateToChange = setFilterAndResetPage(setDateTo)
   const onSearchChange = setFilterAndResetPage(setSearch)
 
+  // Every name that has ever appeared in this module's Who column — the full
+  // list the Filter by Who dropdown offers, not just whatever page of rows
+  // happens to be on screen right now.
+  useEffect(() => {
+    fetch(`${API_ENDPOINTS.AUDIT_LOG}/actors?module=${encodeURIComponent(module)}`)
+      .then(res => (res.ok ? res.json() : Promise.reject()))
+      .then(json => setActorOptions(Array.isArray(json.actors) ? json.actors : []))
+      .catch(() => setActorOptions([]))
+  }, [module])
+
   useEffect(() => {
     const params = new URLSearchParams({ module, page: String(page), limit: String(limit) })
     if (action) params.set('action', action)
+    if (actorName) params.set('actorName', actorName)
     if (dateFrom) params.set('dateFrom', dateFrom)
     if (dateTo) params.set('dateTo', dateTo)
     if (search.trim()) params.set('search', search.trim())
@@ -91,16 +107,7 @@ function AuditLogView({ module, title, subtitle, actions, backTo }) {
       })
       .catch(() => setError('Could not load the audit log. The backend may not have this feature deployed yet.'))
       .finally(() => setLoading(false))
-  }, [module, action, dateFrom, dateTo, search, page])
-
-  // actorName filters client-side against the page just fetched — a full-text
-  // "who" search across the whole table would need its own backend query, and
-  // the visible page is what an admin is actually scanning at any moment.
-  const visibleRows = useMemo(() => {
-    const q = actorName.trim().toLowerCase()
-    if (!q) return rows
-    return rows.filter(r => (r.actor_name || '').toLowerCase().includes(q))
-  }, [rows, actorName])
+  }, [module, action, actorName, dateFrom, dateTo, search, page])
 
   const totalPages = Math.max(1, Math.ceil(total / limit))
   const hasActiveFilters = Boolean(action || actorName || dateFrom || dateTo || search)
@@ -124,13 +131,21 @@ function AuditLogView({ module, title, subtitle, actions, backTo }) {
             style={{ ...inputStyle, width: '100%', paddingLeft: 40, boxSizing: 'border-box' }}
           />
         </div>
-        <select value={action} onChange={e => onActionChange(e.target.value)} style={{ ...inputStyle, cursor: 'pointer', minWidth: 150 }}>
-          <option value="">All actions</option>
-          {actions.map(a => <option key={a} value={a}>{a.charAt(0).toUpperCase() + a.slice(1)}</option>)}
-        </select>
-        <input
-          type="text" placeholder="Filter by who…" value={actorName}
-          onChange={e => setActorName(e.target.value)}
+        <StyledSelect
+          value={action}
+          onChange={onActionChange}
+          options={[]}
+          extraOptions={actions.map(a => ({ value: a, label: a.charAt(0).toUpperCase() + a.slice(1) }))}
+          emptyOptionLabel="All actions"
+          placeholder="All actions"
+          style={{ ...inputStyle, cursor: 'pointer', minWidth: 150 }}
+        />
+        <SearchableSelect
+          value={actorName}
+          onChange={onActorNameChange}
+          options={actorOptions}
+          emptyOptionLabel="All people"
+          placeholder="Filter by who…"
           style={{ ...inputStyle, minWidth: 160 }}
         />
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -170,10 +185,10 @@ function AuditLogView({ module, title, subtitle, actions, backTo }) {
               </tr>
             </thead>
             <tbody>
-              {!loading && visibleRows.length === 0 && (
+              {!loading && rows.length === 0 && (
                 <tr><td colSpan={5} style={{ padding: '40px 20px', textAlign: 'center', color: '#9a9aaa' }}>No activity recorded yet.</td></tr>
               )}
-              {visibleRows.map(row => (
+              {rows.map(row => (
                 <tr key={row.id} style={{ borderTop: '1px solid #ececf0' }}>
                   <td style={{ padding: '14px 20px', color: '#595966', whiteSpace: 'nowrap' }}>
                     {row.created_at ? new Date(row.created_at).toLocaleString() : '—'}
@@ -190,17 +205,14 @@ function AuditLogView({ module, title, subtitle, actions, backTo }) {
             </tbody>
           </table>
         </div>
-        {totalPages > 1 && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '16px 20px', borderTop: '1px solid #ececf0' }}>
-            <button type="button" className="ghost-btn small" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>
-              <ChevronLeft size={15} />
-            </button>
-            <span style={{ fontSize: 13, color: '#7a7a8c' }}>Page {page} of {totalPages}</span>
-            <button type="button" className="ghost-btn small" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>
-              <ChevronRight size={15} />
-            </button>
-          </div>
-        )}
+        <PaginationBar
+          page={page}
+          totalPages={totalPages}
+          totalItems={total}
+          pageSize={limit}
+          onPageChange={setPage}
+          itemLabel="records"
+        />
       </article>
     </div>
   )

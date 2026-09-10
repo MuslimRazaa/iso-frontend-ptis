@@ -4,6 +4,13 @@ import { Pencil, Trash2 } from 'lucide-react'
 import axios from 'axios'
 import { API_ENDPOINTS } from '../../config/api'
 import useLmsBase from '../useLmsBase'
+import StyledSelect from '../../components/StyledSelect'
+
+const formSelectStyle = {
+  border: '1px solid #dcdce3', borderRadius: 14, padding: '12px 14px',
+  background: '#f9f9fb', color: '#14141c', fontFamily: 'inherit', fontSize: 14,
+  cursor: 'pointer', width: '100%', boxSizing: 'border-box',
+}
 
 function AllEmployees() {
   const lmsBase = useLmsBase()
@@ -274,48 +281,35 @@ function AllEmployees() {
               <div className="form-row">
                 <label>
                   <span>Department *</span>
-                  <select
+                  <StyledSelect
                     value={formState.department}
-                    onChange={(e) => handleChange('department', e.target.value)}
-                    required
-                  >
-                    <option value="">Select department</option>
-                    {departments.map((dept) => (
-                      <option key={dept.id} value={dept.name}>
-                        {dept.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(v) => handleChange('department', v)}
+                    options={departments.map((dept) => dept.name)}
+                    emptyOptionLabel="Select department"
+                    style={formSelectStyle}
+                  />
                 </label>
               </div>
 
               <label>
                 <span>Location *</span>
-                <select
+                <StyledSelect
                   value={formState.location}
-                  onChange={(e) => handleChange('location', e.target.value)}
-                  required
-                >
-                  <option value="">Select location</option>
-                  {locations.map((loc) => (
-                    <option key={loc.id} value={loc.name}>
-                      {loc.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(v) => handleChange('location', v)}
+                  options={locations.map((loc) => loc.name)}
+                  emptyOptionLabel="Select location"
+                  style={formSelectStyle}
+                />
               </label>
 
               <label>
                 <span>Status *</span>
-                <select
+                <StyledSelect
                   value={formState.status}
-                  onChange={(e) => handleChange('status', e.target.value)}
-                  required
-                >
-                  <option value="Active">Active</option>
-                  <option value="Blocked">Blocked</option>
-                  <option value="Inactive">Inactive</option>
-                </select>
+                  onChange={(v) => handleChange('status', v)}
+                  options={['Active', 'Blocked', 'Inactive']}
+                  style={formSelectStyle}
+                />
               </label>
 
               <div className="modal-actions">

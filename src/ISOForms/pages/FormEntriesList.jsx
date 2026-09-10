@@ -4,6 +4,11 @@ import { Search, Calendar, X, Trash2, Pencil } from 'lucide-react'
 import { API_ENDPOINTS } from '../../config/api'
 import { getCurrentEmployeeId } from '../utils/currentEmployee'
 import { getOfflineEntries, deleteOfflineEntry } from '../utils/offlineStore'
+import PaginationBar from '../../components/PaginationBar'
+import StyledSelect from '../../components/StyledSelect'
+import SearchableSelect from '../../components/SearchableSelect'
+
+const PAGE_SIZE = 100
 
 const STATUS_COLORS = {
   pending:  { bg: '#fff7e6', color: '#b54708' },
@@ -41,6 +46,12 @@ function FormEntriesList() {
 
   const searchParams = new URLSearchParams(location.search)
   const pendingMine = searchParams.get('filter') === 'pending-mine'
+  // Landed on from a stats card (?status=pending/approved/rejected) — preset
+  // the filter so the number that was clicked is exactly what's now listed.
+  const statusFromUrl = searchParams.get('status')
+  const initialStatusFilter = pendingMine
+    ? 'pending'
+    : (['pending', 'approved', 'rejected'].includes(statusFromUrl) ? statusFromUrl : '')
 
   const isAdmin = !isUserSide || (() => {
     try { return JSON.parse(localStorage.getItem('userPermissions') || '{}').iso_forms_admin === true } catch { return false }
@@ -54,13 +65,26 @@ function FormEntriesList() {
 
   // Filters
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState(pendingMine ? 'pending' : '')
+  const [statusFilter, setStatusFilter] = useState(initialStatusFilter)
   const [templateFilter, setTemplateFilter] = useState('')
   const [createdByFilter, setCreatedByFilter] = useState('')
   const [relatedToFilter, setRelatedToFilter] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [onlyMine, setOnlyMine] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+
+  // Changing a filter goes back to page 1 — set right in the handler that
+  // changes the filter, not in an effect reacting to the filter afterwards.
+  const setFilterAndResetPage = (setter) => (value) => { setter(value); setCurrentPage(1) }
+  const onSearchChange = setFilterAndResetPage(setSearch)
+  const onTemplateFilterChange = setFilterAndResetPage(setTemplateFilter)
+  const onStatusFilterChange = setFilterAndResetPage(setStatusFilter)
+  const onCreatedByFilterChange = setFilterAndResetPage(setCreatedByFilter)
+  const onRelatedToFilterChange = setFilterAndResetPage(setRelatedToFilter)
+  const onDateFromChange = setFilterAndResetPage(setDateFrom)
+  const onDateToChange = setFilterAndResetPage(setDateTo)
+  const onOnlyMineChange = setFilterAndResetPage(setOnlyMine)
 
   const effectiveOnlyMine = pendingMine && !isAdmin ? true : onlyMine
 
@@ -150,6 +174,13 @@ function FormEntriesList() {
     })
   }, [entries, search, templateFilter, createdByFilter, relatedToFilter, dateFrom, dateTo])
 
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
+  const safePage = Math.min(currentPage, totalPages)
+  const paginatedRows = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE
+    return rows.slice(start, start + PAGE_SIZE)
+  }, [rows, safePage])
+
   // Who may remove a submitted form: its author while it is still pending, and
   // an ISO Forms admin at any time — the same rule as editing one. A decided
   // form is the record that was signed off, so removing it is deliberately an
@@ -192,6 +223,7 @@ function FormEntriesList() {
     setDateTo('')
     if (!pendingMine) setStatusFilter('')
     setOnlyMine(false)
+    setCurrentPage(1)
   }
 
   const hasActiveFilters = search || templateFilter || createdByFilter || relatedToFilter || dateFrom || dateTo || onlyMine || (statusFilter && !pendingMine)
@@ -232,54 +264,55 @@ function FormEntriesList() {
             style={{ ...inputStyle, paddingLeft: 40, width: '100%', boxSizing: 'border-box' }}
             placeholder="Search forms…"
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => onSearchChange(e.target.value)}
           />
         </div>
 
         {/* Template / Form name */}
-        <select
+        <StyledSelect
           style={{ ...inputStyle, minWidth: 160, cursor: 'pointer' }}
           value={templateFilter}
-          onChange={e => setTemplateFilter(e.target.value)}
-        >
-          <option value="">All Forms</option>
-          {templateOptions.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
+          onChange={onTemplateFilterChange}
+          options={templateOptions}
+          emptyOptionLabel="All Forms"
+        />
 
         {/* Status */}
         {!pendingMine && (
-          <select
+          <StyledSelect
             style={{ ...inputStyle, minWidth: 140, cursor: 'pointer' }}
             value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
-          >
-            <option value="">All Statuses</option>
-            <option value="pending">Pending</option>
-            <option value="approved">Approved</option>
-            <option value="rejected">Rejected</option>
-          </select>
+            onChange={onStatusFilterChange}
+            options={[]}
+            extraOptions={[
+              { value: 'pending', label: 'Pending' },
+              { value: 'approved', label: 'Approved' },
+              { value: 'rejected', label: 'Rejected' },
+            ]}
+            emptyOptionLabel="All Statuses"
+          />
         )}
 
         {/* Created By */}
-        <select
-          style={{ ...inputStyle, minWidth: 150, cursor: 'pointer' }}
+        <SearchableSelect
+          style={{ ...inputStyle, minWidth: 150, cursor: 'text' }}
           value={createdByFilter}
-          onChange={e => setCreatedByFilter(e.target.value)}
-        >
-          <option value="">All Created By</option>
-          {createdByOptions.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
+          onChange={onCreatedByFilterChange}
+          options={createdByOptions}
+          emptyOptionLabel="All Created By"
+          placeholder="Type to search…"
+        />
 
         {/* Related To */}
         {(!pendingMine || isAdmin) && (
-          <select
-            style={{ ...inputStyle, minWidth: 150, cursor: 'pointer' }}
+          <SearchableSelect
+            style={{ ...inputStyle, minWidth: 150, cursor: 'text' }}
             value={relatedToFilter}
-            onChange={e => setRelatedToFilter(e.target.value)}
-          >
-            <option value="">All Related To</option>
-            {relatedToOptions.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
+            onChange={onRelatedToFilterChange}
+            options={relatedToOptions}
+            emptyOptionLabel="All Related To"
+            placeholder="Type to search…"
+          />
         )}
 
         {/* Date range */}
@@ -292,7 +325,7 @@ function FormEntriesList() {
             value={dateFrom}
             max={dateTo || undefined}
             style={{ ...inputStyle, padding: '10px 10px', minWidth: 0, cursor: 'pointer' }}
-            onChange={e => setDateFrom(e.target.value)}
+            onChange={e => onDateFromChange(e.target.value)}
           />
           <span style={{ fontSize: 12, fontWeight: 600, color: '#7a7a8c' }}>To</span>
           <input
@@ -300,7 +333,7 @@ function FormEntriesList() {
             value={dateTo}
             min={dateFrom || undefined}
             style={{ ...inputStyle, padding: '10px 10px', minWidth: 0, cursor: 'pointer' }}
-            onChange={e => setDateTo(e.target.value)}
+            onChange={e => onDateToChange(e.target.value)}
           />
         </div>
 
@@ -309,7 +342,7 @@ function FormEntriesList() {
             would only ever have taken things away. */}
         {isAdmin && (
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: '#595966', whiteSpace: 'nowrap', cursor: 'pointer' }}>
-            <input type="checkbox" checked={effectiveOnlyMine} onChange={e => setOnlyMine(e.target.checked)} />
+            <input type="checkbox" checked={effectiveOnlyMine} onChange={e => onOnlyMineChange(e.target.checked)} />
             Only mine
           </label>
         )}
@@ -362,7 +395,7 @@ function FormEntriesList() {
               </tr>
             </thead>
             <tbody>
-              {rows.map(entry => (
+              {paginatedRows.map(entry => (
                 <tr key={entry.id} style={{ borderTop: '1px solid #ececf0' }}>
                   <td style={{ padding: '16px 20px', fontWeight: 700, color: '#14141c' }}>{entry.template_name || `Template #${entry.template_id}`}</td>
                   <td style={{ padding: '16px 20px', color: '#595966' }}>{entry.created_by_name || entry.created_by || '—'}</td>
@@ -400,6 +433,14 @@ function FormEntriesList() {
             </tbody>
           </table>
         )}
+        <PaginationBar
+          page={safePage}
+          totalPages={totalPages}
+          totalItems={rows.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setCurrentPage}
+          itemLabel={pendingMine ? 'pending approvals' : 'forms'}
+        />
       </article>
     </div>
   )

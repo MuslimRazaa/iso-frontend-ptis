@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useSearchParams } from 'react-router-dom'
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api'
+import PaginationBar from '../../components/PaginationBar'
+import StyledSelect from '../../components/StyledSelect'
 import { BsBriefcase, BsBoxSeam, BsWallet2, BsLaptop, BsClipboardData, BsPencilSquare } from 'react-icons/bs'
 import { MdOutlineHealthAndSafety } from 'react-icons/md'
 import {
@@ -858,8 +860,6 @@ function JobLogDescription() {
   const [dateFrom, setDateFrom] = useState('') // entry-date range filter (inclusive)
   const [dateTo, setDateTo] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
-  const [openSelect, setOpenSelect] = useState(null)
-  const selectClickIntent = useRef({ status: false, source: false })
   const csvInputRef = useRef(null)
 
   /* ── CSV / Excel export (admin) ─────────────────────────── */
@@ -1114,16 +1114,9 @@ function JobLogDescription() {
   const paginatedEntries = useMemo(() =>
     filteredEntries.slice(pageStartIdx, pageStartIdx + PAGE_SIZE),
     [filteredEntries, pageStartIdx])
-  const pageStart = totalEntries === 0 ? 0 : pageStartIdx + 1
-  const pageEnd = totalEntries === 0 ? 0 : pageStartIdx + paginatedEntries.length
 
   useEffect(() => { setCurrentPage(1) }, [searchTerm, statusFilter, sourceFilter, sortBy, dateFrom, dateTo])
   useEffect(() => { if (currentPage !== safePage) setCurrentPage(safePage) }, [currentPage, safePage])
-
-  const handleSelectOpen = n => setOpenSelect(n)
-  const handleSelectClose = n => { selectClickIntent.current[n] = false; setOpenSelect(p => p === n ? null : p) }
-  const handleSelectPD = n => { if (openSelect === n) { selectClickIntent.current[n] = true; return } selectClickIntent.current[n] = false; handleSelectOpen(n) }
-  const handleSelectClick = n => { if (selectClickIntent.current[n]) handleSelectClose(n) }
 
   const openAddModal = () => {
     setModalMode('add'); setEditingId(null)
@@ -1318,23 +1311,34 @@ function JobLogDescription() {
       onClick={clickable ? () => applyStatusFilter(filterValue) : undefined}
       title={clickable ? `Show only ${label}` : undefined}
       style={{
-      flex: '1 1 140px',
+      flex: '1 1 180px',
       background: T.statCardBg,
       border: active ? `2px solid ${accent}` : T.statBorderFn(accent),
-      borderRadius: 16,
-      padding: '16px 20px',
-      display: 'flex', flexDirection: 'column', gap: 4,
+      borderRadius: 20,
+      padding: 24,
+      minHeight: 140,
+      boxSizing: 'border-box',
+      display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4,
       boxShadow: T.statCardShadow(accent),
       cursor: clickable ? 'pointer' : 'default',
-      transition: 'filter 0.25s ease, opacity 0.25s ease, border-color 0.2s ease',
+      transition: 'filter 0.25s ease, opacity 0.25s ease, border-color 0.2s ease, transform 0.2s ease',
       ...(dimmed ? { filter: 'grayscale(1)', opacity: 0.45 } : null),
-    }}>
+    }}
+      onMouseEnter={clickable ? (e) => {
+        if (!active) e.currentTarget.style.border = `2px solid ${accent}`
+        e.currentTarget.style.transform = 'translateY(-2px)'
+      } : undefined}
+      onMouseLeave={clickable ? (e) => {
+        if (!active) e.currentTarget.style.border = T.statBorderFn(accent)
+        e.currentTarget.style.transform = ''
+      } : undefined}
+    >
       <span style={{
         fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
         letterSpacing: '0.12em', color: accent,
         display: 'inline-flex', alignItems: 'center', gap: 6
       }}>{Icon && <Icon size={13} />}{label}</span>
-      <span style={{ fontSize: 28, fontWeight: 800, color: accent }}>{value}</span>
+      <span style={{ fontSize: 34, fontWeight: 800, color: accent }}>{value}</span>
     </div>
     )
   }
@@ -1350,6 +1354,21 @@ function JobLogDescription() {
     transition: 'all 0.2s ease',
     outline: 'none',
     fontFamily: 'inherit',
+  }
+
+  // Matches the plain .modal-form select CSS (style.css) — the trigger
+  // button for a StyledSelect standing in for one of those <select>s needs
+  // that same look inline, since the CSS rule only targets the <select> tag.
+  const modalSelectStyle = {
+    border: '1px solid #dcdce3',
+    borderRadius: 14,
+    padding: '12px 14px',
+    background: '#f9f9fb',
+    color: '#14141c',
+    fontFamily: 'inherit',
+    fontSize: 14,
+    cursor: 'pointer',
+    width: '100%',
   }
 
   return (
@@ -1534,43 +1553,38 @@ function JobLogDescription() {
           />
         </div>
         {/* Status filter */}
-        <select
+        <StyledSelect
           style={{ ...inputStyle, minWidth: 160, cursor: 'pointer' }}
           value={statusFilter}
-          onChange={e => { setStatusFilter(e.target.value); handleSelectClose('status') }}
-          onPointerDown={() => handleSelectPD('status')}
-          onClick={() => handleSelectClick('status')}
-          onBlur={() => handleSelectClose('status')}
-        >
-          <option value="all">All Status</option>
-          <option value={STATUS_PENDING_ANY}>Pending / not set</option>
-          {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
+          onChange={setStatusFilter}
+          options={statusOptions}
+          extraOptions={[{ value: STATUS_PENDING_ANY, label: 'Pending / not set' }]}
+          emptyOptionLabel="All Status"
+          emptyOptionValue="all"
+        />
         {/* Region filter */}
-        <select
+        <StyledSelect
           style={{ ...inputStyle, minWidth: 160, cursor: 'pointer' }}
           value={sourceFilter}
-          onChange={e => { setSourceFilter(e.target.value); handleSelectClose('source') }}
-          onPointerDown={() => handleSelectPD('source')}
-          onClick={() => handleSelectClick('source')}
-          onBlur={() => handleSelectClose('source')}
-        >
-          <option value="all">All Regions</option>
-          {sourceOptions.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
+          onChange={setSourceFilter}
+          options={sourceOptions}
+          emptyOptionLabel="All Regions"
+          emptyOptionValue="all"
+        />
         {/* Sort */}
-        <select
+        <StyledSelect
           style={{ ...inputStyle, minWidth: 180, cursor: 'pointer' }}
           value={sortBy}
-          onChange={e => setSortBy(e.target.value)}
-          title="Sort entries"
-        >
-          <option value="entryDesc">Entry Date — Newest first</option>
-          <option value="entryAsc">Entry Date — Oldest first</option>
-          <option value="sNoDesc">S# — High to Low</option>
-          <option value="sNoAsc">S# — Low to High</option>
-          <option value="clientAsc">Client — A to Z</option>
-        </select>
+          onChange={setSortBy}
+          options={[]}
+          extraOptions={[
+            { value: 'entryDesc', label: 'Entry Date — Newest first' },
+            { value: 'entryAsc', label: 'Entry Date — Oldest first' },
+            { value: 'sNoDesc', label: 'S# — High to Low' },
+            { value: 'sNoAsc', label: 'S# — Low to High' },
+            { value: 'clientAsc', label: 'Client — A to Z' },
+          ]}
+        />
         {/* Entry-date range */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} title="Filter by entry date">
           <span style={{ fontSize: 12, fontWeight: 600, color: T.clearBtnColor, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Calendar size={13} /> From</span>
@@ -1756,23 +1770,14 @@ function JobLogDescription() {
         </div>
 
         {/* Pagination */}
-        <div className="all-records-pagination">
-          <div className="all-records-pagination-info">
-            <span>Showing <strong>{pageStart}</strong>–<strong>{pageEnd}</strong> of <strong>{totalEntries}</strong> entries</span>
-            <span className="all-records-pagination-limit">Rows per page: {PAGE_SIZE}</span>
-          </div>
-          <div className="all-records-pagination-controls">
-            <button type="button" className="ghost-btn pagination-btn"
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={totalEntries === 0 || safePage === 1}>← Previous</button>
-            <span className="all-records-pagination-page">
-              Page <strong>{safePage}</strong> of <strong>{totalPages}</strong>
-            </span>
-            <button type="button" className="ghost-btn pagination-btn"
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={totalEntries === 0 || safePage === totalPages}>Next →</button>
-          </div>
-        </div>
+        <PaginationBar
+          page={safePage}
+          totalPages={totalPages}
+          totalItems={totalEntries}
+          pageSize={PAGE_SIZE}
+          onPageChange={setCurrentPage}
+          itemLabel="entries"
+        />
       </div>
 
       {/* ══ MODAL ════════════════════════════════════════════ */}
@@ -1837,10 +1842,14 @@ function JobLogDescription() {
                     disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('workOrder', e.target.value)} /></label>
                 <label><span>Reference</span>
-                  <select value={refChoice}
+                  <StyledSelect
+                    value={refChoice}
                     disabled={!canEdit('operations')}
-                    onChange={e => {
-                      const v = e.target.value
+                    options={REFERENCE_OPTIONS}
+                    extraOptions={[{ value: 'Others', label: 'Others (enter manually)' }]}
+                    emptyOptionLabel="— Select —"
+                    style={modalSelectStyle}
+                    onChange={v => {
                       setRefChoice(v)
                       if (v === 'Others') {
                         // keep any existing custom text; clear if it was a fixed option
@@ -1848,11 +1857,7 @@ function JobLogDescription() {
                       } else {
                         handleModalChange('reference', v) // fixed option or '' (Select)
                       }
-                    }}>
-                    <option value="">— Select —</option>
-                    {REFERENCE_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
-                    <option value="Others">Others (enter manually)</option>
-                  </select>
+                    }} />
                   {refChoice === 'Others' && (
                     <input type="text" value={modalState.reference} placeholder="Enter reference…"
                       style={{ marginTop: 6 }}
@@ -1960,35 +1965,36 @@ function JobLogDescription() {
                     disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('drivenKm', e.target.value)} /></label>
                 <label><span>JMPs</span>
-                  <input type="text" value={modalState.jmps} placeholder="Count / ref"
+                  <input type="number" min="0" value={modalState.jmps} placeholder="0"
                     disabled={!canEdit('operations')}
-                    onChange={e => handleModalChange('jmps', e.target.value)} /></label>
+                    onChange={e => handleModalChange('jmps', e.target.value.replace(/[^0-9]/g, ''))} /></label>
               </div>
 
               <div className="form-row">
                 <label><span>Status</span>
-                  <select value={modalState.status} disabled={!canEdit('operations')}
-                    onChange={e => handleModalChange('status', e.target.value)}>
-                    <option value="">— Select —</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Closed">Closed</option>
-                    <option value="Pending">Pending</option>
-                    <option value="On Hold">On Hold</option>
-                  </select></label>
+                  <StyledSelect
+                    value={modalState.status}
+                    disabled={!canEdit('operations')}
+                    options={['In Progress', 'Closed', 'Pending', 'On Hold']}
+                    emptyOptionLabel="— Select —"
+                    style={modalSelectStyle}
+                    onChange={v => handleModalChange('status', v)}
+                  /></label>
                 <label><span>Completion Date</span>
                   <input type="date" value={modalState.completionDate}
                     disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('completionDate', e.target.value)} /></label>
                 <label><span>Region *</span>
-                  <select value={modalState.source} required
+                  <StyledSelect
+                    value={modalState.source}
                     disabled={!canEdit('operations')}
-                    onChange={e => handleModalChange('source', e.target.value)}>
-                    <option value="">— Select region —</option>
-                    {REGION_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
-                    {modalState.source && !REGION_OPTIONS.includes(modalState.source) && (
-                      <option value={modalState.source}>{modalState.source}</option>
-                    )}
-                  </select></label>
+                    options={modalState.source && !REGION_OPTIONS.includes(modalState.source)
+                      ? [...REGION_OPTIONS, modalState.source]
+                      : REGION_OPTIONS}
+                    emptyOptionLabel="— Select region —"
+                    style={modalSelectStyle}
+                    onChange={v => handleModalChange('source', v)}
+                  /></label>
               </div>
 
               <label><span>Operations Remarks</span>
@@ -2012,16 +2018,18 @@ function JobLogDescription() {
                     onChange={e => handleModalChange('tbt', e.target.value)} /></label>
                 {[['equipCL', 'Equip C/L'], ['vLog', 'V. Log'], ['rept', 'REPT (Report)']].map(([f, l]) => (
                   <label key={f}><span>{l}</span>
-                    <select value={modalState[f]} disabled={!canEdit('qhse')}
-                      onChange={e => handleModalChange(f, e.target.value)}>
-                      <option value="">— Select —</option>
-                      {QHSE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                      {/* Legacy rows may hold an older value (e.g. "Done") — keep it
-                          selectable so editing an entry never silently clears it. */}
-                      {modalState[f] && !QHSE_OPTIONS.includes(modalState[f]) && (
-                        <option value={modalState[f]}>{modalState[f]}</option>
-                      )}
-                    </select>
+                    <StyledSelect
+                      value={modalState[f]}
+                      disabled={!canEdit('qhse')}
+                      // Legacy rows may hold an older value (e.g. "Done") — keep it
+                      // selectable so editing an entry never silently clears it.
+                      options={modalState[f] && !QHSE_OPTIONS.includes(modalState[f])
+                        ? [...QHSE_OPTIONS, modalState[f]]
+                        : QHSE_OPTIONS}
+                      emptyOptionLabel="— Select —"
+                      style={modalSelectStyle}
+                      onChange={v => handleModalChange(f, v)}
+                    />
                   </label>
                 ))}
                 <label><span>Submission Date</span>
@@ -2070,12 +2078,14 @@ function JobLogDescription() {
               <div className="form-row">
                 {[['exp', 'EXP (Expenses)'], ['accounts', 'Accounts']].map(([f, l]) => (
                   <label key={f}><span>{l}</span>
-                    <select value={modalState[f]} disabled={!canEdit('accounts')}
-                      onChange={e => handleModalChange(f, e.target.value)}>
-                      <option value="">— Select —</option>
-                      <option value="Yes">Yes</option><option value="No">No</option>
-                      <option value="Done">Done</option><option value="Pending">Pending</option>
-                    </select>
+                    <StyledSelect
+                      value={modalState[f]}
+                      disabled={!canEdit('accounts')}
+                      options={['Yes', 'No', 'Done', 'Pending']}
+                      emptyOptionLabel="— Select —"
+                      style={modalSelectStyle}
+                      onChange={v => handleModalChange(f, v)}
+                    />
                   </label>
                 ))}
               </div>
@@ -2089,12 +2099,14 @@ function JobLogDescription() {
               <ModalSection Icon={BsLaptop} title="IT" hint="IT sign-off" />
               <div className="form-row">
                 <label><span>I.T</span>
-                  <select value={modalState.it} disabled={!canEdit('it')}
-                    onChange={e => handleModalChange('it', e.target.value)}>
-                    <option value="">— Select —</option>
-                    <option value="Yes">Yes</option><option value="No">No</option>
-                    <option value="Done">Done</option><option value="Pending">Pending</option>
-                  </select></label>
+                  <StyledSelect
+                    value={modalState.it}
+                    disabled={!canEdit('it')}
+                    options={['Yes', 'No', 'Done', 'Pending']}
+                    emptyOptionLabel="— Select —"
+                    style={modalSelectStyle}
+                    onChange={v => handleModalChange('it', v)}
+                  /></label>
               </div>
               <label><span>IT Remarks</span>
                 <textarea rows="2" value={modalState.remarkIt}

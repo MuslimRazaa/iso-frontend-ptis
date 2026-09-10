@@ -169,6 +169,34 @@ const renderTileIcon = (type) => {
   }
 };
 
+const DEFAULT_TILE_ORDER = dashboardTiles.map((t) => t.id);
+
+const loadTileOrder = () => {
+  try {
+    const stored = JSON.parse(localStorage.getItem("dashboardTileOrder") || "null");
+    if (Array.isArray(stored) && stored.length) return stored;
+  } catch { /* corrupt/missing — fall back to default */ }
+  return DEFAULT_TILE_ORDER;
+};
+
+const loadHiddenTiles = () => {
+  try {
+    const stored = JSON.parse(localStorage.getItem("dashboardHiddenTiles") || "null");
+    if (Array.isArray(stored)) return stored;
+  } catch { /* corrupt/missing — fall back to none hidden */ }
+  return [];
+};
+
+// "X mins ago" against the moment the dashboard's data actually last loaded,
+// not a fixed string no fetch ever touched.
+const formatSyncedAgo = (date) => {
+  if (!date) return "Syncing…";
+  const mins = Math.floor((Date.now() - date.getTime()) / 60000);
+  if (mins < 1) return "Live telemetry synced just now";
+  if (mins === 1) return "Live telemetry synced 1 min ago";
+  return `Live telemetry synced ${mins} mins ago`;
+};
+
 function MainDashboard() {
   const [showSystemMap, setShowSystemMap] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -177,7 +205,57 @@ function MainDashboard() {
   const [loadingCourses, setLoadingCourses] = useState(true);
   const [loadingStats, setLoadingStats] = useState(true);
   const [tileMetrics, setTileMetrics] = useState({});
+  const [lastSyncedAt, setLastSyncedAt] = useState(null);
+  const [, setSyncTick] = useState(0);
+  const [showCustomize, setShowCustomize] = useState(false);
+  const [tileOrder, setTileOrder] = useState(loadTileOrder);
+  const [hiddenTiles, setHiddenTiles] = useState(loadHiddenTiles);
   const navigate = useNavigate();
+
+  // Re-renders the "synced X mins ago" line as time passes, without
+  // refetching anything.
+  useEffect(() => {
+    const id = setInterval(() => setSyncTick((t) => t + 1), 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Tiles the admin has hidden/reordered via "Customize Grid", reconciled
+  // with the live tile list so a newly added module still shows up even if
+  // it didn't exist when this browser last saved an order.
+  const orderedTileIds = [
+    ...tileOrder.filter((id) => dashboardTiles.some((t) => t.id === id)),
+    ...DEFAULT_TILE_ORDER.filter((id) => !tileOrder.includes(id)),
+  ];
+  const orderedTiles = orderedTileIds.map((id) => dashboardTiles.find((t) => t.id === id)).filter(Boolean);
+  const visibleTiles = orderedTiles.filter((t) => !hiddenTiles.includes(t.id));
+
+  const toggleTileVisibility = (id) => {
+    setHiddenTiles((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+      localStorage.setItem("dashboardHiddenTiles", JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const moveTile = (id, direction) => {
+    setTileOrder(() => {
+      const current = orderedTileIds;
+      const idx = current.indexOf(id);
+      const swapIdx = idx + direction;
+      if (idx === -1 || swapIdx < 0 || swapIdx >= current.length) return current;
+      const next = [...current];
+      [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+      localStorage.setItem("dashboardTileOrder", JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const resetGridCustomization = () => {
+    localStorage.removeItem("dashboardTileOrder");
+    localStorage.removeItem("dashboardHiddenTiles");
+    setTileOrder(DEFAULT_TILE_ORDER);
+    setHiddenTiles([]);
+  };
 
   // Fetch courses from API
   useEffect(() => {
@@ -278,9 +356,8 @@ function MainDashboard() {
       }
     };
 
-    fetchCourses();
-    fetchStats();
-    fetchTileMetrics();
+    Promise.allSettled([fetchCourses(), fetchStats(), fetchTileMetrics()])
+      .then(() => setLastSyncedAt(new Date()));
   }, []);
 
   const handleSystemMapToggle = () => setShowSystemMap((prev) => !prev);
@@ -372,7 +449,7 @@ function MainDashboard() {
             </ul>
             <div className="status-footer">
               <span className="pulse" />
-              Live telemetry synced 2 mins ago
+              {formatSyncedAgo(lastSyncedAt)}
             </div>
           </article>
         </section>
@@ -383,11 +460,22 @@ function MainDashboard() {
               <p className="eyebrow">Launchpads</p>
               <h2>Primary Modules</h2>
             </div>
-            <button className="ghost-btn">Customize Grid</button>
+            <button className="ghost-btn" onClick={() => setShowCustomize(true)}>Customize Grid</button>
           </div>
 
+          {visibleTiles.length === 0 ? (
+            <div style={{
+              padding: '60px 20px', textAlign: 'center', background: 'rgba(0,0,0,0.02)',
+              borderRadius: '16px', border: '2px dashed rgba(0,0,0,0.1)',
+            }}>
+              <p style={{ margin: 0, color: '#7a7a8c' }}>Every module is hidden.</p>
+              <button className="ghost-btn" style={{ marginTop: 12 }} onClick={() => setShowCustomize(true)}>
+                Customize Grid
+              </button>
+            </div>
+          ) : (
           <div className="module-grid">
-            {dashboardTiles.map((tile) => (
+            {visibleTiles.map((tile) => (
               <button
                 type="button"
                 key={tile.id}
@@ -436,7 +524,64 @@ function MainDashboard() {
               </button>
             ))}
           </div>
+          )}
         </section>
+
+        {showCustomize && (
+          <div className="modal-overlay" onClick={() => setShowCustomize(false)}>
+            <div className="modal-content" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>Customize Grid</h2>
+                <button className="close-modal-btn" onClick={() => setShowCustomize(false)}>✕</button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto' }}>
+                {orderedTiles.map((tile, index) => {
+                  const isHidden = hiddenTiles.includes(tile.id);
+                  return (
+                    <div
+                      key={tile.id}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12,
+                        padding: '10px 14px', borderRadius: 14,
+                        border: '1px solid #ececf0', background: isHidden ? '#fafafb' : '#fff',
+                        opacity: isHidden ? 0.55 : 1,
+                      }}
+                    >
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={!isHidden}
+                          onChange={() => toggleTileVisibility(tile.id)}
+                        />
+                        <span style={{ fontWeight: 700, color: '#14141c', fontSize: 14 }}>{tile.title}</span>
+                      </label>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button
+                          type="button" className="ghost-btn small"
+                          disabled={index === 0}
+                          onClick={() => moveTile(tile.id, -1)}
+                          title="Move up"
+                        >↑</button>
+                        <button
+                          type="button" className="ghost-btn small"
+                          disabled={index === orderedTiles.length - 1}
+                          onClick={() => moveTile(tile.id, 1)}
+                          title="Move down"
+                        >↓</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="modal-actions">
+                <button type="button" className="ghost-btn" onClick={resetGridCustomization}>Reset to Default</button>
+                <button type="button" className="primary-btn" onClick={() => setShowCustomize(false)}>Done</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* <section>
           <div className="section-heading">

@@ -4,6 +4,13 @@ import { useNavigate } from 'react-router-dom'
 import { API_ENDPOINTS } from '../../config/api'
 import useLmsBase from '../useLmsBase'
 import { Pencil, Trash2 } from 'lucide-react'
+import StyledSelect from '../../components/StyledSelect'
+
+const formSelectStyle = {
+  border: '1px solid #dcdce3', borderRadius: 14, padding: '12px 14px',
+  background: '#f9f9fb', color: '#14141c', fontFamily: 'inherit', fontSize: 14,
+  cursor: 'pointer', width: '100%', boxSizing: 'border-box',
+}
 
 function AddEmployee() {
   const navigate = useNavigate()
@@ -260,20 +267,13 @@ function AddEmployee() {
           <label>
             <span>Department *</span>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <select 
-                name="department"
+              <StyledSelect
                 value={formData.department}
-                onChange={handleInputChange}
-                required
-                style={{ flex: 1 }}
-              >
-                <option value="">Select department</option>
-                {departments.map((dept) => (
-                  <option key={dept.id} value={dept.name}>
-                    {dept.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => handleInputChange({ target: { name: 'department', value: v } })}
+                options={departments.map((dept) => dept.name)}
+                emptyOptionLabel="Select department"
+                style={{ ...formSelectStyle, flex: 1 }}
+              />
               <button 
                 type="button" 
                 className="ghost-btn"
@@ -291,20 +291,13 @@ function AddEmployee() {
           <label>
             <span>Location *</span>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <select 
-                name="location"
+              <StyledSelect
                 value={formData.location}
-                onChange={handleInputChange}
-                required
-                style={{ flex: 1 }}
-              >
-                <option value="">Select location</option>
-                {locations.map((loc) => (
-                  <option key={loc.id} value={loc.name}>
-                    {loc.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => handleInputChange({ target: { name: 'location', value: v } })}
+                options={locations.map((loc) => loc.name)}
+                emptyOptionLabel="Select location"
+                style={{ ...formSelectStyle, flex: 1 }}
+              />
               <button 
                 type="button" 
                 className="ghost-btn"
@@ -322,16 +315,12 @@ function AddEmployee() {
 
         <label>
           <span>User Status *</span>
-          <select 
-            name="status"
+          <StyledSelect
             value={formData.status}
-            onChange={handleInputChange}
-            required
-          >
-            <option value="Active">Active</option>
-            <option value="Blocked">Blocked</option>
-            <option value="Inactive">Inactive</option>
-          </select>
+            onChange={(v) => handleInputChange({ target: { name: 'status', value: v } })}
+            options={['Active', 'Blocked', 'Inactive']}
+            style={formSelectStyle}
+          />
         </label>
 
         <div className="form-actions">

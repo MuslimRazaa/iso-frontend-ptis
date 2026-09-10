@@ -6,6 +6,10 @@ import {
 import { useSearchParams } from 'react-router-dom'
 import { API_ENDPOINTS } from '../../config/api'
 import { rowState } from '../utils/courseProgressState'
+import PaginationBar from '../../components/PaginationBar'
+import StyledSelect from '../../components/StyledSelect'
+
+const PAGE_SIZE = 100
 
 // Expected total study time for a course (mirrors the learner-side logic):
 //  - credit hours  -> 15 study hours each (industry standard)
@@ -97,6 +101,7 @@ function CourseTracking() {
   const requestedStatus = searchParams.get('status')
   const [statusFilter, setStatusFilter] = useState(
     ['in_progress', 'completed', 'enrolled', 'overdue'].includes(requestedStatus) ? requestedStatus : 'all')
+  const [currentPage, setCurrentPage] = useState(1)
 
   const fetchProgress = async () => {
     try {
@@ -129,7 +134,8 @@ function CourseTracking() {
   }, [rows])
 
   // Clicking the card you are already looking at clears the filter again.
-  const pickStatus = (value) => setStatusFilter((prev) => (prev === value ? 'all' : value))
+  const pickStatus = (value) => { setStatusFilter((prev) => (prev === value ? 'all' : value)); setCurrentPage(1) }
+  const onQueryChange = (value) => { setQuery(value); setCurrentPage(1) }
   const cardProps = (value) => ({
     onClick: () => pickStatus(value),
     active: statusFilter === value,
@@ -146,6 +152,13 @@ function CourseTracking() {
         .some((v) => String(v).toLowerCase().includes(q))
     })
   }, [rows, query, statusFilter])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const safePage = Math.min(currentPage, totalPages)
+  const paginated = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE
+    return filtered.slice(start, start + PAGE_SIZE)
+  }, [filtered, safePage])
 
   return (
     <div className="lms-table-panel">
@@ -181,24 +194,26 @@ function CourseTracking() {
             type="text"
             placeholder="Search by user, email, department or course…"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => onQueryChange(e.target.value)}
             style={{
               width: '100%', padding: '10px 12px 10px 36px', borderRadius: 10,
               border: '1px solid #e2e2ea', fontSize: 14, outline: 'none', background: '#fff'
             }}
           />
         </div>
-        <select
+        <StyledSelect
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(v) => { setStatusFilter(v); setCurrentPage(1) }}
+          options={[]}
+          extraOptions={[
+            { value: 'all', label: 'All statuses' },
+            { value: 'in_progress', label: 'In Progress' },
+            { value: 'completed', label: 'Completed' },
+            { value: 'enrolled', label: 'Not Started' },
+            { value: 'overdue', label: 'Overdue' },
+          ]}
           style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e2ea', fontSize: 14, background: '#fff', cursor: 'pointer' }}
-        >
-          <option value="all">All statuses</option>
-          <option value="in_progress">In Progress</option>
-          <option value="completed">Completed</option>
-          <option value="enrolled">Not Started</option>
-          <option value="overdue">Overdue</option>
-        </select>
+        />
         <span style={{ color: '#9a9aaa', fontSize: 13, marginLeft: 'auto' }}>
           {filtered.length} of {rows.length} records
         </span>
@@ -244,7 +259,7 @@ function CourseTracking() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r) => {
+              {paginated.map((r) => {
                 const state = rowState(r)
                 const meta = STATE_META[state]
                 const left = state === 'completed' ? 0 : Math.max(0, expectedSeconds(r) - (Number(r.total_time_spent) || 0))
@@ -306,6 +321,17 @@ function CourseTracking() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {!loading && !error && filtered.length > 0 && (
+        <PaginationBar
+          page={safePage}
+          totalPages={totalPages}
+          totalItems={filtered.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setCurrentPage}
+          itemLabel="records"
+        />
       )}
     </div>
   )

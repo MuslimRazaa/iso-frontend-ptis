@@ -2,6 +2,7 @@
 import { Edit2, Trash2, BookOpen, X } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { API_BASE_URL as HOST_API_BASE_URL } from '../../config/api';
+import PaginationBar from '../../components/PaginationBar';
 import '../PTIS_App.css';
 
 const StandardsAdminPage = ({ onBack, showToast, onSaved }) => {
@@ -18,7 +19,6 @@ const StandardsAdminPage = ({ onBack, showToast, onSaved }) => {
   const [currentStandard, setCurrentStandard] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [standardsCurrentPage, setStandardsCurrentPage] = useState(1);
-  const [standardsGoToPage, setStandardsGoToPage] = useState('');
   const [templateFile, setTemplateFile] = useState(null);
   const [templateUploading, setTemplateUploading] = useState(false);
   const templateInputRef = useRef(null);
@@ -186,7 +186,9 @@ const StandardsAdminPage = ({ onBack, showToast, onSaved }) => {
     }
 
     try {
-      await fetch(`${API_BASE_URL}/api/standards/legacy/${encodeURIComponent(standardName)}`, {
+      const actorId = localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || '';
+      const actorName = localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin';
+      await fetch(`${API_BASE_URL}/api/standards/legacy/${encodeURIComponent(standardName)}?actorId=${encodeURIComponent(actorId)}&actorName=${encodeURIComponent(actorName)}`, {
         method: 'DELETE'
       });
 
@@ -303,7 +305,9 @@ const StandardsAdminPage = ({ onBack, showToast, onSaved }) => {
         Hours: parseInt(formData.Hours),
         Minutes: parseInt(formData.Minutes),
         Seconds: parseInt(formData.Seconds),
-        Practical_Required: formData.Practical_Required
+        Practical_Required: formData.Practical_Required,
+        actorId: localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || '',
+        actorName: localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin'
       };
 
       // Persist locally too — backend may not have a column for this yet,
@@ -359,7 +363,7 @@ const StandardsAdminPage = ({ onBack, showToast, onSaved }) => {
     standard.Standard_List.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const standardsItemsPerPage = 20;
+  const standardsItemsPerPage = 100;
   const totalStandardPages = Math.ceil(filteredStandards.length / standardsItemsPerPage);
   const paginatedStandards = filteredStandards.slice(
     (standardsCurrentPage - 1) * standardsItemsPerPage,
@@ -653,111 +657,14 @@ const StandardsAdminPage = ({ onBack, showToast, onSaved }) => {
               </tbody>
             </table>
           </div>
-          {totalStandardPages > 1 && (
-            <div style={{
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              gap: '10px',
-              flexWrap: 'wrap',
-              padding: '14px 16px',
-              backgroundColor: colors.cardBg,
-              borderTop: `1px solid ${colors.border}`
-            }}>
-            <button
-              onClick={() => setStandardsCurrentPage(prev => Math.max(1, prev - 1))}
-              disabled={standardsCurrentPage === 1}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: standardsCurrentPage === 1 ? colors.border : '#1a1a2e',
-                color: standardsCurrentPage === 1 ? colors.textMuted : 'white',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: standardsCurrentPage === 1 ? 'not-allowed' : 'pointer',
-                fontWeight: '600',
-                fontSize: '14px',
-                transition: 'all 0.2s ease'
-              }}
-            >
-              Previous
-            </button>
-
-            <span style={{
-              color: colors.text,
-              fontWeight: '600',
-              fontSize: '14px',
-              padding: '0 10px'
-            }}>
-              Page {standardsCurrentPage} of {totalStandardPages} ({filteredStandards.length} standards)
-            </span>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ color: colors.textMuted, fontWeight: '600', fontSize: '12px' }}>Go to</span>
-              <input
-                type="number"
-                min="1"
-                max={totalStandardPages}
-                value={standardsGoToPage}
-                onChange={(e) => setStandardsGoToPage(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key !== 'Enter') return;
-                  const nextPage = parseInt(standardsGoToPage, 10);
-                  if (!Number.isFinite(nextPage)) return;
-                  setStandardsCurrentPage(Math.min(totalStandardPages, Math.max(1, nextPage)));
-                  setStandardsGoToPage('');
-                }}
-                style={{
-                  width: '70px',
-                  padding: '6px 10px',
-                  border: `1px solid ${colors.border}`,
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  textAlign: 'center',
-                  backgroundColor: colors.cardAltBg,
-                  color: colors.text
-                }}
-              />
-              <button
-                onClick={() => {
-                  const nextPage = parseInt(standardsGoToPage, 10);
-                  if (!Number.isFinite(nextPage)) return;
-                  setStandardsCurrentPage(Math.min(totalStandardPages, Math.max(1, nextPage)));
-                  setStandardsGoToPage('');
-                }}
-                style={{
-                  padding: '6px 12px',
-                  backgroundColor: '#1a1a2e',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontWeight: '600',
-                  fontSize: '13px'
-                }}
-              >
-                Go
-              </button>
-            </div>
-
-            <button
-              onClick={() => setStandardsCurrentPage(prev => Math.min(totalStandardPages, prev + 1))}
-              disabled={standardsCurrentPage === totalStandardPages}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: standardsCurrentPage === totalStandardPages ? colors.border : '#1a1a2e',
-                color: standardsCurrentPage === totalStandardPages ? colors.textMuted : 'white',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: standardsCurrentPage === totalStandardPages ? 'not-allowed' : 'pointer',
-                fontWeight: '600',
-                fontSize: '14px',
-                transition: 'all 0.2s ease'
-              }}
-            >
-              Next
-            </button>
-            </div>
-          )}
+          <PaginationBar
+            page={standardsCurrentPage}
+            totalPages={totalStandardPages}
+            totalItems={filteredStandards.length}
+            pageSize={standardsItemsPerPage}
+            onPageChange={setStandardsCurrentPage}
+            itemLabel="standards"
+          />
         </article>
       </div>
 

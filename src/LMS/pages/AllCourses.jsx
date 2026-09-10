@@ -1,12 +1,23 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import axios from 'axios'
 import { Pencil, Trash2 } from 'lucide-react'
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api'
+import PaginationBar from '../../components/PaginationBar'
+import StyledSelect from '../../components/StyledSelect'
+
+const formSelectStyle = {
+  border: '1px solid #dcdce3', borderRadius: 14, padding: '12px 14px',
+  background: '#f9f9fb', color: '#14141c', fontFamily: 'inherit', fontSize: 14,
+  cursor: 'pointer', width: '100%', boxSizing: 'border-box',
+}
 
 import dataAnalystThumb from '../../assets/thumbnails/1.jpg'
 
+const PAGE_SIZE = 100
+
 function AllCourses() {
   const [courses, setCourses] = useState([])
+  const [currentPage, setCurrentPage] = useState(1)
   const [loading, setLoading] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState({
@@ -198,6 +209,13 @@ function AllCourses() {
     setEditForm({ ...editForm, videos: newVideos })
   }
 
+  const totalPages = Math.max(1, Math.ceil(courses.length / PAGE_SIZE))
+  const safePage = Math.min(currentPage, totalPages)
+  const paginatedCourses = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE
+    return courses.slice(start, start + PAGE_SIZE)
+  }, [courses, safePage])
+
   return (
     <div className="lms-table-panel">
       <header>
@@ -235,7 +253,7 @@ function AllCourses() {
               </tr>
             </thead>
             <tbody>
-              {courses.map((row) => (
+              {paginatedCourses.map((row) => (
                 <tr key={row.id}>
                   <td>
                     <div className="course-cell">
@@ -270,6 +288,17 @@ function AllCourses() {
           </tbody>
         </table>
         </div>
+      )}
+
+      {!loading && courses.length > 0 && (
+        <PaginationBar
+          page={safePage}
+          totalPages={totalPages}
+          totalItems={courses.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setCurrentPage}
+          itemLabel="courses"
+        />
       )}
 
       {showModal && (
@@ -350,17 +379,13 @@ function AllCourses() {
 
               <label>
                 <span>Category</span>
-                <select
+                <StyledSelect
                   value={editForm.category}
-                  onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
-                >
-                  <option value="">Select category</option>
-                  <option value="Technical Skills">Technical Skills</option>
-                  <option value="Compliance & Safety">Compliance & Safety</option>
-                  <option value="Management">Management</option>
-                  <option value="Operations">Operations</option>
-                  <option value="Other">Other</option>
-                </select>
+                  onChange={(v) => setEditForm({ ...editForm, category: v })}
+                  options={['Technical Skills', 'Compliance & Safety', 'Management', 'Operations', 'Other']}
+                  emptyOptionLabel="Select category"
+                  style={formSelectStyle}
+                />
               </label>
 
               <label>
