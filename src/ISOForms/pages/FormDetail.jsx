@@ -159,6 +159,16 @@ function FormDetail() {
     return Boolean(me) && String(entry.created_by || '') === String(me)
   })()
 
+  // Who may remove this form: same rule as revising it — its author while
+  // still pending, and an ISO Forms admin at any time.
+  const canDelete = (() => {
+    if (!entry) return false
+    if (isAdminOverride) return true
+    if (entry.status !== 'pending') return false
+    const me = myEmployeeId || localStorage.getItem('userEmail')
+    return Boolean(me) && String(entry.created_by || '') === String(me)
+  })()
+
   const setApproverValue = (fieldId, val) => setApproverValues(prev => ({ ...prev, [fieldId]: val }))
 
   // Who an approver signature signs as when its name is left blank.
@@ -218,7 +228,11 @@ function FormDetail() {
       const res = await fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}/${id}/decision`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status, remarks: remarks.trim(), approver_data: signedApproverValues }),
+        body: JSON.stringify({
+          status, remarks: remarks.trim(), approver_data: signedApproverValues,
+          actor_id: myEmployeeId || localStorage.getItem('userEmail') || null,
+          actor_name: signerName,
+        }),
       })
       if (!res.ok) throw new Error('decision failed')
     } catch {
@@ -235,13 +249,23 @@ function FormDetail() {
     load()
   }
 
-  // Admin-only, and confirmed — a submitted form is a record, not a draft.
+  // Confirmed first — a submitted form is a record, not a draft.
   const handleDelete = async () => {
     const label = entry?.template_name || template?.name || `Form #${id}`
     if (!window.confirm(`Delete "${label}"? This permanently removes the submission and its attachments.`)) return
+    const params = new URLSearchParams()
+    if (isAdminOverride) params.set('admin', '1')
+    else {
+      const me = myEmployeeId || localStorage.getItem('userEmail')
+      if (me) params.set('editor', me)
+    }
     try {
-      const res = await fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}/${id}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error('delete failed')
+      const res = await fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}/${id}?${params.toString()}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const failed = await res.json().catch(() => ({}))
+        setError(failed.error || `Could not delete this form (HTTP ${res.status}).`)
+        return
+      }
     } catch {
       deleteOfflineEntry(id)
     }
@@ -282,7 +306,7 @@ function FormDetail() {
               <button type="button" className="ghost-btn">✏ Edit Form</button>
             </Link>
           )}
-          {isAdminOverride && (
+          {canDelete && (
             <button type="button" className="ghost-btn" onClick={handleDelete} style={{ color: '#b42318' }}>
               🗑 Delete Form
             </button>

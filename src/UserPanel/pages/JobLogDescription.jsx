@@ -1171,6 +1171,17 @@ function JobLogDescription() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isModalOpen, editingId])
 
+  // Who is acting, for the audit trail — this app has no session to read it
+  // from server-side, so it rides along as a query param on every mutating
+  // request, the same way ISO Forms already does it.
+  const actorQuery = () => {
+    const actorId = localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || ''
+    const actorName = localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin'
+    const params = new URLSearchParams({ actorName })
+    if (actorId) params.set('actorId', actorId)
+    return params.toString()
+  }
+
   const handleSubmit = async e => {
     e.preventDefault()
     const rd = calculateDays(modalState.startDate, modalState.endDate)
@@ -1180,13 +1191,13 @@ function JobLogDescription() {
       setSaving(true)
       let res
       if (modalMode === 'add') {
-        res = await fetch(API_ENDPOINTS.JOB_LOG, {
+        res = await fetch(`${API_ENDPOINTS.JOB_LOG}?${actorQuery()}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         })
       } else {
-        res = await fetch(`${API_ENDPOINTS.JOB_LOG}/${editingId}`, {
+        res = await fetch(`${API_ENDPOINTS.JOB_LOG}/${editingId}?${actorQuery()}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -1208,7 +1219,7 @@ function JobLogDescription() {
   const handleDelete = async id => {
     if (!window.confirm('Are you sure you want to delete this entry?')) return
     try {
-      const res = await fetch(`${API_ENDPOINTS.JOB_LOG}/${id}`, { method: 'DELETE' })
+      const res = await fetch(`${API_ENDPOINTS.JOB_LOG}/${id}?${actorQuery()}`, { method: 'DELETE' })
       if (!res.ok) throw new Error(`Server error ${res.status}`)
       setEntries(p => p.filter(e => e.id !== id))
     } catch (err) {
@@ -1226,7 +1237,7 @@ function JobLogDescription() {
     formData.append('csv', file)
     try {
       setLoading(true); setImportMsg(null); setError(null)
-      const res = await fetch(`${API_ENDPOINTS.JOB_LOG}/upload-csv?mode=${csvMode}`, {
+      const res = await fetch(`${API_ENDPOINTS.JOB_LOG}/upload-csv?mode=${csvMode}&${actorQuery()}`, {
         method: 'POST',
         body: formData,
       })
@@ -1262,7 +1273,7 @@ function JobLogDescription() {
   const performDeleteAll = async () => {
     try {
       setLoading(true); setError(null)
-      const res = await fetch(`${API_ENDPOINTS.JOB_LOG}/clear-all`, { method: 'DELETE' })
+      const res = await fetch(`${API_ENDPOINTS.JOB_LOG}/clear-all?${actorQuery()}`, { method: 'DELETE' })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || `Server error ${res.status}`)
       setEntries([])

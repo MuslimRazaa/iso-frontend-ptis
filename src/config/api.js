@@ -34,6 +34,7 @@ export const API_ENDPOINTS = {
   JOB_LOG: `${API_BASE_URL}/api/job-log`,
   ISO_FORMS_TEMPLATES: `${API_BASE_URL}/api/iso-forms/templates`,
   ISO_FORMS_ENTRIES: `${API_BASE_URL}/api/iso-forms/entries`,
+  AUDIT_LOG: `${API_BASE_URL}/api/audit-log`,
 };
 
 export default API_BASE_URL;

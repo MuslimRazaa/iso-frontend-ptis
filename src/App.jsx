@@ -40,12 +40,14 @@ import EmployeesLayout from './Employees/EmployeesLayout'
 import JLRLayout from './JLR/JLRLayout'
 import JLRHome from './JLR/pages/JLRHome'
 import JLRBackups from './JLR/pages/JLRBackups'
+import JLRAuditLog from './JLR/pages/JLRAuditLog'
 
 // Admin - ISO Forms (standalone module, dynamic form builder)
 import ISOFormsLayout from './ISOForms/ISOFormsLayout'
 import ISOFormsHome from './ISOForms/pages/ISOFormsHome'
 import TemplatesList from './ISOForms/admin/TemplatesList'
 import TemplateBuilder from './ISOForms/admin/TemplateBuilder'
+import ISOFormsAuditLog from './ISOForms/admin/AuditLog'
 import FormFiller from './ISOForms/pages/FormFiller'
 import FormEntriesList from './ISOForms/pages/FormEntriesList'
 import FormDetail from './ISOForms/pages/FormDetail'
@@ -160,6 +162,7 @@ function App() {
               <Route index element={<JLRHome />} />
               <Route path="entries" element={<JobLogDescription />} />
               <Route path="backups" element={<JLRBackups />} />
+              <Route path="audit-log" element={<JLRAuditLog />} />
             </Route>
 
             {/* User — Job Log Description (same standalone layout, role-based fields) */}
@@ -179,6 +182,7 @@ function App() {
               <Route path="entries" element={<FormEntriesList />} />
               <Route path="entries/:id" element={<FormDetail />} />
               <Route path="entries/:id/edit" element={<FormFiller />} />
+              <Route path="audit-log" element={<ISOFormsAuditLog />} />
             </Route>
 
             {/* User — ISO Forms (same standalone layout, role-based fields) */}
@@ -192,6 +196,7 @@ function App() {
               <Route path="entries" element={<FormEntriesList />} />
               <Route path="entries/:id" element={<FormDetail />} />
               <Route path="entries/:id/edit" element={<FormFiller />} />
+              <Route path="audit-log" element={<ISOFormsAuditLog />} />
             </Route>
 
             {/* User — LMS (user-specific layout, no admin pages) */}

@@ -150,14 +150,33 @@ function FormEntriesList() {
     })
   }, [entries, search, templateFilter, createdByFilter, relatedToFilter, dateFrom, dateTo])
 
-  // Admin-only. A submitted form is a record, so this is confirmed first and
-  // the row is dropped locally rather than re-running the whole list fetch.
+  // Who may remove a submitted form: its author while it is still pending, and
+  // an ISO Forms admin at any time — the same rule as editing one. A decided
+  // form is the record that was signed off, so removing it is deliberately an
+  // admin-only act.
+  const canDelete = (entry) => {
+    if (isAdmin) return true
+    if (entry.status !== 'pending') return false
+    const me = myEmployeeId || localStorage.getItem('userEmail')
+    return Boolean(me) && String(entry.created_by || '') === String(me)
+  }
+
   const handleDelete = async (entry) => {
     const label = entry.template_name || `Form #${entry.id}`
     if (!window.confirm(`Delete "${label}"? This permanently removes the submission and its attachments.`)) return
+    const params = new URLSearchParams()
+    if (isAdmin) params.set('admin', '1')
+    else {
+      const me = myEmployeeId || localStorage.getItem('userEmail')
+      if (me) params.set('editor', me)
+    }
     try {
-      const res = await fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}/${entry.id}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error('delete failed')
+      const res = await fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}/${entry.id}?${params.toString()}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const failed = await res.json().catch(() => ({}))
+        alert(failed.error || `Could not delete this form (HTTP ${res.status}).`)
+        return
+      }
     } catch {
       deleteOfflineEntry(entry.id)
     }
@@ -364,7 +383,7 @@ function FormEntriesList() {
                           </button>
                         </Link>
                       )}
-                      {isAdmin && (
+                      {canDelete(entry) && (
                         <button
                           type="button"
                           title="Delete form"

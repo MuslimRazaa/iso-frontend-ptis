@@ -118,8 +118,12 @@ function TemplatesList() {
 
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this template? Forms already submitted from it will keep their data.')) return
+    const actorId = localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || ''
+    const actorName = localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin'
+    const params = new URLSearchParams({ actorName })
+    if (actorId) params.set('actorId', actorId)
     try {
-      const res = await fetch(`${API_ENDPOINTS.ISO_FORMS_TEMPLATES}/${id}`, { method: 'DELETE' })
+      const res = await fetch(`${API_ENDPOINTS.ISO_FORMS_TEMPLATES}/${id}?${params.toString()}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('delete failed')
       load()
     } catch {

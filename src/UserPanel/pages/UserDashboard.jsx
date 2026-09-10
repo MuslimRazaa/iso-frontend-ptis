@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { API_ENDPOINTS } from '../../config/api';
 import { getCurrentEmployeeId } from '../../ISOForms/utils/currentEmployee';
+import { summarise, averageCompletion } from '../../LMS/utils/courseProgressState';
 
 const UserDashboard = () => {
     const [userPermissions, setUserPermissions] = useState({});
@@ -14,6 +15,8 @@ const UserDashboard = () => {
     const [courses, setCourses] = useState([]);
     const [loadingCourses, setLoadingCourses] = useState(true);
     const [isoPendingCount, setIsoPendingCount] = useState(0);
+    const [lmsMetric, setLmsMetric] = useState('Training module access');
+    const [jobLogMetric, setJobLogMetric] = useState('Job log access');
 
     const userEmail = localStorage.getItem('userEmail') || 'user@ptis.com';
     const userName = userEmail.split('@')[0].replace(/\./g, ' ').split(' ').map(word =>
@@ -21,12 +24,47 @@ const UserDashboard = () => {
     ).join(' ');
 
 
-    useEffect(() => {
-        // Fetch user permissions from backend
-        fetchUserPermissions();
-        fetchCourses();
-        fetchIsoPendingCount();
-    }, []);
+    // "X% of your courses completed" — the same source (and math) as the LMS's
+    // own dashboard, scoped to this employee's enrolments only.
+    const fetchLmsMetric = async () => {
+        try {
+            if (!userEmail) return;
+            const res = await fetch(`${API_ENDPOINTS.COURSE_PROGRESS}/user/${encodeURIComponent(userEmail)}`);
+            if (!res.ok) return;
+            const json = await res.json();
+            const rows = Array.isArray(json?.data) ? json.data : [];
+            const progress = summarise(rows);
+            if (!progress.total) { setLmsMetric('No courses started yet'); return; }
+            const avg = averageCompletion(rows);
+            setLmsMetric(`${avg}% of your courses completed`);
+        } catch (error) {
+            console.error('Error fetching LMS metric:', error);
+        }
+    };
+
+    // Job Log entries aren't tied to an employee id, so "yours" is matched by
+    // name against the inspector/team fields the register actually records.
+    const fetchJobLogMetric = async () => {
+        try {
+            const res = await fetch(API_ENDPOINTS.JOB_LOG);
+            if (!res.ok) return;
+            const json = await res.json();
+            const rows = Array.isArray(json?.data) ? json.data : (Array.isArray(json) ? json : []);
+            if (!rows.length) { setJobLogMetric('No job entries yet'); return; }
+            const userFullName = (localStorage.getItem('userFullName') || '').toLowerCase().trim();
+            const mine = userFullName
+                ? rows.filter(e =>
+                    (e.inspector_name || '').toLowerCase().includes(userFullName) ||
+                    (e.inspector_team || '').toLowerCase().includes(userFullName)
+                ).length
+                : 0;
+            setJobLogMetric(mine > 0
+                ? `${mine} of your job entries logged`
+                : `${rows.length} job entries logged company-wide`);
+        } catch (error) {
+            console.error('Error fetching Job Log metric:', error);
+        }
+    };
 
     // Forms routed to this employee that are still awaiting their decision —
     // powers the red badge on the ISO Forms card (same count as the ISO Forms
@@ -83,6 +121,15 @@ const UserDashboard = () => {
         }
     };
 
+    useEffect(() => {
+        // Fetch user permissions from backend
+        fetchUserPermissions();
+        fetchCourses();
+        fetchIsoPendingCount();
+        fetchLmsMetric();
+        fetchJobLogMetric();
+    }, []);
+
     // Define all possible tiles.
     // NOTE: only real MODULES live here. Course/certificate views are part of
     // the LMS itself (shown & handled inside the LMS), so they are NOT cards
@@ -95,7 +142,7 @@ const UserDashboard = () => {
             description: "Full access to Learning Management System features.",
             status: "sync",
             statusLabel: "Active",
-            metric: "Training module access",
+            metric: lmsMetric,
             permission: userPermissions.lms,
             icon: "lms"
         },
@@ -117,7 +164,7 @@ const UserDashboard = () => {
             description: "Track inspection activities and field job entries.",
             status: "online",
             statusLabel: "Live",
-            metric: "12 CVs queued",
+            metric: jobLogMetric,
             permission: userPermissions.cvs,
             icon: "cv"
         },
@@ -156,6 +203,21 @@ const UserDashboard = () => {
             metric: "Analytics dashboard",
             permission: userPermissions.reports,
             icon: "power-bi"
+        },
+        {
+            id: "premier-erp",
+            title: "Premier ERP",
+            // A separate application on its own domain, opened in a new tab —
+            // shown to every user regardless of permissions, same as on the
+            // admin dashboard.
+            link: "https://erp.ptis.co/",
+            external: true,
+            description: "Sales, procurement, HR/payroll and the full ISO compliance stack — CRM, audits, NCR/CAPA, risk and HSE in one system.",
+            status: "online",
+            statusLabel: "Live",
+            metric: "Company-wide operations & compliance",
+            permission: true,
+            icon: "premier-erp"
         }
     ];
 
@@ -213,6 +275,14 @@ const UserDashboard = () => {
                         <rect x="32" y="8" width="8" height="32" />
                     </svg>
                 );
+            case "premier-erp":
+                return (
+                    <svg viewBox="0 0 48 48" role="img" aria-hidden="true">
+                        <rect x="8" y="6" width="32" height="36" rx="4" />
+                        <path d="M8 18h32M8 30h32" />
+                        <path d="M17 24l4 4 8-8" />
+                    </svg>
+                );
             default:
                 return (
                     <svg viewBox="0 0 48 48" role="img" aria-hidden="true">
@@ -223,7 +293,10 @@ const UserDashboard = () => {
     };
 
     const handleModuleClick = (moduleId) => {
-        console.log(`Module selected: ${moduleId}`);
+        const selected = dashboardTiles.find((tile) => tile.id === moduleId);
+        if (selected?.external) {
+            window.open(selected.link, "_blank", "noopener,noreferrer");
+        }
     };
 
     return (
@@ -299,14 +372,33 @@ const UserDashboard = () => {
                                     </div>
                                     <div className="module-footer">
                                         <span className="module-metric">{tile.metric}</span>
-                                        <Link to={tile.link}>
-                                            <span className="module-link">
-                                                Open Module
-                                                <svg viewBox="0 0 24 24" aria-hidden="true">
-                                                    <path d="M5 12h14M13 6l6 6-6 6" />
-                                                </svg>
-                                            </span>
-                                        </Link>
+                                        {tile.external ? (
+                                            // The card's own onClick already opens this in a new
+                                            // tab; without stopping the click here it would bubble
+                                            // up and open a second one.
+                                            <a
+                                                href={tile.link}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                <span className="module-link">
+                                                    Open in New Window
+                                                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                                                        <path d="M5 12h14M13 6l6 6-6 6" />
+                                                    </svg>
+                                                </span>
+                                            </a>
+                                        ) : (
+                                            <Link to={tile.link}>
+                                                <span className="module-link">
+                                                    Open Module
+                                                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                                                        <path d="M5 12h14M13 6l6 6-6 6" />
+                                                    </svg>
+                                                </span>
+                                            </Link>
+                                        )}
                                     </div>
                                 </button>
                             ))}
