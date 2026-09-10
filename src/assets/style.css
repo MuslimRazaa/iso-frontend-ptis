@@ -1386,6 +1386,7 @@ body {
   padding: 60px clamp(24px, 5vw, 96px);
   position: relative;
   overflow-x: hidden;
+  overflow-y: visible;
   max-width: 100%;
 }
 
@@ -1470,6 +1471,10 @@ body {
   flex-direction: column;
   gap: 44px;
   overflow-x: hidden;
+  /* overflow-x alone forces the browser to compute overflow-y as `auto` too,
+     which clips anything that lifts above the top edge on hover (e.g. the
+     stat cards, the very first thing inside this box on some tabs). */
+  overflow-y: visible;
   max-width: 100%;
 }
 
@@ -1605,6 +1610,10 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 20px;
+  overflow: visible;
+  /* Real (not cancelled-out) clearance from whatever sits above — a card's
+     hover lift (translateY(-2px)) was reaching into that element's box. */
+  margin-top: 8px;
 }
 
 .stat-card {
@@ -1616,6 +1625,14 @@ body {
   flex-direction: column;
   gap: 4px;
   min-height: 140px;
+  cursor: pointer;
+  overflow: visible;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.stat-card:hover {
+  border-color: #d7263d;
+  transform: translateY(-2px);
 }
 
 .stat-card h3 {
@@ -1666,6 +1683,20 @@ body {
   border-radius: 999px;
   padding: 8px 16px;
   font-size: 12px;
+}
+
+.learning-progress header button,
+.session-board header button {
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.learning-progress header button:hover,
+.session-board header button:hover {
+  border-color: #d7263d;
+  color: #d7263d;
+  transform: translateY(-2px);
 }
 
 .learning-progress ul,
@@ -5005,6 +5036,42 @@ body {
 .pagination-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.all-records-pagination-goto {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding-left: 12px;
+  border-left: 1px solid #e0e0e6;
+}
+
+.all-records-pagination-goto label {
+  font-size: 13px;
+  color: #595966;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.all-records-pagination-goto input {
+  width: 56px;
+  padding: 7px 8px;
+  border-radius: 10px;
+  border: 1px solid #e0e0e6;
+  font-size: 13px;
+  color: #14141c;
+  text-align: center;
+  font-family: inherit;
+}
+
+.all-records-pagination-goto input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.all-records-pagination-goto .pagination-btn {
+  padding: 7px 12px;
 }
 
 /* Responsive Design */

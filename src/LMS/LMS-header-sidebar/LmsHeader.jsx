@@ -1,5 +1,5 @@
 import React from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 function LmsHeader() {
   const navigate = useNavigate();
@@ -39,14 +39,6 @@ function LmsHeader() {
         <p className="lms-header__meta">
           Track employee enablement, approvals, and course momentum from one unified workspace.
         </p>
-      </div>
-      <div className="lms-header-actions">
-        <button type="button" className="btn btn-ghost">
-          Weekly Report
-        </button>
-        <Link to={`${lmsBase}/add-course`} className="btn btn-primary" style={{textDecoration:"none"}}>
-          Launch Program
-        </Link>
       </div>
     </header>
   );

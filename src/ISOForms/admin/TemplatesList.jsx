@@ -1,9 +1,12 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Eye, Plus, Pencil, Trash2, X } from 'lucide-react'
 import { API_ENDPOINTS } from '../../config/api'
 import { SEED_TEMPLATES, SEED_VERSION } from '../seedTemplates'
 import { ensureSeeded, getOfflineTemplates, deleteOfflineTemplate } from '../utils/offlineStore'
+import PaginationBar from '../../components/PaginationBar'
+
+const PAGE_SIZE = 100
 
 // Preview shows the template's ACTUAL PDF, not a rebuilt approximation — it is
 // the same document filled forms are generated from, so what an admin sees
@@ -94,6 +97,7 @@ function TemplatesList() {
   const [offline, setOffline] = useState(false)
   const [error, setError] = useState('')
   const [previewTemplate, setPreviewTemplate] = useState(null)
+  const [currentPage, setCurrentPage] = useState(1)
 
   const load = () => {
     fetch(API_ENDPOINTS.ISO_FORMS_TEMPLATES)
@@ -115,6 +119,13 @@ function TemplatesList() {
   }
 
   useEffect(() => { load() }, [])
+
+  const totalPages = Math.max(1, Math.ceil(templates.length / PAGE_SIZE))
+  const safePage = Math.min(currentPage, totalPages)
+  const paginatedTemplates = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE
+    return templates.slice(start, start + PAGE_SIZE)
+  }, [templates, safePage])
 
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this template? Forms already submitted from it will keep their data.')) return
@@ -176,7 +187,7 @@ function TemplatesList() {
               </tr>
             </thead>
             <tbody>
-              {templates.map(t => {
+              {paginatedTemplates.map(t => {
                 const fieldCount = (() => {
                   try {
                     const f = typeof t.fields === 'string' ? JSON.parse(t.fields) : t.fields
@@ -252,6 +263,14 @@ function TemplatesList() {
             </tbody>
           </table>
         )}
+        <PaginationBar
+          page={safePage}
+          totalPages={totalPages}
+          totalItems={templates.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setCurrentPage}
+          itemLabel="templates"
+        />
       </article>
 
       {previewTemplate && (

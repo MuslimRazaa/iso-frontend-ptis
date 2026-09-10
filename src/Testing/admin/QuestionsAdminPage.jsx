@@ -3,6 +3,9 @@ import { Edit2, Trash2, Upload, FileSpreadsheet, Download, X } from 'lucide-reac
 import * as XLSX from 'xlsx';
 import { useTheme } from '../contexts/ThemeContext';
 import { API_BASE_URL as HOST_API_BASE_URL } from '../../config/api';
+import PaginationBar from '../../components/PaginationBar';
+import StyledSelect from '../../components/StyledSelect';
+import SearchableSelect from '../../components/SearchableSelect';
 import '../PTIS_App.css';
 
 const QuestionsAdminPage = ({ onBack, showToast }) => {
@@ -28,8 +31,7 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const [goToPage, setGoToPage] = useState('');
-  const itemsPerPage = 50; // Show 50 questions per page
+  const itemsPerPage = 100;
 
   // True DB counts (from /api/questions/count)
   const [totalDbCount, setTotalDbCount] = useState(null);
@@ -195,10 +197,12 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/questions/legacy/${questionNo}`, {
+      const actorId = localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || '';
+      const actorName = localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin';
+      const response = await fetch(`${API_BASE_URL}/api/questions/legacy/${questionNo}?actorId=${encodeURIComponent(actorId)}&actorName=${encodeURIComponent(actorName)}`, {
         method: 'DELETE'
       });
-      
+
       if (!response.ok) throw new Error('Delete failed');
       if (showToast) showToast('Question deleted successfully!', 'success');
       fetchData();
@@ -216,7 +220,11 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
       const response = await fetch(`${API_BASE_URL}/api/questions/legacy/bulk-delete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nos: Array.from(selectedNos) })
+        body: JSON.stringify({
+          nos: Array.from(selectedNos),
+          actorId: localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || '',
+          actorName: localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin'
+        })
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Bulk delete failed');
@@ -281,14 +289,20 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    const payload = {
+      ...formData,
+      actorId: localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || '',
+      actorName: localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin'
+    };
+
     try {
       if (editMode) {
         const response = await fetch(`${API_BASE_URL}/api/questions/legacy/${currentQuestion}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData)
+          body: JSON.stringify(payload)
         });
-        
+
         if (!response.ok) {
           const errorText = await response.text();
           throw new Error(errorText || 'Update failed');
@@ -298,7 +312,7 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
         const response = await fetch(`${API_BASE_URL}/api/questions/legacy`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData)
+          body: JSON.stringify(payload)
         });
         
         if (!response.ok) {
@@ -566,9 +580,13 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
                 }}></span>
                 Filter by Standard
               </label>
-              <select
+              <SearchableSelect
                 value={filterStandard}
-                onChange={(e) => setFilterStandard(e.target.value)}
+                onChange={setFilterStandard}
+                options={standards.map(std => std.Standard_List)}
+                emptyOptionLabel="All Standards"
+                placeholder="Type to search…"
+                extraOptions={[{ value: '__UNMATCHED__', label: `⚠ Unmatched Standard ${unmatchedCount != null ? `(${unmatchedCount})` : ''}` }]}
                 style={{
                   width: '100%',
                   padding: '12px 15px',
@@ -578,30 +596,12 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
                   backgroundColor: colors.cardAltBg,
                   color: colors.text,
                   fontWeight: '500',
-                  cursor: 'pointer',
+                  cursor: 'text',
                   transition: 'all 0.2s ease',
                   outline: 'none',
                   boxSizing: 'border-box'
                 }}
-                onFocus={e => {
-                  e.target.style.borderColor = colors.text;
-                  e.target.style.backgroundColor = colors.inputBg;
-                }}
-                onBlur={e => {
-                  e.target.style.borderColor = colors.inputBorder;
-                  e.target.style.backgroundColor = colors.cardAltBg;
-                }}
-              >
-                <option value="">All Standards</option>
-                {standards.map(std => (
-                  <option key={std.Standard_List} value={std.Standard_List}>
-                    {std.Standard_List}
-                  </option>
-                ))}
-                <option value="__UNMATCHED__">
-                  ⚠ Unmatched Standard {unmatchedCount != null ? `(${unmatchedCount})` : ''}
-                </option>
-              </select>
+              />
             </div>
             <div>
               <label style={{ 
@@ -1123,111 +1123,14 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
         </div>
 
         {/* Pagination Controls */}
-        {totalPages > 1 && (
-          <div style={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            gap: '10px',
-            flexWrap: 'wrap',
-            padding: '14px 16px',
-            backgroundColor: colors.cardBg,
-            borderTop: `1px solid ${colors.border}`
-          }}>
-            <button
-              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-              disabled={currentPage === 1}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: currentPage === 1 ? colors.border : '#1a1a2e',
-                color: currentPage === 1 ? colors.textMuted : 'white',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
-                fontWeight: '600',
-                fontSize: '14px',
-                transition: 'all 0.2s ease'
-              }}
-            >
-              Previous
-            </button>
-            
-            <span style={{ 
-              color: colors.text, 
-              fontWeight: '600',
-              fontSize: '14px',
-              padding: '0 10px'
-            }}>
-              Page {currentPage} of {totalPages} ({filteredQuestions.length} questions)
-            </span>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ color: colors.textMuted, fontWeight: '600', fontSize: '12px' }}>Go to</span>
-              <input
-                type="number"
-                min="1"
-                max={totalPages}
-                value={goToPage}
-                onChange={(e) => setGoToPage(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key !== 'Enter') return;
-                  const nextPage = parseInt(goToPage, 10);
-                  if (!Number.isFinite(nextPage)) return;
-                  setCurrentPage(Math.min(totalPages, Math.max(1, nextPage)));
-                  setGoToPage('');
-                }}
-                style={{
-                  width: '70px',
-                  padding: '6px 10px',
-                  border: `1px solid ${colors.border}`,
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  textAlign: 'center',
-                  backgroundColor: colors.cardAltBg,
-                  color: colors.text
-                }}
-              />
-              <button
-                onClick={() => {
-                  const nextPage = parseInt(goToPage, 10);
-                  if (!Number.isFinite(nextPage)) return;
-                  setCurrentPage(Math.min(totalPages, Math.max(1, nextPage)));
-                  setGoToPage('');
-                }}
-                style={{
-                  padding: '6px 12px',
-                  backgroundColor: '#1a1a2e',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontWeight: '600',
-                  fontSize: '13px'
-                }}
-              >
-                Go
-              </button>
-            </div>
-            
-            <button
-              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-              disabled={currentPage === totalPages}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: currentPage === totalPages ? colors.border : '#1a1a2e',
-                color: currentPage === totalPages ? colors.textMuted : 'white',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
-                fontWeight: '600',
-                fontSize: '14px',
-                transition: 'all 0.2s ease'
-              }}
-            >
-              Next
-            </button>
-          </div>
-        )}
+        <PaginationBar
+          page={currentPage}
+          totalPages={totalPages}
+          totalItems={filteredQuestions.length}
+          pageSize={itemsPerPage}
+          onPageChange={setCurrentPage}
+          itemLabel="questions"
+        />
       </article>
 
       {/* Modal for Add/Edit */}
@@ -1295,11 +1198,10 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
                 }}>
                   Standard:
                 </label>
-                <select
-                  name="Standard_List"
+                <StyledSelect
                   value={formData.Standard_List}
-                  onChange={handleChange}
-                  required
+                  onChange={(v) => handleChange({ target: { name: 'Standard_List', value: v } })}
+                  options={standards.map(std => std.Standard_List)}
                   style={{
                     width: '100%',
                     padding: '12px 15px',
@@ -1313,15 +1215,7 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
                     cursor: 'pointer',
                     boxSizing: 'border-box'
                   }}
-                  onFocus={e => e.target.style.borderColor = colors.text}
-                  onBlur={e => e.target.style.borderColor = colors.inputBorder}
-                >
-                  {standards.map(std => (
-                    <option key={std.Standard_List} value={std.Standard_List}>
-                      {std.Standard_List}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
 
               <div style={{ marginBottom: '22px' }}>
@@ -1503,11 +1397,10 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
                 }}>
                   Correct Answer:
                 </label>
-                <select
-                  name="Answer"
+                <StyledSelect
                   value={formData.Answer}
-                  onChange={handleChange}
-                  required
+                  onChange={(v) => handleChange({ target: { name: 'Answer', value: v } })}
+                  options={['A', 'B', 'C', 'D']}
                   style={{
                     width: '100%',
                     padding: '12px 15px',
@@ -1521,14 +1414,7 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
                     cursor: 'pointer',
                     boxSizing: 'border-box'
                   }}
-                  onFocus={e => e.target.style.borderColor = colors.text}
-                  onBlur={e => e.target.style.borderColor = colors.inputBorder}
-                >
-                  <option value="A">A</option>
-                  <option value="B">B</option>
-                  <option value="C">C</option>
-                  <option value="D">D</option>
-                </select>
+                />
               </div>
 
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '30px', flexWrap: 'wrap' }}>

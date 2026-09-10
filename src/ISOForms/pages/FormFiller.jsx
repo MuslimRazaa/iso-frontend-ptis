@@ -8,6 +8,7 @@ import { ensureSeeded, getOfflineTemplates, getOfflineTemplate, addOfflineEntry 
 import { getCurrentEmployeeId } from '../utils/currentEmployee'
 import { resolveSignerName, stampSignature } from '../utils/signature'
 import { fileToDataUrl } from '../utils/fileToDataUrl'
+import SearchableSelect from '../../components/SearchableSelect'
 
 // One column per ~340px of available width, so the same markup is a single
 // column on a laptop-narrow pane and four across on a wide monitor.
@@ -336,16 +337,17 @@ function FormFiller() {
             <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, fontSize: 14 }}>
               Related Employee (Approver)<span style={{ color: '#d7263d' }}> *</span>
             </label>
-            <select
+            <SearchableSelect
               value={relatedEmployeeId}
-              onChange={e => setRelatedEmployeeId(e.target.value)}
-              style={{ width: '100%', padding: '12px 15px', border: '2px solid #e0e0e6', borderRadius: 12, fontSize: 14, cursor: 'pointer', boxSizing: 'border-box' }}
-            >
-              <option value="">Select an employee…</option>
-              {employees.map(emp => (
-                <option key={emp.id} value={emp.id}>{emp.full_name || emp.name} {emp.department_name ? `— ${emp.department_name}` : ''}</option>
-              ))}
-            </select>
+              onChange={setRelatedEmployeeId}
+              options={employees.map(emp => ({
+                value: String(emp.id),
+                label: `${emp.full_name || emp.name}${emp.department_name ? ` — ${emp.department_name}` : ''}`,
+              }))}
+              emptyOptionLabel="Select an employee…"
+              placeholder="Type to search…"
+              style={{ width: '100%', padding: '12px 15px', border: '2px solid #e0e0e6', borderRadius: 12, fontSize: 14, cursor: 'text', boxSizing: 'border-box' }}
+            />
             <p style={{ margin: '8px 0 0', fontSize: 12, color: '#7a7a8c' }}>
               This person will need to approve or reject the form once submitted.
             </p>

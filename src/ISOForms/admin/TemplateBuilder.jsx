@@ -6,6 +6,7 @@ import PdfImportModal from '../components/PdfImportModal'
 import FieldPositionEditor from './FieldPositionEditor'
 import { isPlaced } from '../utils/pdfCoords'
 import { FIELD_TYPES, OWNERS, blankField, hasOptions } from '../utils/fieldTypes'
+import StyledSelect from '../../components/StyledSelect'
 
 // The template PDF is sent as a real file part, not as base64 inside the JSON
 // body: shared hosting (mod_security) caps non-file request data at 128 KB and
@@ -293,13 +294,13 @@ function TemplateBuilder() {
                 placeholder="Field label, e.g. Department"
                 style={{ padding: '10px 14px', border: '2px solid #e0e0e6', borderRadius: 10, fontSize: 14 }}
               />
-              <select
+              <StyledSelect
                 value={field.type}
-                onChange={e => updateField(field.id, { type: e.target.value })}
+                onChange={v => updateField(field.id, { type: v })}
+                options={[]}
+                extraOptions={FIELD_TYPES}
                 style={{ padding: '10px 14px', border: '2px solid #e0e0e6', borderRadius: 10, fontSize: 14, cursor: 'pointer' }}
-              >
-                {FIELD_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
+              />
             </div>
 
             {hasOptions(field.type) && (
@@ -314,13 +315,13 @@ function TemplateBuilder() {
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 13, color: '#595966', flexShrink: 0 }}>Filled by:</span>
-              <select
+              <StyledSelect
                 value={field.owner || 'requester'}
-                onChange={e => updateField(field.id, { owner: e.target.value })}
+                onChange={v => updateField(field.id, { owner: v })}
+                options={[]}
+                extraOptions={OWNERS}
                 style={{ padding: '8px 12px', border: '2px solid #e0e0e6', borderRadius: 10, fontSize: 13, cursor: 'pointer' }}
-              >
-                {OWNERS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
+              />
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

@@ -1,6 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Upload, Loader2 } from 'lucide-react'
 import { API_ENDPOINTS } from '../../config/api'
+import SearchableSelect from '../../components/SearchableSelect'
+
+const formSelectStyle = {
+  border: '1px solid #dcdce3', borderRadius: 14, padding: '12px 14px',
+  background: '#f9f9fb', color: '#14141c', fontFamily: 'inherit', fontSize: 14,
+  cursor: 'pointer', width: '100%', boxSizing: 'border-box',
+}
 
 function QuestionBank({ defaultTab = 'add' }) {
   const [activeTab, setActiveTab] = useState(defaultTab)
@@ -342,22 +349,16 @@ function QuestionBank({ defaultTab = 'add' }) {
               <div className="form-row">
                 <label>
                   <span>Standard *</span>
-                  <select 
-                    value={formState.standardId} 
-                    onChange={(event) => setFormState((prev) => ({ ...prev, standardId: event.target.value }))} 
+                  <SearchableSelect
+                    value={formState.standardId}
+                    onChange={(v) => setFormState((prev) => ({ ...prev, standardId: v }))}
                     required
                     disabled={loading || standards.length === 0}
-                  >
-                    {standards.length === 0 ? (
-                      <option value="">No standards available</option>
-                    ) : (
-                      standards.map((standard) => (
-                        <option key={standard.id} value={standard.id}>
-                          {standard.standard_name}
-                        </option>
-                      ))
-                    )}
-                  </select>
+                    options={standards.map((standard) => ({ value: standard.id, label: standard.standard_name }))}
+                    emptyOptionLabel={standards.length === 0 ? 'No standards available' : undefined}
+                    placeholder="Type to search…"
+                    style={formSelectStyle}
+                  />
                 </label>
               </div>
 
@@ -434,18 +435,19 @@ function QuestionBank({ defaultTab = 'add' }) {
             <div className="filter-section">
               <label>
                 <span>Filter by Standard</span>
-                <select value={filterStandard} onChange={(e) => setFilterStandard(e.target.value)} disabled={loading}>
-                  <option value="">-- Select Standard --</option>
-                  <option value="all">All Standards</option>
-                  <option value="recent">Recently Added (Last 10)</option>
-                  {standards.length > 0 && <optgroup label="Standards">
-                    {standards.map((standard) => (
-                      <option key={standard.id} value={standard.id.toString()}>
-                        {standard.standard_name}
-                      </option>
-                    ))}
-                  </optgroup>}
-                </select>
+                <SearchableSelect
+                  value={filterStandard}
+                  onChange={setFilterStandard}
+                  disabled={loading}
+                  options={standards.map((standard) => ({ value: standard.id.toString(), label: standard.standard_name }))}
+                  emptyOptionLabel="-- Select Standard --"
+                  extraOptions={[
+                    { value: 'all', label: 'All Standards' },
+                    { value: 'recent', label: 'Recently Added (Last 10)' },
+                  ]}
+                  placeholder="Type to search…"
+                  style={formSelectStyle}
+                />
               </label>
             </div>
 

@@ -1,7 +1,17 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Video, FileText, Trash2, Inbox, Info, RotateCcw } from 'lucide-react'
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api'
+import PaginationBar from '../../components/PaginationBar'
+import SearchableSelect from '../../components/SearchableSelect'
+
+const formSelectStyle = {
+  border: '1px solid #dcdce3', borderRadius: 14, padding: '12px 14px',
+  background: '#f9f9fb', color: '#14141c', fontFamily: 'inherit', fontSize: 14,
+  cursor: 'pointer', width: '100%', boxSizing: 'border-box',
+}
+
+const PAGE_SIZE = 100
 
 function TaskAllocation() {
   const [tasks, setTasks] = useState([])
@@ -16,6 +26,8 @@ function TaskAllocation() {
   const [activeTab, setActiveTab] = useState(
     searchParams.get('tab') === 'requests' ? 'requests' : 'allocations') // 'allocations' | 'requests'
   const [courseRequests, setCourseRequests] = useState([])
+  const [tasksPage, setTasksPage] = useState(1)
+  const [requestsPage, setRequestsPage] = useState(1)
   const [formData, setFormData] = useState({
     employee_id: '',
     course_id: '',
@@ -261,6 +273,20 @@ function TaskAllocation() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
+  const tasksTotalPages = Math.max(1, Math.ceil(tasks.length / PAGE_SIZE))
+  const tasksSafePage = Math.min(tasksPage, tasksTotalPages)
+  const paginatedTasks = useMemo(() => {
+    const start = (tasksSafePage - 1) * PAGE_SIZE
+    return tasks.slice(start, start + PAGE_SIZE)
+  }, [tasks, tasksSafePage])
+
+  const requestsTotalPages = Math.max(1, Math.ceil(courseRequests.length / PAGE_SIZE))
+  const requestsSafePage = Math.min(requestsPage, requestsTotalPages)
+  const paginatedRequests = useMemo(() => {
+    const start = (requestsSafePage - 1) * PAGE_SIZE
+    return courseRequests.slice(start, start + PAGE_SIZE)
+  }, [courseRequests, requestsSafePage])
+
   const formatHours = (seconds) => {
     if (!seconds) return '0h 0m'
     const h = Math.floor(seconds / 3600)
@@ -346,7 +372,7 @@ function TaskAllocation() {
                   </td>
                 </tr>
               ) : (
-                tasks.map((task) => {
+                paginatedTasks.map((task) => {
                   const st = computeTaskStatus(task)
                   return (
                     <tr key={task.id} className={st.label === 'Overdue' ? 'overdue-row' : ''}>
@@ -420,6 +446,14 @@ function TaskAllocation() {
               )}
             </tbody>
           </table>
+          <PaginationBar
+            page={tasksSafePage}
+            totalPages={tasksTotalPages}
+            totalItems={tasks.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setTasksPage}
+            itemLabel="tasks"
+          />
         </div>
       ) : (
         /* Course Requests Tab */
@@ -456,7 +490,7 @@ function TaskAllocation() {
                   </tr>
                 </thead>
                 <tbody>
-                  {courseRequests.map((req, index) => (
+                  {paginatedRequests.map((req, index) => (
                     <tr key={req.id || index}>
                       <td>
                         <strong>{req.employee_name}</strong>
@@ -490,6 +524,14 @@ function TaskAllocation() {
                   ))}
                 </tbody>
               </table>
+              <PaginationBar
+                page={requestsSafePage}
+                totalPages={requestsTotalPages}
+                totalItems={courseRequests.length}
+                pageSize={PAGE_SIZE}
+                onPageChange={setRequestsPage}
+                itemLabel="requests"
+              />
             </div>
           )}
         </div>
@@ -527,34 +569,28 @@ function TaskAllocation() {
             >
               <label>
                 <span>Select Employee *</span>
-                <select
+                <SearchableSelect
                   value={formData.employee_id}
-                  onChange={(e) => setFormData({ ...formData, employee_id: e.target.value })}
+                  onChange={(v) => setFormData({ ...formData, employee_id: v })}
                   required
-                >
-                  <option value="">Choose employee</option>
-                  {employees.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.full_name} ({emp.employee_id})
-                    </option>
-                  ))}
-                </select>
+                  options={employees.map((emp) => ({ value: emp.id, label: `${emp.full_name} (${emp.employee_id})` }))}
+                  emptyOptionLabel="Choose employee"
+                  placeholder="Type to search…"
+                  style={formSelectStyle}
+                />
               </label>
 
               <label>
                 <span>Select Course *</span>
-                <select
+                <SearchableSelect
                   value={formData.course_id}
-                  onChange={(e) => setFormData({ ...formData, course_id: e.target.value })}
+                  onChange={(v) => setFormData({ ...formData, course_id: v })}
                   required
-                >
-                  <option value="">Choose course</option>
-                  {courses.map((course) => (
-                    <option key={course.id} value={course.id}>
-                      {course.course_title} ({course.credit_hours} hours)
-                    </option>
-                  ))}
-                </select>
+                  options={courses.map((course) => ({ value: course.id, label: `${course.course_title} (${course.credit_hours} hours)` }))}
+                  emptyOptionLabel="Choose course"
+                  placeholder="Type to search…"
+                  style={formSelectStyle}
+                />
               </label>
 
               <label>

@@ -11,46 +11,22 @@ const defaultStatHighlights = [
   { label: "Pending Approvals", value: "—", helper: "Course requests waiting", tone: "warning" },
 ];
 
-const learningTracks = [
-  { title: "Integrity Inspectors", modules: "12 modules", progress: 76, due: "Due in 4d" },
-  { title: "Rigless Crew L2", modules: "9 modules", progress: 48, due: "Due in 8d" },
-  { title: "Audit Leads", modules: "7 modules", progress: 34, due: "New" },
-];
-
-const upcomingSessions = [
-  {
-    title: "API Integrity & Safety",
-    owner: "Lead Inspector Team",
-    date: "Jan 12 · 09:00 GMT",
-    status: "On Track",
-  },
-  {
-    title: "Rigless Operations Refresher",
-    owner: "Training Cell",
-    date: "Jan 16 · 14:00 GMT",
-    status: "Enrolling",
-  },
-  {
-    title: "ISO 17020 Update Brief",
-    owner: "Compliance Desk",
-    date: "Jan 22 · 11:30 GMT",
-    status: "Draft",
-  },
-];
-
-
-
-const quickActions = [
-  { label: "Create Course", helper: "Upload modules, tasks, and rubrics", action: "Start Draft" },
-  { label: "Assign Learners", helper: "Send invites to teams or individuals", action: "Open Roster" },
-  { label: "Quality Review", helper: "Track SME feedback and approval", action: "View Queue" },
-];
+const formatDue = (date) => {
+  if (!date) return "No deadline";
+  const days = Math.ceil((date.getTime() - Date.now()) / 86400000);
+  if (days < 0) return "Overdue";
+  if (days === 0) return "Due today";
+  return `Due in ${days}d`;
+};
 
 function LmsHome() {
   const navigate = useNavigate();
   const lmsBase = useLmsBase();
   const [spotlightCourses, setSpotlightCourses] = useState([]);
   const [statHighlights, setStatHighlights] = useState(defaultStatHighlights);
+  const [learningTracks, setLearningTracks] = useState([]);
+  const [upcomingDeadlines, setUpcomingDeadlines] = useState([]);
+  const [heroSnapshot, setHeroSnapshot] = useState(null);
   const [loadingCourses, setLoadingCourses] = useState(true);
   const [loadingStats, setLoadingStats] = useState(true);
 
@@ -129,6 +105,43 @@ function LmsHome() {
             tone: "warning", to: `${lmsBase}/task-allocation?tab=requests`,
           },
         ]);
+
+        // "Learning pulse" — the courses with real enrolments right now, not a
+        // fixed shortlist of course names that may not even exist any more.
+        const byCourse = {};
+        progressRows.forEach((r) => {
+          const id = r.course_id;
+          if (!byCourse[id]) byCourse[id] = { title: r.course_title || `Course #${id}`, total: 0, progressSum: 0, nearestDeadline: null };
+          const g = byCourse[id];
+          g.total += 1;
+          g.progressSum += Number(r.progress_percentage) || 0;
+          if (r.deadline) {
+            const d = new Date(r.deadline);
+            if (!Number.isNaN(d.getTime()) && (!g.nearestDeadline || d < g.nearestDeadline)) g.nearestDeadline = d;
+          }
+        });
+        const tracks = Object.values(byCourse)
+          .sort((a, b) => b.total - a.total)
+          .slice(0, 3)
+          .map((g) => ({
+            title: g.title,
+            modules: `${g.total} learner${g.total === 1 ? '' : 's'}`,
+            progress: Math.round(g.progressSum / g.total),
+            due: formatDue(g.nearestDeadline),
+          }));
+        setLearningTracks(tracks);
+
+        // The hero card's numbers, same real sources as everything else here —
+        // not a fixed "+18% / 207 learners" no data ever produced.
+        const weekAgo = Date.now() - 7 * 86400000;
+        const newEnrollments7d = progressRows.filter((r) => {
+          const d = r.enrollment_date ? new Date(r.enrollment_date) : null;
+          return d && !Number.isNaN(d.getTime()) && d.getTime() >= weekAgo;
+        }).length;
+        setHeroSnapshot({
+          activeCourses, activeEnrolments: progress.total, inProgress: progress.in_progress,
+          avgCompletion, pendingRequests, newEnrollments7d,
+        });
       } catch (error) {
         console.error('Error fetching stats:', error);
       } finally {
@@ -136,8 +149,35 @@ function LmsHome() {
       }
     };
 
+    // "Upcoming agenda" — the nearest real task deadlines, not a fixed list
+    // of training-session names no course or calendar ever produced.
+    const fetchDeadlines = async () => {
+      try {
+        const res = await fetch(API_ENDPOINTS.TASK_ALLOCATIONS);
+        const data = res.ok ? await res.json() : [];
+        const rows = Array.isArray(data) ? data : [];
+        const upcoming = rows
+          .filter((t) => t.deadline && new Date(t.deadline) >= new Date(new Date().toDateString()))
+          .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))
+          .slice(0, 3)
+          .map((t) => {
+            const progress = Number(t.live_progress ?? t.progress) || 0;
+            return {
+              title: t.course_title || 'Course',
+              owner: t.employee_name || 'Unassigned',
+              date: new Date(t.deadline).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+              status: progress >= 100 ? 'Completed' : progress > 0 ? 'In Progress' : 'Not Started',
+            };
+          });
+        setUpcomingDeadlines(upcoming);
+      } catch (error) {
+        console.error('Error fetching deadlines:', error);
+      }
+    };
+
     fetchCourses();
     fetchStats();
+    fetchDeadlines();
   }, [lmsBase]);
 
   const handleCardClick = (courseId) => {
@@ -158,30 +198,31 @@ function LmsHome() {
             <Link to={`${lmsBase}/add-course`} className="btn btn-primary" style={{textDecoration:"none"}}>
               Launch New Course
             </Link>
-            <button type="button" className="btn btn-ghost">
-              Share Snapshot
-            </button>
           </div>
         </div>
         <div className="lms-hero__card">
           <div className="hero-card__meta">
-            <span>Weekly Throughput</span>
-            <strong>+18%</strong>
+            <span>Active Enrolments</span>
+            <strong>{heroSnapshot ? heroSnapshot.activeEnrolments : '—'}</strong>
           </div>
-          <h3>Inspection Academies</h3>
-          <p>207 learners tracking ahead of schedule across 11 active pathways.</p>
+          <h3>This Week in Training</h3>
+          <p>
+            {heroSnapshot
+              ? `${heroSnapshot.inProgress} learner${heroSnapshot.inProgress === 1 ? '' : 's'} in progress across ${heroSnapshot.activeCourses} active course${heroSnapshot.activeCourses === 1 ? '' : 's'}.`
+              : 'Loading live training activity…'}
+          </p>
           <ul>
             <li>
-              <span>QA Sign-off</span>
-              <strong>7 pending</strong>
+              <span>Average Completion</span>
+              <strong>{heroSnapshot ? `${heroSnapshot.avgCompletion}%` : '—'}</strong>
             </li>
             <li>
-              <span>Assignments graded</span>
-              <strong>54 today</strong>
+              <span>Pending Approvals</span>
+              <strong>{heroSnapshot ? heroSnapshot.pendingRequests : '—'}</strong>
             </li>
             <li>
-              <span>New enrollments</span>
-              <strong>32</strong>
+              <span>New Enrollments (7d)</span>
+              <strong>{heroSnapshot ? heroSnapshot.newEnrollments7d : '—'}</strong>
             </li>
           </ul>
         </div>
@@ -222,47 +263,59 @@ function LmsHome() {
               <p className="eyebrow">Cohorts</p>
               <h2>Learning pulse</h2>
             </div>
-            <button type="button">View All</button>
+            <Link to={`${lmsBase}/course-tracking`}><button type="button">View All</button></Link>
           </header>
-          <ul>
-            {learningTracks.map((track) => (
-              <li key={track.title}>
-                <div className="track-meta">
-                  <strong>{track.title}</strong>
-                  <span>{track.modules}</span>
-                </div>
-                <div className="track-progress">
-                  <div className="progress-pill">
-                    <span style={{ width: `${track.progress}%` }} />
+          {learningTracks.length === 0 ? (
+            <p style={{ padding: '1rem 0', color: '#8c8c94' }}>
+              {loadingStats ? 'Loading…' : 'No active enrolments yet.'}
+            </p>
+          ) : (
+            <ul>
+              {learningTracks.map((track) => (
+                <li key={track.title}>
+                  <div className="track-meta">
+                    <strong>{track.title}</strong>
+                    <span>{track.modules}</span>
                   </div>
-                  <em>{track.due}</em>
-                </div>
-              </li>
-            ))}
-          </ul>
+                  <div className="track-progress">
+                    <div className="progress-pill">
+                      <span style={{ width: `${track.progress}%` }} />
+                    </div>
+                    <em>{track.due}</em>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </article>
         <article className="panel session-board">
           <header>
             <div>
-              <p className="eyebrow">Live Sessions</p>
+              <p className="eyebrow">Deadlines</p>
               <h2>Upcoming agenda</h2>
             </div>
-            <button type="button">Publish All</button>
+            <Link to={`${lmsBase}/task-allocation`}><button type="button">View All</button></Link>
           </header>
-          <ul>
-            {upcomingSessions.map((session) => (
-              <li key={session.title}>
-                <div>
-                  <strong>{session.title}</strong>
-                  <span>{session.owner}</span>
-                </div>
-                <div className="session-meta">
-                  <span>{session.date}</span>
-                  <em>{session.status}</em>
-                </div>
-              </li>
-            ))}
-          </ul>
+          {upcomingDeadlines.length === 0 ? (
+            <p style={{ padding: '1rem 0', color: '#8c8c94' }}>
+              {loadingStats ? 'Loading…' : 'No upcoming deadlines.'}
+            </p>
+          ) : (
+            <ul>
+              {upcomingDeadlines.map((session, i) => (
+                <li key={`${session.title}-${i}`}>
+                  <div>
+                    <strong>{session.title}</strong>
+                    <span>{session.owner}</span>
+                  </div>
+                  <div className="session-meta">
+                    <span>{session.date}</span>
+                    <em>{session.status}</em>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </article>
       </section>
 
@@ -315,17 +368,6 @@ function LmsHome() {
         </div>
       </section>
 
-      <section className="quick-actions">
-        {quickActions.map((item) => (
-          <article key={item.label} className="quick-card">
-            <div>
-              <p className="eyebrow">{item.label}</p>
-              <h3>{item.helper}</h3>
-            </div>
-            <button type="button">{item.action}</button>
-          </article>
-        ))}
-      </section>
     </div>
   );
 }

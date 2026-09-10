@@ -3,6 +3,14 @@ import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import { API_ENDPOINTS } from '../../config/api'
 import useLmsBase from '../useLmsBase'
+import StyledSelect from '../../components/StyledSelect'
+import SearchableSelect from '../../components/SearchableSelect'
+
+const formSelectStyle = {
+  border: '1px solid #dcdce3', borderRadius: 14, padding: '12px 14px',
+  background: '#f9f9fb', color: '#14141c', fontFamily: 'inherit', fontSize: 14,
+  cursor: 'pointer', width: '100%', boxSizing: 'border-box',
+}
 
 function AddCourse() {
   const navigate = useNavigate()
@@ -274,19 +282,13 @@ function AddCourse() {
 
         <label>
           <span>Course Category *</span>
-          <select 
-            name="course_category"
+          <StyledSelect
             value={formData.course_category}
-            onChange={handleInputChange}
-            required
-          >
-            <option value="">Select category</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.name}>
-                {category.name}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => handleInputChange({ target: { name: 'course_category', value: v } })}
+            options={categories.map((category) => category.name)}
+            emptyOptionLabel="Select category"
+            style={formSelectStyle}
+          />
         </label>
 
         <label>
@@ -306,18 +308,17 @@ function AddCourse() {
           </div>
 
           {standardMode === 'single' ? (
-            <select
-              name="standard_id"
+            <SearchableSelect
               value={formData.standard_id}
-              onChange={handleInputChange}
-            >
-              <option value="">Select standard</option>
-              {standards.map((standard) => (
-                <option key={standard.id} value={standard.id}>
-                  {standard.standard_name} ({standard.short_name})
-                </option>
-              ))}
-            </select>
+              onChange={(v) => handleInputChange({ target: { name: 'standard_id', value: v } })}
+              options={standards.map((standard) => ({
+                value: standard.id,
+                label: `${standard.standard_name} (${standard.short_name})`,
+              }))}
+              emptyOptionLabel="Select standard"
+              placeholder="Type to search…"
+              style={formSelectStyle}
+            />
           ) : (
             <div style={{
               border: '1px solid #e0e0e6', borderRadius: 10, padding: 10,

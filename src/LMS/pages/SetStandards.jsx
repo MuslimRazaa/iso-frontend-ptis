@@ -2,6 +2,8 @@ import React, { useMemo, useState, useEffect } from 'react'
 import axios from 'axios'
 import { Trash2 } from 'lucide-react'
 import { API_ENDPOINTS } from '../../config/api'
+import StyledSelect from '../../components/StyledSelect'
+import SearchableSelect from '../../components/SearchableSelect'
 
 const timeLimitPresets = [30, 45, 60, 75, 90, 120]
 
@@ -195,18 +197,14 @@ function SetStandards() {
           <label>
             <span>Time Limit (minutes) *</span>
             <div className="time-limit-row">
-              <select
+              <StyledSelect
                 value={timeLimitPresets.includes(Number(formData.time_limit)) ? formData.time_limit : ''}
-                onChange={(e) => handleChange('time_limit', e.target.value)}
-                required
-              >
-                <option value="">Select preset</option>
-                {timeLimitPresets.map((minutes) => (
-                  <option value={minutes} key={minutes}>
-                    {minutes} minutes
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => handleChange('time_limit', v)}
+                options={[]}
+                extraOptions={timeLimitPresets.map((minutes) => ({ value: minutes, label: `${minutes} minutes` }))}
+                emptyOptionLabel="Select preset"
+                style={{ borderRadius: 16, border: '1px solid #e3e3ea', padding: '12px 16px', fontFamily: 'inherit', cursor: 'pointer' }}
+              />
               <input
                 type="number"
                 min="10"
@@ -234,14 +232,15 @@ function SetStandards() {
             <p className="eyebrow">Active Benchmarks</p>
             <label>
               <span>Select Standard</span>
-              <select value={selectedStandardId} onChange={(e) => setSelectedStandardId(e.target.value)}>
-                <option value="all">All Standards</option>
-                {standards.map((standard) => (
-                  <option key={standard.id} value={String(standard.id)}>
-                    {standard.standard_name}
-                  </option>
-                ))}
-              </select>
+              <SearchableSelect
+                value={selectedStandardId}
+                onChange={setSelectedStandardId}
+                options={standards.map((standard) => ({ value: String(standard.id), label: standard.standard_name }))}
+                emptyOptionLabel="All Standards"
+                emptyOptionValue="all"
+                placeholder="Type to search…"
+                style={{ borderRadius: 18, border: '1px solid #e1e1e8', padding: '12px 16px', fontFamily: 'inherit', background: '#fff', color: '#1f1f27', fontSize: 14 }}
+              />
             </label>
           </div>
           <div className="standards-meta">

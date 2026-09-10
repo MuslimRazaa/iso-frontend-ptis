@@ -1,5 +1,7 @@
 import React from 'react'
 import { signatureLines } from '../utils/signature'
+import StyledSelect from '../../components/StyledSelect'
+import SearchableSelect from '../../components/SearchableSelect'
 
 const inputStyle = {
   width: '100%', padding: '12px 15px', border: '2px solid #e0e0e6',
@@ -81,10 +83,13 @@ function DynamicField({ field, value, onChange, readOnly, employees = [], signer
       return <input type="date" {...common} />
     case 'dropdown':
       return (
-        <select {...common} style={{ ...inputStyle, cursor: 'pointer' }}>
-          <option value="">Select…</option>
-          {options.map(o => <option key={o} value={o}>{o}</option>)}
-        </select>
+        <StyledSelect
+          value={value ?? ''}
+          onChange={onChange}
+          options={options}
+          emptyOptionLabel="Select…"
+          style={{ ...inputStyle, cursor: 'pointer' }}
+        />
       )
     case 'checkbox':
       return (
@@ -111,14 +116,17 @@ function DynamicField({ field, value, onChange, readOnly, employees = [], signer
     }
     case 'employee':
       return (
-        <select {...common} style={{ ...inputStyle, cursor: 'pointer' }}>
-          <option value="">Select employee…</option>
-          {employees.map(emp => (
-            <option key={emp.id} value={emp.id}>
-              {emp.full_name || emp.name}{(emp.department_name || emp.department) ? ` — ${emp.department_name || emp.department}` : ''}
-            </option>
-          ))}
-        </select>
+        <SearchableSelect
+          value={value ?? ''}
+          onChange={onChange}
+          options={employees.map(emp => ({
+            value: String(emp.id),
+            label: `${emp.full_name || emp.name}${(emp.department_name || emp.department) ? ` — ${emp.department_name || emp.department}` : ''}`,
+          }))}
+          emptyOptionLabel="Select employee…"
+          placeholder="Type to search…"
+          style={{ ...inputStyle, cursor: 'text' }}
+        />
       )
     default:
       return <input type="text" {...common} />

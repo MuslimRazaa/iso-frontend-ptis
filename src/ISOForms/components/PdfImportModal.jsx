@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react'
 import { parsePdf, pdfToBase64, enrichSeedFieldsWithCoords } from '../utils/parsePdf'
 import { SEED_TEMPLATES } from '../seedTemplates'
+import StyledSelect from '../../components/StyledSelect'
 
 const FIELD_TYPES = [
   { value: 'text',           label: 'Short Text' },
@@ -257,20 +258,20 @@ function PdfImportModal({ onImport, onClose }) {
                         onChange={e => updateField(f.id, { label: e.target.value })}
                         style={{ padding: '8px 12px', border: '1px solid #e0e0e6', borderRadius: 10, fontSize: 13 }}
                       />
-                      <select
+                      <StyledSelect
                         value={f.type}
-                        onChange={e => updateField(f.id, { type: e.target.value })}
+                        onChange={v => updateField(f.id, { type: v })}
+                        options={[]}
+                        extraOptions={FIELD_TYPES}
                         style={{ padding: '8px 10px', border: '1px solid #e0e0e6', borderRadius: 10, fontSize: 12, cursor: 'pointer' }}
-                      >
-                        {FIELD_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                      </select>
-                      <select
+                      />
+                      <StyledSelect
                         value={f.owner}
-                        onChange={e => updateField(f.id, { owner: e.target.value })}
+                        onChange={v => updateField(f.id, { owner: v })}
+                        options={[]}
+                        extraOptions={OWNERS}
                         style={{ padding: '8px 10px', border: '1px solid #e0e0e6', borderRadius: 10, fontSize: 12, cursor: 'pointer' }}
-                      >
-                        {OWNERS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                      </select>
+                      />
                       <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#595966' }}>
                         <input type="checkbox" checked={f.required} onChange={e => updateField(f.id, { required: e.target.checked })} />
                         Required
