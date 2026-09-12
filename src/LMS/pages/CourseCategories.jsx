@@ -128,6 +128,7 @@ function CourseCategories() {
         <div>
           <p className="eyebrow">Settings</p>
           <h2>Course Categories</h2>
+          <p className="panel-subtitle">Group courses into categories learners can browse by.</p>
         </div>
         <button className="primary-btn" onClick={() => setIsAdding(true)}>
           + Add Category

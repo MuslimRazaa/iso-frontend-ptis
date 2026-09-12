@@ -1379,6 +1379,10 @@ body {
   text-decoration: none;
 }
 
+.submenu a:hover {
+  color: #d7263d;
+}
+
 .lms-main {
   flex: 1;
   display: flex;
@@ -1388,6 +1392,15 @@ body {
   overflow-x: hidden;
   overflow-y: visible;
   max-width: 100%;
+}
+
+/* Testing & Certification reuses .lms-main (same shell as LMS/JLR) but its
+   horizontal padding tops out at 96px on wide screens — noticeably more
+   side margin than ISO Forms, whose pages pad themselves at clamp(24px,
+   4vw, 48px). Narrowing just the side padding here matches that. */
+.testing-lms-main {
+  padding-left: clamp(24px, 4vw, 48px);
+  padding-right: clamp(24px, 4vw, 48px);
 }
 
 .lms-header {

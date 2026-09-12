@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Video, FileText, Trash2, Inbox, Info, RotateCcw } from 'lucide-react'
+import { Video, FileText, Trash2, Inbox, Info, RotateCcw, Search } from 'lucide-react'
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api'
 import PaginationBar from '../../components/PaginationBar'
 import SearchableSelect from '../../components/SearchableSelect'
+import StyledSelect from '../../components/StyledSelect'
+import StyledDatePicker from '../../components/StyledDatePicker'
 
 const formSelectStyle = {
   border: '1px solid #dcdce3', borderRadius: 14, padding: '12px 14px',
@@ -28,6 +30,10 @@ function TaskAllocation() {
   const [courseRequests, setCourseRequests] = useState([])
   const [tasksPage, setTasksPage] = useState(1)
   const [requestsPage, setRequestsPage] = useState(1)
+  const [taskQuery, setTaskQuery] = useState('')
+  const [taskStatusFilter, setTaskStatusFilter] = useState('all')
+  const [taskDateFrom, setTaskDateFrom] = useState('')
+  const [taskDateTo, setTaskDateTo] = useState('')
   const [formData, setFormData] = useState({
     employee_id: '',
     course_id: '',
@@ -273,12 +279,43 @@ function TaskAllocation() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
-  const tasksTotalPages = Math.max(1, Math.ceil(tasks.length / PAGE_SIZE))
+  const onTaskQueryChange = (v) => { setTaskQuery(v); setTasksPage(1) }
+  const onTaskStatusChange = (v) => { setTaskStatusFilter(v); setTasksPage(1) }
+  const onTaskDateFromChange = (v) => { setTaskDateFrom(v); setTasksPage(1) }
+  const onTaskDateToChange = (v) => { setTaskDateTo(v); setTasksPage(1) }
+  const hasActiveTaskFilters = Boolean(taskQuery || taskStatusFilter !== 'all' || taskDateFrom || taskDateTo)
+  const clearTaskFilters = () => {
+    setTaskQuery(''); setTaskStatusFilter('all'); setTaskDateFrom(''); setTaskDateTo(''); setTasksPage(1)
+  }
+
+  const filteredTasks = useMemo(() => {
+    const q = taskQuery.trim().toLowerCase()
+    return tasks.filter((task) => {
+      if (taskStatusFilter !== 'all') {
+        const label = computeTaskStatus(task).label
+        if (taskStatusFilter === 'Completed' ? !label.startsWith('Completed') : label !== taskStatusFilter) return false
+      }
+      if (taskDateFrom || taskDateTo) {
+        const deadline = task.deadline ? new Date(task.deadline) : null
+        if (!deadline || Number.isNaN(deadline.getTime())) return false
+        const dateKey = deadline.toISOString().slice(0, 10)
+        if (taskDateFrom && dateKey < taskDateFrom) return false
+        if (taskDateTo && dateKey > taskDateTo) return false
+      }
+      if (!q) return true
+      return [task.employee_name, task.course_title]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q))
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks, taskQuery, taskStatusFilter, taskDateFrom, taskDateTo, resultsByEmail, standardById])
+
+  const tasksTotalPages = Math.max(1, Math.ceil(filteredTasks.length / PAGE_SIZE))
   const tasksSafePage = Math.min(tasksPage, tasksTotalPages)
   const paginatedTasks = useMemo(() => {
     const start = (tasksSafePage - 1) * PAGE_SIZE
-    return tasks.slice(start, start + PAGE_SIZE)
-  }, [tasks, tasksSafePage])
+    return filteredTasks.slice(start, start + PAGE_SIZE)
+  }, [filteredTasks, tasksSafePage])
 
   const requestsTotalPages = Math.max(1, Math.ceil(courseRequests.length / PAGE_SIZE))
   const requestsSafePage = Math.min(requestsPage, requestsTotalPages)
@@ -300,6 +337,7 @@ function TaskAllocation() {
         <div>
           <p className="eyebrow">Employee Training</p>
           <h2>Task Allocation & Progress Tracking</h2>
+          <p className="panel-subtitle">Assign courses to employees, track deadlines, and review incoming course requests.</p>
         </div>
         <button className="primary-btn" onClick={() => setShowModal(true)}>
           + Assign Course
@@ -351,6 +389,69 @@ function TaskAllocation() {
         </div>
       ) : activeTab === 'allocations' ? (
         <div className="task-table-wrapper">
+          {/* Filters */}
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 18 }}>
+            <div style={{ position: 'relative', flex: '1 1 200px', minWidth: 160, maxWidth: 320 }}>
+              <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#9a9aaa' }} />
+              <input
+                type="text"
+                placeholder="Search by employee or course…"
+                value={taskQuery}
+                onChange={(e) => onTaskQueryChange(e.target.value)}
+                style={{
+                  width: '100%', padding: '10px 12px 10px 36px', borderRadius: 10,
+                  border: '1px solid #e2e2ea', fontSize: 14, outline: 'none', background: '#fff', boxSizing: 'border-box',
+                }}
+              />
+            </div>
+            <StyledSelect
+              value={taskStatusFilter}
+              onChange={onTaskStatusChange}
+              options={[]}
+              extraOptions={[
+                { value: 'all', label: 'All statuses' },
+                { value: 'Completed', label: 'Completed' },
+                { value: 'Overdue', label: 'Overdue' },
+                { value: 'In Progress', label: 'In Progress' },
+                { value: 'Not Started', label: 'Not Started' },
+              ]}
+              style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e2ea', fontSize: 14, background: '#fff', cursor: 'pointer', minWidth: 150 }}
+            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }} title="Filter by deadline">
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#7a7a8c' }}>From</span>
+              <StyledDatePicker value={taskDateFrom} onChange={onTaskDateFromChange} max={taskDateTo || undefined}
+                style={{ padding: '10px 10px', borderRadius: 10, border: '1px solid #e2e2ea', fontSize: 14, background: '#fff', cursor: 'pointer' }} />
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#7a7a8c' }}>To</span>
+              <StyledDatePicker value={taskDateTo} onChange={onTaskDateToChange} min={taskDateFrom || undefined}
+                style={{ padding: '10px 10px', borderRadius: 10, border: '1px solid #e2e2ea', fontSize: 14, background: '#fff', cursor: 'pointer' }} />
+            </div>
+            {hasActiveTaskFilters && (
+              <button
+                type="button"
+                onClick={clearTaskFilters}
+                style={{
+                  background: 'transparent', border: '1px solid #e2e2ea', color: '#595966',
+                  padding: '10px 16px', borderRadius: 10, fontSize: 14, cursor: 'pointer',
+                  whiteSpace: 'nowrap', transition: 'all 0.2s ease', flexShrink: 0,
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.borderColor = '#d7263d'
+                  e.currentTarget.style.color = '#d7263d'
+                  e.currentTarget.style.transform = 'translateY(-2px)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.borderColor = '#e2e2ea'
+                  e.currentTarget.style.color = '#595966'
+                  e.currentTarget.style.transform = 'translateY(0)'
+                }}
+              >
+                Clear
+              </button>
+            )}
+            <span style={{ color: '#9a9aaa', fontSize: 13, width: '100%' }}>
+              {filteredTasks.length} of {tasks.length} tasks
+            </span>
+          </div>
           <table className="task-table">
             <thead>
               <tr>
@@ -365,10 +466,10 @@ function TaskAllocation() {
               </tr>
             </thead>
             <tbody>
-              {tasks.length === 0 ? (
+              {filteredTasks.length === 0 ? (
                 <tr>
                   <td colSpan="8" style={{ textAlign: 'center', padding: '40px' }}>
-                    No task allocations found. Create one to get started.
+                    {tasks.length === 0 ? 'No task allocations found. Create one to get started.' : 'No tasks match the current filters.'}
                   </td>
                 </tr>
               ) : (
@@ -449,7 +550,7 @@ function TaskAllocation() {
           <PaginationBar
             page={tasksSafePage}
             totalPages={tasksTotalPages}
-            totalItems={tasks.length}
+            totalItems={filteredTasks.length}
             pageSize={PAGE_SIZE}
             onPageChange={setTasksPage}
             itemLabel="tasks"
@@ -595,12 +696,11 @@ function TaskAllocation() {
 
               <label>
                 <span>Deadline *</span>
-                <input
-                  type="date"
+                <StyledDatePicker
                   value={formData.deadline}
-                  onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
-                  required
+                  onChange={(v) => setFormData({ ...formData, deadline: v })}
                   min={new Date().toISOString().split('T')[0]}
+                  style={formSelectStyle}
                 />
               </label>
 

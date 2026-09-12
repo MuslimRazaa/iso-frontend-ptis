@@ -167,6 +167,7 @@ function Certificates() {
             <div>
               <p className="eyebrow">Test Results</p>
               <h2>Passed Tests</h2>
+              <p className="panel-subtitle">Employees who passed a standard and are ready for certificate generation.</p>
             </div>
           </header>
 
@@ -242,6 +243,7 @@ function Certificates() {
             <div>
               <p className="eyebrow">Issued Credentials</p>
               <h2>Generated Certificates</h2>
+              <p className="panel-subtitle">Every certificate issued so far, ready to view or download.</p>
             </div>
             <span className="cert-count">{certificates.length} total</span>
           </header>

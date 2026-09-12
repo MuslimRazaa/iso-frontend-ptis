@@ -3,6 +3,7 @@ import { useLocation, useSearchParams } from 'react-router-dom'
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api'
 import PaginationBar from '../../components/PaginationBar'
 import StyledSelect from '../../components/StyledSelect'
+import StyledDatePicker from '../../components/StyledDatePicker'
 import { BsBriefcase, BsBoxSeam, BsWallet2, BsLaptop, BsClipboardData, BsPencilSquare } from 'react-icons/bs'
 import { MdOutlineHealthAndSafety } from 'react-icons/md'
 import {
@@ -804,6 +805,7 @@ function JobLogDescription() {
   const [importMsg, setImportMsg] = useState(null)
   const [saving, setSaving] = useState(false)
   const [csvMode, setCsvMode] = useState('append') // 'replace' | 'append'
+  const [csvHovered, setCsvHovered] = useState(null) // 'append' | 'replace' | null — which toggle segment the pointer is over
   const [jlrPerms, setJlrPerms] = useState(null)     // null = loading / unknown
 
   /* ── Fetch current user's JLR permissions ───────────────────
@@ -852,7 +854,7 @@ function JobLogDescription() {
   // sends a stable token ('closed', 'in_progress', 'pending') rather than a
   // guessed spelling — this page is what knows how a status is actually
   // spelled in the register, and resolves it once statusOptions is ready below.
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const requestedStatusToken = searchParams.get('status')
   const [statusFilter, setStatusFilter] = useState('all')
   const [sourceFilter, setSourceFilter] = useState('all')
@@ -1040,6 +1042,16 @@ function JobLogDescription() {
     // by a URL that is now stale.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestedStatusToken, statusOptions])
+
+  // The sidebar's "Add New Entry" shortcut arrives as ?add=1 — wait for
+  // entries to load first so nextSerial (used to pre-fill S#) is correct,
+  // then open the modal once and drop the param so a refresh doesn't reopen it.
+  useEffect(() => {
+    if (loading || searchParams.get('add') !== '1') return
+    if (canAccessAnyJlr) openAddModal()
+    setSearchParams(prev => { const next = new URLSearchParams(prev); next.delete('add'); return next }, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, searchParams, canAccessAnyJlr])
   const sourceOptions = useMemo(() => [...new Set(entries.map(e => e.source).filter(Boolean))], [entries])
 
   const filteredEntries = useMemo(() => {
@@ -1420,20 +1432,28 @@ function JobLogDescription() {
               border: '1px solid #e0e0e6', fontSize: 13, fontWeight: 600,
             }}>
               <button type="button" onClick={() => setCsvMode('append')}
+                onMouseEnter={() => setCsvHovered('append')}
+                onMouseLeave={() => setCsvHovered(null)}
                 style={{
                   padding: '9px 14px', border: 'none', cursor: 'pointer', transition: 'all 0.2s',
                   background: csvMode === 'append' ? '#d7263d' : '#fff',
-                  color: csvMode === 'append' ? '#fff' : '#7a7a8c',
+                  color: csvMode === 'append' ? '#fff' : (csvHovered === 'append' ? '#d7263d' : '#7a7a8c'),
+                  transform: csvMode !== 'append' && csvHovered === 'append' ? 'translateY(-2px)' : 'translateY(0)',
                   display: 'inline-flex', alignItems: 'center', gap: 6,
+                  height: '100%', boxSizing: 'border-box',
                 }}>
                 <Plus size={15} /> Append
               </button>
               <button type="button" onClick={() => setCsvMode('replace')}
+                onMouseEnter={() => setCsvHovered('replace')}
+                onMouseLeave={() => setCsvHovered(null)}
                 style={{
                   padding: '9px 14px', border: 'none', cursor: 'pointer', transition: 'all 0.2s',
                   background: csvMode === 'replace' ? '#d7263d' : '#fff',
-                  color: csvMode === 'replace' ? '#fff' : '#7a7a8c',
+                  color: csvMode === 'replace' ? '#fff' : (csvHovered === 'replace' ? '#d7263d' : '#7a7a8c'),
+                  transform: csvMode !== 'replace' && csvHovered === 'replace' ? 'translateY(-2px)' : 'translateY(0)',
                   display: 'inline-flex', alignItems: 'center', gap: 6,
+                  height: '100%', boxSizing: 'border-box',
                 }}>
                 <RefreshCw size={15} /> Replace
               </button>
@@ -1478,6 +1498,16 @@ function JobLogDescription() {
                 padding: '10px 18px', borderRadius: 16,
                 fontSize: 14, fontWeight: 600, cursor: 'pointer',
                 transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = '#fdecea'
+                e.currentTarget.style.borderColor = '#d7263d'
+                e.currentTarget.style.transform = 'translateY(-2px)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'transparent'
+                e.currentTarget.style.borderColor = '#ffd1d8'
+                e.currentTarget.style.transform = 'translateY(0)'
               }}
             >
               <Trash2 size={15} /> Delete All
@@ -1588,13 +1618,13 @@ function JobLogDescription() {
         {/* Entry-date range */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} title="Filter by entry date">
           <span style={{ fontSize: 12, fontWeight: 600, color: T.clearBtnColor, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Calendar size={13} /> From</span>
-          <input type="date" value={dateFrom} max={dateTo || undefined}
+          <StyledDatePicker value={dateFrom} max={dateTo || undefined}
             style={{ ...inputStyle, padding: '10px 10px', minWidth: 0, cursor: 'pointer' }}
-            onChange={e => setDateFrom(e.target.value)} />
+            onChange={setDateFrom} />
           <span style={{ fontSize: 12, fontWeight: 600, color: T.clearBtnColor }}>To</span>
-          <input type="date" value={dateTo} min={dateFrom || undefined}
+          <StyledDatePicker value={dateTo} min={dateFrom || undefined}
             style={{ ...inputStyle, padding: '10px 10px', minWidth: 0, cursor: 'pointer' }}
-            onChange={e => setDateTo(e.target.value)} />
+            onChange={setDateTo} />
         </div>
         {/* Clear */}
         <button
@@ -1606,6 +1636,16 @@ function JobLogDescription() {
             transition: 'all 0.2s ease',
           }}
           onClick={() => { setSearchTerm(''); setStatusFilter('all'); setSourceFilter('all'); setDateFrom(''); setDateTo(''); setSortBy('entryDesc') }}
+          onMouseEnter={e => {
+            e.currentTarget.style.borderColor = '#d7263d'
+            e.currentTarget.style.color = '#d7263d'
+            e.currentTarget.style.transform = 'translateY(-2px)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.borderColor = T.clearBtnBorder.split(' ').pop()
+            e.currentTarget.style.color = T.clearBtnColor
+            e.currentTarget.style.transform = 'translateY(0)'
+          }}
         >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><X size={14} /> Clear Filters</span>
         </button>
@@ -1814,9 +1854,10 @@ function JobLogDescription() {
                   <input type="text" value={modalState.sNo} readOnly
                     style={{ background: '#f4f4f7', color: '#aaa', cursor: 'not-allowed' }} /></label>
                 <label><span>Entry Date *</span>
-                  <input type="date" value={modalState.entryDate} required
+                  <StyledDatePicker value={modalState.entryDate}
                     disabled={!canEdit('operations')}
-                    onChange={e => handleModalChange('entryDate', e.target.value)} /></label>
+                    style={modalSelectStyle}
+                    onChange={v => handleModalChange('entryDate', v)} /></label>
                 <div className="field-col"><span>Client *</span>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -1929,13 +1970,15 @@ function JobLogDescription() {
                     disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('natureOfJob', e.target.value)} /></label>
                 <label><span>Job Start</span>
-                  <input type="date" value={modalState.startDate}
+                  <StyledDatePicker value={modalState.startDate}
                     disabled={!canEdit('operations')}
-                    onChange={e => handleModalChange('startDate', e.target.value)} /></label>
+                    style={modalSelectStyle}
+                    onChange={v => handleModalChange('startDate', v)} /></label>
                 <label><span>Job End</span>
-                  <input type="date" value={modalState.endDate}
+                  <StyledDatePicker value={modalState.endDate}
                     disabled={!canEdit('operations')}
-                    onChange={e => handleModalChange('endDate', e.target.value)} /></label>
+                    style={modalSelectStyle}
+                    onChange={v => handleModalChange('endDate', v)} /></label>
                 <label><span>Vehicle Plate No.</span>
                   <input type="text" value={modalState.vehicleUsed} placeholder="Hilux-12"
                     disabled={!canEdit('operations')}
@@ -1981,9 +2024,10 @@ function JobLogDescription() {
                     onChange={v => handleModalChange('status', v)}
                   /></label>
                 <label><span>Completion Date</span>
-                  <input type="date" value={modalState.completionDate}
+                  <StyledDatePicker value={modalState.completionDate}
                     disabled={!canEdit('operations')}
-                    onChange={e => handleModalChange('completionDate', e.target.value)} /></label>
+                    style={modalSelectStyle}
+                    onChange={v => handleModalChange('completionDate', v)} /></label>
                 <label><span>Region *</span>
                   <StyledSelect
                     value={modalState.source}
@@ -2033,9 +2077,10 @@ function JobLogDescription() {
                   </label>
                 ))}
                 <label><span>Submission Date</span>
-                  <input type="date" value={modalState.submissionDate}
+                  <StyledDatePicker value={modalState.submissionDate}
                     disabled={!canEdit('qhse')}
-                    onChange={e => handleModalChange('submissionDate', e.target.value)} /></label>
+                    style={modalSelectStyle}
+                    onChange={v => handleModalChange('submissionDate', v)} /></label>
               </div>
               <label><span>QHSE Remarks</span>
                 <textarea rows="2" value={modalState.remarkQhse}
@@ -2186,12 +2231,14 @@ function JobLogDescription() {
               {/* Single date-range calendar: From → To (by entry date) */}
               <div className="form-row">
                 <label><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Calendar size={14} /> From</span>
-                  <input type="date" value={exportFrom} max={exportTo || undefined}
-                    onChange={e => setExportFrom(e.target.value)} />
+                  <StyledDatePicker value={exportFrom} max={exportTo || undefined}
+                    onChange={setExportFrom}
+                    style={{ border: '1px solid #dcdce3', borderRadius: 14, padding: '12px 14px', background: '#f9f9fb', color: '#14141c', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box' }} />
                 </label>
                 <label><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Calendar size={14} /> To</span>
-                  <input type="date" value={exportTo} min={exportFrom || undefined}
-                    onChange={e => setExportTo(e.target.value)} />
+                  <StyledDatePicker value={exportTo} min={exportFrom || undefined}
+                    onChange={setExportTo}
+                    style={{ border: '1px solid #dcdce3', borderRadius: 14, padding: '12px 14px', background: '#f9f9fb', color: '#14141c', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box' }} />
                 </label>
               </div>
               <p style={{ margin: '0 0 2px', fontSize: 12.5, color: '#9a9aaa' }}>

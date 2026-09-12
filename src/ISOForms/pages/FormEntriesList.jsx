@@ -7,6 +7,7 @@ import { getOfflineEntries, deleteOfflineEntry } from '../utils/offlineStore'
 import PaginationBar from '../../components/PaginationBar'
 import StyledSelect from '../../components/StyledSelect'
 import SearchableSelect from '../../components/SearchableSelect'
+import StyledDatePicker from '../../components/StyledDatePicker'
 
 const PAGE_SIZE = 100
 
@@ -320,20 +321,18 @@ function FormEntriesList() {
           <span style={{ fontSize: 12, fontWeight: 600, color: '#7a7a8c', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             <Calendar size={13} /> From
           </span>
-          <input
-            type="date"
+          <StyledDatePicker
             value={dateFrom}
             max={dateTo || undefined}
             style={{ ...inputStyle, padding: '10px 10px', minWidth: 0, cursor: 'pointer' }}
-            onChange={e => onDateFromChange(e.target.value)}
+            onChange={onDateFromChange}
           />
           <span style={{ fontSize: 12, fontWeight: 600, color: '#7a7a8c' }}>To</span>
-          <input
-            type="date"
+          <StyledDatePicker
             value={dateTo}
             min={dateFrom || undefined}
             style={{ ...inputStyle, padding: '10px 10px', minWidth: 0, cursor: 'pointer' }}
-            onChange={e => onDateToChange(e.target.value)}
+            onChange={onDateToChange}
           />
         </div>
 
@@ -357,6 +356,17 @@ function FormEntriesList() {
               color: '#595966', padding: '10px 16px', borderRadius: 16,
               fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap',
               display: 'inline-flex', alignItems: 'center', gap: 6,
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = '#d7263d'
+              e.currentTarget.style.color = '#d7263d'
+              e.currentTarget.style.transform = 'translateY(-2px)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = '#e0e0e6'
+              e.currentTarget.style.color = '#595966'
+              e.currentTarget.style.transform = 'translateY(0)'
             }}
           >
             <X size={14} /> Clear

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import axios from 'axios'
-import { Pencil, Trash2 } from 'lucide-react'
+import { Pencil, Trash2, Search } from 'lucide-react'
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api'
 import PaginationBar from '../../components/PaginationBar'
 import StyledSelect from '../../components/StyledSelect'
+import StyledDatePicker from '../../components/StyledDatePicker'
 
 const formSelectStyle = {
   border: '1px solid #dcdce3', borderRadius: 14, padding: '12px 14px',
@@ -38,6 +39,11 @@ function AllCourses() {
   })
   const [saving, setSaving] = useState(false)
   const [showModal, setShowModal] = useState(false)
+  const [query, setQuery] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
 
   // Fetch courses from backend
   useEffect(() => {
@@ -79,6 +85,7 @@ function AllCourses() {
           duration: course.duration_weeks || 0,
           status: course.is_published ? 'Active' : 'Draft',
           updated: updatedText,
+          updatedAt: course.updated_at,
           thumbnail: course.course_thumbnail ? `${API_BASE_URL}${course.course_thumbnail}` : dataAnalystThumb,
           prerequisites: course.prerequisites || 'None',
           videos: course.course_videos || [],
@@ -209,12 +216,46 @@ function AllCourses() {
     setEditForm({ ...editForm, videos: newVideos })
   }
 
-  const totalPages = Math.max(1, Math.ceil(courses.length / PAGE_SIZE))
+  const categoryOptions = useMemo(
+    () => [...new Set(courses.map((c) => c.category).filter(Boolean))].sort(),
+    [courses]
+  )
+
+  const onQueryChange = (v) => { setQuery(v); setCurrentPage(1) }
+  const onCategoryChange = (v) => { setCategoryFilter(v); setCurrentPage(1) }
+  const onStatusChange = (v) => { setStatusFilter(v); setCurrentPage(1) }
+  const onDateFromChange = (v) => { setDateFrom(v); setCurrentPage(1) }
+  const onDateToChange = (v) => { setDateTo(v); setCurrentPage(1) }
+  const hasActiveFilters = Boolean(query || categoryFilter !== 'all' || statusFilter !== 'all' || dateFrom || dateTo)
+  const clearFilters = () => {
+    setQuery(''); setCategoryFilter('all'); setStatusFilter('all'); setDateFrom(''); setDateTo(''); setCurrentPage(1)
+  }
+
+  const filteredCourses = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return courses.filter((c) => {
+      if (categoryFilter !== 'all' && c.category !== categoryFilter) return false
+      if (statusFilter !== 'all' && c.status !== statusFilter) return false
+      if (dateFrom || dateTo) {
+        const updated = c.updatedAt ? new Date(c.updatedAt) : null
+        if (!updated || Number.isNaN(updated.getTime())) return false
+        const dateKey = updated.toISOString().slice(0, 10)
+        if (dateFrom && dateKey < dateFrom) return false
+        if (dateTo && dateKey > dateTo) return false
+      }
+      if (!q) return true
+      return [c.title, c.owner, c.category, c.standard]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q))
+    })
+  }, [courses, query, categoryFilter, statusFilter, dateFrom, dateTo])
+
+  const totalPages = Math.max(1, Math.ceil(filteredCourses.length / PAGE_SIZE))
   const safePage = Math.min(currentPage, totalPages)
   const paginatedCourses = useMemo(() => {
     const start = (safePage - 1) * PAGE_SIZE
-    return courses.slice(start, start + PAGE_SIZE)
-  }, [courses, safePage])
+    return filteredCourses.slice(start, start + PAGE_SIZE)
+  }, [filteredCourses, safePage])
 
   return (
     <div className="lms-table-panel">
@@ -222,9 +263,82 @@ function AllCourses() {
         <div>
           <p className="eyebrow">Course Catalogue</p>
           <h2>All Courses</h2>
+          <p className="panel-subtitle">Every published and draft course, with quick edit and delete.</p>
         </div>
         <button className="ghost-btn" onClick={fetchCourses}>Refresh</button>
       </header>
+
+      {/* Filters */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', margin: '18px 0' }}>
+        <div style={{ position: 'relative', flex: '1 1 200px', minWidth: 160, maxWidth: 320 }}>
+          <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#9a9aaa' }} />
+          <input
+            type="text"
+            placeholder="Search by title, owner, category or standard…"
+            value={query}
+            onChange={(e) => onQueryChange(e.target.value)}
+            style={{
+              width: '100%', padding: '10px 12px 10px 36px', borderRadius: 10,
+              border: '1px solid #e2e2ea', fontSize: 14, outline: 'none', background: '#fff', boxSizing: 'border-box',
+            }}
+          />
+        </div>
+        <StyledSelect
+          value={categoryFilter}
+          onChange={onCategoryChange}
+          options={[]}
+          extraOptions={[
+            { value: 'all', label: 'All categories' },
+            ...categoryOptions.map((c) => ({ value: c, label: c })),
+          ]}
+          style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e2ea', fontSize: 14, background: '#fff', cursor: 'pointer', minWidth: 160 }}
+        />
+        <StyledSelect
+          value={statusFilter}
+          onChange={onStatusChange}
+          options={[]}
+          extraOptions={[
+            { value: 'all', label: 'All statuses' },
+            { value: 'Active', label: 'Active' },
+            { value: 'Draft', label: 'Draft' },
+          ]}
+          style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e2ea', fontSize: 14, background: '#fff', cursor: 'pointer', minWidth: 140 }}
+        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#7a7a8c' }}>From</span>
+          <StyledDatePicker value={dateFrom} onChange={onDateFromChange} max={dateTo || undefined}
+            style={{ padding: '10px 10px', borderRadius: 10, border: '1px solid #e2e2ea', fontSize: 14, background: '#fff', cursor: 'pointer' }} />
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#7a7a8c' }}>To</span>
+          <StyledDatePicker value={dateTo} onChange={onDateToChange} min={dateFrom || undefined}
+            style={{ padding: '10px 10px', borderRadius: 10, border: '1px solid #e2e2ea', fontSize: 14, background: '#fff', cursor: 'pointer' }} />
+        </div>
+        {hasActiveFilters && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            style={{
+              background: 'transparent', border: '1px solid #e2e2ea', color: '#595966',
+              padding: '10px 16px', borderRadius: 10, fontSize: 14, cursor: 'pointer',
+              whiteSpace: 'nowrap', transition: 'all 0.2s ease', flexShrink: 0,
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = '#d7263d'
+              e.currentTarget.style.color = '#d7263d'
+              e.currentTarget.style.transform = 'translateY(-2px)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = '#e2e2ea'
+              e.currentTarget.style.color = '#595966'
+              e.currentTarget.style.transform = 'translateY(0)'
+            }}
+          >
+            Clear
+          </button>
+        )}
+        <span style={{ color: '#9a9aaa', fontSize: 13, width: '100%' }}>
+          {filteredCourses.length} of {courses.length} courses
+        </span>
+      </div>
 
       {loading && (
         <div style={{ textAlign: 'center', padding: '2rem' }}>
@@ -238,7 +352,13 @@ function AllCourses() {
         </div>
       )}
 
-      {!loading && courses.length > 0 && (
+      {!loading && courses.length > 0 && filteredCourses.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '2rem' }}>
+          <p>No courses match the current filters.</p>
+        </div>
+      )}
+
+      {!loading && filteredCourses.length > 0 && (
         <div className="table-wrapper">
           <table className="course-table">
             <thead>
@@ -290,11 +410,11 @@ function AllCourses() {
         </div>
       )}
 
-      {!loading && courses.length > 0 && (
+      {!loading && filteredCourses.length > 0 && (
         <PaginationBar
           page={safePage}
           totalPages={totalPages}
-          totalItems={courses.length}
+          totalItems={filteredCourses.length}
           pageSize={PAGE_SIZE}
           onPageChange={setCurrentPage}
           itemLabel="courses"

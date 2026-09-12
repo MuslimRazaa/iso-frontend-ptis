@@ -192,6 +192,7 @@ function AddEmployee() {
         <div>
           <p className="eyebrow">Talent & Workforce</p>
           <h2>Add Employee Profile</h2>
+          <p className="panel-subtitle">Create a learner profile with department, location and access details.</p>
         </div>
       </header>
 

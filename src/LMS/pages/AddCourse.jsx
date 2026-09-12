@@ -199,6 +199,7 @@ function AddCourse() {
         <div>
           <p className="eyebrow">Course Builder</p>
           <h2>Add New Course</h2>
+          <p className="panel-subtitle">Publish a new course with standards, prerequisites and learning material in one form.</p>
         </div>
       </header>
 

@@ -131,6 +131,7 @@ function AllEmployees() {
         <div>
           <p className="eyebrow">People Directory</p>
           <h2>All Employees</h2>
+          <p className="panel-subtitle">Every learner enrolled in the system, with department, location and status.</p>
         </div>
         <div className="table-actions">
           <button className="ghost-btn" onClick={fetchEmployees}>

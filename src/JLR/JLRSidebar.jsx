@@ -20,6 +20,9 @@ const SidebarIcon = ({ id }) => (
 
 function JLRSidebar() {
   const [isExpanded, setIsExpanded] = useState(false)
+  const [entriesMenuOpen, setEntriesMenuOpen] = useState(false)
+  const [auditMenuOpen, setAuditMenuOpen] = useState(false)
+  const [backupsMenuOpen, setBackupsMenuOpen] = useState(false)
   const location = useLocation()
 
   // Detect whether this layout is mounted under /user/* (user side) or /job-log/* (admin)
@@ -94,43 +97,65 @@ function JLRSidebar() {
           </NavLink>
         </div>
 
-        {/* Job Entries */}
+        {/* Job Entries — a dropdown since the page offers two distinct entry
+            points (jump straight to Add, or just browse the list). */}
         <div className="menu-group">
-          <NavLink
-            to={entriesPath}
-            className={({ isActive }) => `menu-trigger link${isActive ? ' active' : ''}`}
+          <button
+            type="button"
+            className={`menu-trigger ${entriesMenuOpen ? 'open' : ''}`}
+            onClick={() => setEntriesMenuOpen((prev) => !prev)}
           >
             <SidebarIcon id="entries" />
             <span className="menu-label">Job Entries</span>
-            <i aria-hidden="true" />
-          </NavLink>
+            <i />
+          </button>
+          <ul className={`submenu ${entriesMenuOpen ? 'visible' : ''}`}>
+            <li>
+              <NavLink to={`${entriesPath}?add=1`}>Add New Entry</NavLink>
+            </li>
+            <li>
+              <NavLink to={entriesPath} end>View Entries</NavLink>
+            </li>
+          </ul>
         </div>
 
         {/* Backups — admin side only */}
         {!isUserSide && (
           <div className="menu-group">
-            <NavLink
-              to={backupsPath}
-              className={({ isActive }) => `menu-trigger link${isActive ? ' active' : ''}`}
+            <button
+              type="button"
+              className={`menu-trigger ${backupsMenuOpen ? 'open' : ''}`}
+              onClick={() => setBackupsMenuOpen((prev) => !prev)}
             >
               <SidebarIcon id="backups" />
               <span className="menu-label">Backups</span>
-              <i aria-hidden="true" />
-            </NavLink>
+              <i />
+            </button>
+            <ul className={`submenu ${backupsMenuOpen ? 'visible' : ''}`}>
+              <li>
+                <NavLink to={backupsPath}>View Backups</NavLink>
+              </li>
+            </ul>
           </div>
         )}
 
         {/* Audit Log — admin side only */}
         {!isUserSide && (
           <div className="menu-group">
-            <NavLink
-              to={auditLogPath}
-              className={({ isActive }) => `menu-trigger link${isActive ? ' active' : ''}`}
+            <button
+              type="button"
+              className={`menu-trigger ${auditMenuOpen ? 'open' : ''}`}
+              onClick={() => setAuditMenuOpen((prev) => !prev)}
             >
               <SidebarIcon id="audit" />
               <span className="menu-label">Audit Log</span>
-              <i aria-hidden="true" />
-            </NavLink>
+              <i />
+            </button>
+            <ul className={`submenu ${auditMenuOpen ? 'visible' : ''}`}>
+              <li>
+                <NavLink to={auditLogPath}>View Audit Log</NavLink>
+              </li>
+            </ul>
           </div>
         )}
       </nav>

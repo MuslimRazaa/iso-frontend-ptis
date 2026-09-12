@@ -45,6 +45,7 @@ import PaginationBar from '../components/PaginationBar';
 import AuditLogView from '../components/AuditLogView';
 import StyledSelect from '../components/StyledSelect';
 import SearchableSelect from '../components/SearchableSelect';
+import StyledDatePicker from '../components/StyledDatePicker';
 
 // Toast Notification Component
 const Toast = ({ message, type = 'info', onClose, isDarkMode }) => {
@@ -3938,10 +3939,17 @@ const TestingModule = () => {
           </nav>
         </aside>
 
-        <div className="lms-main">
+        <div className="lms-main testing-lms-main">
           <header className="lms-header">
             <div className="lms-header__copy">
-              <p className="eyebrow">PTIS Testing System</p>
+              {adminActiveTab === 'auditlog' && (
+                <button
+                  type="button"
+                  onClick={() => setAdminActiveTab('dashboard')}
+                  style={{ fontFamily: 'inherit', fontSize: 13, color: '#7a7a8c', textDecoration: 'none', background: 'none', border: 'none', padding: 0, cursor: 'pointer', alignSelf: 'flex-start' }}
+                >← Back</button>
+              )}
+              <p className="eyebrow">{adminActiveTab === 'auditlog' ? 'ADMIN' : 'PTIS Testing System'}</p>
               <h1>
                 {adminActiveTab === 'dashboard' && <>Dashboard <span>Overview</span></>}
                 {adminActiveTab === 'results' && <>Test Results <span>Management</span></>}
@@ -3950,8 +3958,11 @@ const TestingModule = () => {
                 {adminActiveTab === 'certificates' && <>Certificate <span>Management</span></>}
                 {adminActiveTab === 'employees' && <>Employee <span>Management</span></>}
                 {adminActiveTab === 'practical' && <>Practical Test <span>Management</span></>}
-                {adminActiveTab === 'auditlog' && <>Audit <span>Log</span></>}
+                {adminActiveTab === 'auditlog' && 'Audit Log'}
               </h1>
+              {adminActiveTab === 'auditlog' && (
+                <p style={{ margin: '0 0 24px', color: '#7a7a8c' }}>Every result, standard, question, certificate and employee change recorded across this module.</p>
+              )}
             </div>
             <div className="lms-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               {!(adminActiveTab === 'dashboard' || adminActiveTab === 'certificates' || adminActiveTab === 'auditlog') && (
@@ -4046,10 +4057,32 @@ const TestingModule = () => {
                 transition: 'filter 0.25s ease, opacity 0.25s ease',
                 ...(selected ? {} : { filter: 'grayscale(1)', opacity: 0.35 }),
               });
-              const statusSelected = (status) => !statusPicked || filterStatus === status;
-              const standardBarSelected = (standard, status) =>
-                (!standardPicked || filterStandard === standard) && (!statusPicked || filterStatus === status);
-              const scoreBandSelected = (range) => !scorePicked || filterScoreRange === range;
+              // A chart's own axis toggles exclusively (click Pass, Fail dims in
+              // that same chart) — but every other chart's axis only knows
+              // whether a matching row still exists once the other filters are
+              // applied, so score bands / standard bars / status segments with
+              // zero matching rows dim too, not just the one the click set.
+              const matchesStatus = (r, status) => (status === 'Pass' ? isPass(r.STATUS) : !isPass(r.STATUS));
+              const statusSelected = (status) => {
+                if (statusPicked) return filterStatus === status;
+                if (!standardPicked && !scorePicked) return true;
+                return chartData.some(r => matchesStatus(r, status)
+                  && (!standardPicked || norm(r.STANDARD) === filterStandard)
+                  && (!scorePicked || scoreRangeOf(toPctNumber(r.PERCENTAGE)) === filterScoreRange));
+              };
+              const standardBarSelected = (standard, status) => {
+                if (standardPicked && filterStandard !== standard) return false;
+                if (statusPicked && filterStatus !== status) return false;
+                return !scorePicked || chartData.some(r => norm(r.STANDARD) === standard && matchesStatus(r, status)
+                  && scoreRangeOf(toPctNumber(r.PERCENTAGE)) === filterScoreRange);
+              };
+              const scoreBandSelected = (range) => {
+                if (scorePicked) return filterScoreRange === range;
+                if (!standardPicked && !statusPicked) return true;
+                return chartData.some(r => scoreRangeOf(toPctNumber(r.PERCENTAGE)) === range
+                  && (!standardPicked || norm(r.STANDARD) === filterStandard)
+                  && (!statusPicked || matchesStatus(r, filterStatus)));
+              };
 
               // Same card design (and now the same hover) as the LMS stats
               // row — clicking one jumps to Results filtered to it, the same
@@ -4496,10 +4529,9 @@ const TestingModule = () => {
                           }}></span>
                           From Date
                         </label>
-                        <input
-                          type="date"
+                        <StyledDatePicker
                           value={filterDateFrom}
-                          onChange={e => setFilterDateFrom(e.target.value)}
+                          onChange={setFilterDateFrom}
                           style={{
                             width: '100%',
                             padding: '12px 15px',
@@ -4512,14 +4544,6 @@ const TestingModule = () => {
                             cursor: 'pointer',
                             transition: 'all 0.2s ease',
                             outline: 'none'
-                          }}
-                          onFocus={e => {
-                            e.target.style.borderColor = theme.text.primary;
-                            e.target.style.backgroundColor = theme.bg.secondary;
-                          }}
-                          onBlur={e => {
-                            e.target.style.borderColor = theme.border.default;
-                            e.target.style.backgroundColor = theme.bg.input;
                           }}
                         />
                       </div>
@@ -4541,10 +4565,10 @@ const TestingModule = () => {
                           }}></span>
                           To Date
                         </label>
-                        <input
-                          type="date"
+                        <StyledDatePicker
                           value={filterDateTo}
-                          onChange={e => setFilterDateTo(e.target.value)}
+                          onChange={setFilterDateTo}
+                          min={filterDateFrom || undefined}
                           style={{
                             width: '100%',
                             padding: '12px 15px',
@@ -4557,14 +4581,6 @@ const TestingModule = () => {
                             cursor: 'pointer',
                             transition: 'all 0.2s ease',
                             outline: 'none'
-                          }}
-                          onFocus={e => {
-                            e.target.style.borderColor = theme.text.primary;
-                            e.target.style.backgroundColor = theme.bg.secondary;
-                          }}
-                          onBlur={e => {
-                            e.target.style.borderColor = theme.border.default;
-                            e.target.style.backgroundColor = theme.bg.input;
                           }}
                         />
                       </div>
@@ -4691,7 +4707,13 @@ const TestingModule = () => {
                     transition: 'filter 0.25s ease, opacity 0.25s ease',
                     ...(selected ? {} : { filter: 'grayscale(1)', opacity: 0.35 }),
                   });
-                  const statusSelected = (status) => !statusPicked || filterStatus === status;
+                  const statusSelected = (status) => {
+                    if (statusPicked) return filterStatus === status;
+                    if (!standardPicked && !scorePicked) return true;
+                    return rfData.some(r => (status === 'Pass' ? isPass(r.STATUS) : !isPass(r.STATUS))
+                      && (!standardPicked || norm(r.STANDARD) === filterStandard)
+                      && (!scorePicked || scoreRangeOf(toPctNumber(r.PERCENTAGE)) === filterScoreRange));
+                  };
                   const trendDotSelected = (point) =>
                     (!filterEmpId || String(filterEmpId) === String(point.empId)) &&
                     (!standardPicked || filterStandard === point.standard);
@@ -4712,9 +4734,20 @@ const TestingModule = () => {
                       />
                     );
                   };
-                  const standardBarSelected = (standard, status) =>
-                    (!standardPicked || filterStandard === standard) && (!statusPicked || filterStatus === status);
-                  const scoreBandSelected = (range) => !scorePicked || filterScoreRange === range;
+                  const matchesStatus = (r, status) => (status === 'Pass' ? isPass(r.STATUS) : !isPass(r.STATUS));
+                  const standardBarSelected = (standard, status) => {
+                    if (standardPicked && filterStandard !== standard) return false;
+                    if (statusPicked && filterStatus !== status) return false;
+                    return !scorePicked || rfData.some(r => norm(r.STANDARD) === standard && matchesStatus(r, status)
+                      && scoreRangeOf(toPctNumber(r.PERCENTAGE)) === filterScoreRange);
+                  };
+                  const scoreBandSelected = (range) => {
+                    if (scorePicked) return filterScoreRange === range;
+                    if (!standardPicked && !statusPicked) return true;
+                    return rfData.some(r => scoreRangeOf(toPctNumber(r.PERCENTAGE)) === range
+                      && (!standardPicked || norm(r.STANDARD) === filterStandard)
+                      && (!statusPicked || matchesStatus(r, filterStatus)));
+                  };
                   const ttStyle = { background: '#fff', border: '1px solid #ececf0', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.08)', fontSize: 13 };
                   const axStyle = { axisLine: false, tickLine: false, tick: { fill: '#9a9aaa', fontSize: 11 } };
                   const fPassed = rfData.filter(r => isPass(r.STATUS)).length;
@@ -5359,11 +5392,9 @@ const TestingModule = () => {
                             }}>
                               Result Date:
                             </label>
-                            <input
-                              type="date"
+                            <StyledDatePicker
                               value={resultFormData.resultDate}
-                              onChange={(e) => setResultFormData({ ...resultFormData, resultDate: e.target.value })}
-                              required
+                              onChange={(v) => setResultFormData({ ...resultFormData, resultDate: v })}
                               style={{
                                 width: '100%',
                                 padding: '12px 15px',
@@ -5376,8 +5407,6 @@ const TestingModule = () => {
                                 backgroundColor: colors.inputBg,
                                 color: colors.text
                               }}
-                              onFocus={e => (e.target.style.borderColor = '#1a1a2e')}
-                              onBlur={e => (e.target.style.borderColor = colors.inputBorder)}
                             />
                           </div>
                           <div>
@@ -5802,9 +5831,9 @@ const TestingModule = () => {
             {adminActiveTab === 'auditlog' && (
               <AuditLogView
                 module="testing"
-                title="Testing & Certification Audit Log"
-                subtitle="Every result, standard, question, certificate and employee change recorded across this module."
                 actions={['create', 'update', 'delete']}
+                padded={false}
+                showHeader={false}
               />
             )}
           </section>
