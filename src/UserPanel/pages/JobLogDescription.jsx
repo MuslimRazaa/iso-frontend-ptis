@@ -1018,12 +1018,34 @@ function JobLogDescription() {
     return max + 1
   }, [entries])
 
+  // Everything except the status filter itself — the stats bar reacts to
+  // region/date/search so its counts always match what's on screen, but
+  // still shows all four statuses side by side rather than zeroing the
+  // other three out the moment one status card is clicked.
+  const statsBaseEntries = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase()
+    return entries.filter(e => {
+      if (sourceFilter !== 'all' && e.source !== sourceFilter) return false
+      if (dateFrom && (!e.entryDate || e.entryDate < dateFrom)) return false
+      if (dateTo && (!e.entryDate || e.entryDate > dateTo)) return false
+      if (!q) return true
+      return [
+        e.sNo, e.entryDate, e.client, e.workOrder, e.inspectorName, e.inspectorTeam,
+        e.reference, e.location, e.natureOfJob, e.startDate, e.endDate, e.vehicleUsed,
+        e.days, e.calculatedDays, e.manPower, e.manHours, e.drivenKm,
+        e.jmps, e.tra, e.equipCL, e.vLog, e.tbt, e.status, e.completionDate,
+        e.rept, e.exp, e.accounts, e.it, e.submissionDate, e.source,
+        e.remark, e.remarks, e.stockRequisition, e.goodsIssueNote, e.consumption, e.gatePass,
+      ].filter(Boolean).join(' ').toLowerCase().includes(q)
+    })
+  }, [entries, sourceFilter, dateFrom, dateTo, searchTerm])
+
   const stats = useMemo(() => ({
-    total: entries.length,
-    closed: entries.filter(e => e.status?.toLowerCase() === 'closed').length,
-    inProgress: entries.filter(e => e.status?.toLowerCase() === 'in progress').length,
-    pending: entries.filter(e => ['pending', ''].includes((e.status || '').toLowerCase())).length,
-  }), [entries])
+    total: statsBaseEntries.length,
+    closed: statsBaseEntries.filter(e => e.status?.toLowerCase() === 'closed').length,
+    inProgress: statsBaseEntries.filter(e => e.status?.toLowerCase() === 'in progress').length,
+    pending: statsBaseEntries.filter(e => ['pending', ''].includes((e.status || '').toLowerCase())).length,
+  }), [statsBaseEntries])
 
   const statusOptions = useMemo(() => [...new Set(entries.map(e => e.status).filter(Boolean))], [entries])
   // Cards know a status by name; the rows spell it however it was entered.
@@ -1055,25 +1077,11 @@ function JobLogDescription() {
   const sourceOptions = useMemo(() => [...new Set(entries.map(e => e.source).filter(Boolean))], [entries])
 
   const filteredEntries = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase()
-    const list = entries.filter(e => {
+    const list = statsBaseEntries.filter(e => {
       if (statusFilter === STATUS_PENDING_ANY) {
         if (!['pending', ''].includes((e.status || '').toLowerCase())) return false
       } else if (statusFilter !== 'all' && e.status !== statusFilter) return false
-      if (sourceFilter !== 'all' && e.source !== sourceFilter) return false
-      // Entry-date range filter (YYYY-MM-DD string compare is correct for ISO dates)
-      if (dateFrom && (!e.entryDate || e.entryDate < dateFrom)) return false
-      if (dateTo && (!e.entryDate || e.entryDate > dateTo)) return false
-      if (!q) return true
-      // Search across every text field in the row
-      return [
-        e.sNo, e.entryDate, e.client, e.workOrder, e.inspectorName, e.inspectorTeam,
-        e.reference, e.location, e.natureOfJob, e.startDate, e.endDate, e.vehicleUsed,
-        e.days, e.calculatedDays, e.manPower, e.manHours, e.drivenKm,
-        e.jmps, e.tra, e.equipCL, e.vLog, e.tbt, e.status, e.completionDate,
-        e.rept, e.exp, e.accounts, e.it, e.submissionDate, e.source,
-        e.remark, e.remarks, e.stockRequisition, e.goodsIssueNote, e.consumption, e.gatePass,
-      ].filter(Boolean).join(' ').toLowerCase().includes(q)
+      return true
     })
 
     // Sorting (default: entry date newest first).
@@ -1099,7 +1107,7 @@ function JobLogDescription() {
       }
     })
     return sorted
-  }, [entries, searchTerm, statusFilter, sourceFilter, sortBy, dateFrom, dateTo])
+  }, [statsBaseEntries, statusFilter, sortBy])
 
   // Any active table filter/search? (sort order isn't a filter.) When true, the
   // Export button switches to "Export by Filter" and exports exactly the rows
