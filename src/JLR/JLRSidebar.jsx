@@ -106,7 +106,7 @@ function JLRSidebar() {
             onClick={() => setEntriesMenuOpen((prev) => !prev)}
           >
             <SidebarIcon id="entries" />
-            <span className="menu-label">Job Entries</span>
+            <span className="menu-label">Job Log Entries</span>
             <i />
           </button>
           <ul className={`submenu ${entriesMenuOpen ? 'visible' : ''}`}>
