@@ -5,6 +5,7 @@ import { API_ENDPOINTS } from '../config/api'
 import PaginationBar from './PaginationBar'
 import StyledSelect from './StyledSelect'
 import SearchableSelect from './SearchableSelect'
+import StyledDatePicker from './StyledDatePicker'
 
 // One viewer, reused by JLR and ISO Forms: an audit row is the same shape
 // (who, did what, to what, when) regardless of which module it came from, and
@@ -54,7 +55,7 @@ const ENTITY_LABEL = {
   certificate: 'Certificate', employee: 'Employee',
 }
 
-function AuditLogView({ module, title, subtitle, actions, backTo }) {
+function AuditLogView({ module, title, subtitle, actions, backTo, padded = true, showHeader = true }) {
   const [rows, setRows] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -114,16 +115,20 @@ function AuditLogView({ module, title, subtitle, actions, backTo }) {
   const clearFilters = () => { setAction(''); setActorName(''); setDateFrom(''); setDateTo(''); setSearch(''); setPage(1) }
 
   return (
-    <div style={{ padding: 'clamp(24px, 4vw, 48px)' }}>
+    <div style={padded ? { padding: 'clamp(24px, 4vw, 48px)' } : undefined}>
       {backTo && (
         <Link to={backTo} style={{ fontSize: 13, color: '#7a7a8c', textDecoration: 'none' }}>← Back</Link>
       )}
-      <p className="eyebrow" style={{ margin: '12px 0 0' }}>Admin</p>
-      <h1 style={{ margin: '4px 0 8px', fontSize: 26, fontWeight: 800, color: '#14141c' }}>{title}</h1>
-      {subtitle && <p style={{ margin: '0 0 24px', color: '#7a7a8c' }}>{subtitle}</p>}
+      {showHeader && (
+        <>
+          <p className="eyebrow" style={{ margin: '12px 0 0' }}>Admin</p>
+          <h1 style={{ margin: '4px 0 8px', fontSize: 26, fontWeight: 800, color: '#14141c' }}>{title}</h1>
+          {subtitle && <p style={{ margin: '0 0 24px', color: '#7a7a8c' }}>{subtitle}</p>}
+        </>
+      )}
 
       <div className="panel" style={{ padding: 20, marginBottom: 20, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-        <div style={{ position: 'relative', flex: '1 1 240px', minWidth: 200 }}>
+        <div style={{ position: 'relative', flex: '1 1 140px', minWidth: 140 }}>
           <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#9a9aaa' }} />
           <input
             type="text" placeholder="Search what happened…" value={search}
@@ -138,7 +143,7 @@ function AuditLogView({ module, title, subtitle, actions, backTo }) {
           extraOptions={actions.map(a => ({ value: a, label: a.charAt(0).toUpperCase() + a.slice(1) }))}
           emptyOptionLabel="All actions"
           placeholder="All actions"
-          style={{ ...inputStyle, cursor: 'pointer', minWidth: 150 }}
+          style={{ ...inputStyle, cursor: 'pointer', minWidth: 130 }}
         />
         <SearchableSelect
           value={actorName}
@@ -146,16 +151,16 @@ function AuditLogView({ module, title, subtitle, actions, backTo }) {
           options={actorOptions}
           emptyOptionLabel="All people"
           placeholder="Filter by who…"
-          style={{ ...inputStyle, minWidth: 160 }}
+          style={{ ...inputStyle, minWidth: 140 }}
         />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           <Calendar size={16} style={{ color: '#9a9aaa' }} />
-          <input type="date" value={dateFrom} onChange={e => onDateFromChange(e.target.value)} style={{ ...inputStyle, padding: '10px 10px' }} />
+          <StyledDatePicker value={dateFrom} onChange={onDateFromChange} max={dateTo || undefined} style={{ ...inputStyle, padding: '10px 10px' }} />
           <span style={{ color: '#9a9aaa' }}>to</span>
-          <input type="date" value={dateTo} min={dateFrom || undefined} onChange={e => onDateToChange(e.target.value)} style={{ ...inputStyle, padding: '10px 10px' }} />
+          <StyledDatePicker value={dateTo} onChange={onDateToChange} min={dateFrom || undefined} style={{ ...inputStyle, padding: '10px 10px' }} />
         </div>
         {hasActiveFilters && (
-          <button type="button" className="ghost-btn" onClick={clearFilters} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <button type="button" className="ghost-btn" onClick={clearFilters} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
             <X size={14} /> Clear
           </button>
         )}

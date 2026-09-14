@@ -24,6 +24,9 @@ const SidebarIcon = ({ id }) => (
 function ISOFormsSidebar() {
   const [isExpanded, setIsExpanded] = useState(false)
   const [pendingCount, setPendingCount] = useState(0)
+  const [templatesMenuOpen, setTemplatesMenuOpen] = useState(false)
+  const [formsMenuOpen, setFormsMenuOpen] = useState(false)
+  const [auditMenuOpen, setAuditMenuOpen] = useState(false)
   const location = useLocation()
 
   const isUserSide   = location.pathname.startsWith('/user')
@@ -99,54 +102,61 @@ function ISOFormsSidebar() {
           </NavLink>
         </div>
 
-        {/* Form Templates — admin/template-builder only */}
+        {/* Form Templates — admin/template-builder only. A dropdown since the
+            page offers two distinct entry points (jump straight to a new
+            template, or just browse the list). */}
         {isAdminUser && (
           <div className="menu-group">
-            <NavLink
-              to={`${base}/templates`}
-              className={({ isActive }) => `menu-trigger link${isActive ? ' active' : ''}`}
+            <button
+              type="button"
+              className={`menu-trigger ${templatesMenuOpen ? 'open' : ''}`}
+              onClick={() => setTemplatesMenuOpen((prev) => !prev)}
             >
               <SidebarIcon id="templates" />
               <span className="menu-label">Form Templates</span>
-              <i aria-hidden="true" />
-            </NavLink>
+              <i />
+            </button>
+            <ul className={`submenu ${templatesMenuOpen ? 'visible' : ''}`}>
+              <li>
+                <NavLink to={`${base}/templates/new`}>Add New Template</NavLink>
+              </li>
+              <li>
+                <NavLink to={`${base}/templates`} end>View Templates</NavLink>
+              </li>
+            </ul>
           </div>
         )}
 
         {/* Audit Log — admin only */}
         {isAdminUser && (
           <div className="menu-group">
-            <NavLink
-              to={`${base}/audit-log`}
-              className={({ isActive }) => `menu-trigger link${isActive ? ' active' : ''}`}
+            <button
+              type="button"
+              className={`menu-trigger ${auditMenuOpen ? 'open' : ''}`}
+              onClick={() => setAuditMenuOpen((prev) => !prev)}
             >
               <SidebarIcon id="audit" />
               <span className="menu-label">Audit Log</span>
-              <i aria-hidden="true" />
-            </NavLink>
+              <i />
+            </button>
+            <ul className={`submenu ${auditMenuOpen ? 'visible' : ''}`}>
+              <li>
+                <NavLink to={`${base}/audit-log`}>View Audit Log</NavLink>
+              </li>
+            </ul>
           </div>
         )}
 
-        {/* All Forms */}
+        {/* Forms — a dropdown grouping every way into the register: start a
+            blank one, browse everything, or jump straight to what's pending. */}
         <div className="menu-group">
-          <Link
-            to={`${base}/entries`}
-            className={`menu-trigger link${isAllFormsView ? ' active' : ''}`}
+          <button
+            type="button"
+            className={`menu-trigger ${formsMenuOpen ? 'open' : ''}`}
+            onClick={() => setFormsMenuOpen((prev) => !prev)}
           >
             <SidebarIcon id="entries" />
-            <span className="menu-label">All Forms</span>
-            <i aria-hidden="true" />
-          </Link>
-        </div>
-
-        {/* Pending Approvals */}
-        <div className="menu-group">
-          <Link
-            to={`${base}/entries?filter=pending-mine`}
-            className={`menu-trigger link${isPendingMineView ? ' active' : ''}`}
-          >
-            <SidebarIcon id="pending" />
-            <span className="menu-label">Pending Approvals</span>
+            <span className="menu-label">Forms</span>
             {pendingCount > 0 && (
               <span style={{
                 marginLeft: 'auto', minWidth: 18, height: 18, borderRadius: 9,
@@ -155,8 +165,21 @@ function ISOFormsSidebar() {
                 padding: '0 5px',
               }}>{pendingCount}</span>
             )}
-            <i aria-hidden="true" />
-          </Link>
+            <i />
+          </button>
+          <ul className={`submenu ${formsMenuOpen ? 'visible' : ''}`}>
+            <li>
+              <NavLink to={`${base}/new`}>Fill a New Form</NavLink>
+            </li>
+            <li>
+              <Link to={`${base}/entries`} className={isAllFormsView ? 'active' : ''}>All Forms</Link>
+            </li>
+            <li>
+              <Link to={`${base}/entries?filter=pending-mine`} className={isPendingMineView ? 'active' : ''}>
+                Pending Approvals{pendingCount > 0 ? ` (${pendingCount})` : ''}
+              </Link>
+            </li>
+          </ul>
         </div>
       </nav>
     </aside>

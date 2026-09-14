@@ -51,17 +51,21 @@ const STATE_META = {
 }
 
 function StatCard({ icon: Icon, label, value, color, onClick, active, dimmed }) {
+  const [hovered, setHovered] = useState(false)
   return (
     <div
       onClick={onClick}
       title={onClick ? `Show only ${label}` : undefined}
+      onMouseEnter={onClick ? () => setHovered(true) : undefined}
+      onMouseLeave={onClick ? () => setHovered(false) : undefined}
       style={{
       flex: '1 1 160px', minWidth: 160, background: '#fff', borderRadius: 16,
-      border: active ? `2px solid ${color}` : '1px solid #ececf1',
+      border: active || (onClick && hovered) ? `2px solid ${color}` : '1px solid #ececf1',
       padding: '18px 20px', display: 'flex',
       alignItems: 'center', gap: 14, boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
       cursor: onClick ? 'pointer' : 'default',
-      transition: 'filter 0.25s ease, opacity 0.25s ease, border-color 0.2s ease',
+      transition: 'filter 0.25s ease, opacity 0.25s ease, border-color 0.2s ease, transform 0.2s ease',
+      transform: onClick && hovered ? 'translateY(-2px)' : 'translateY(0)',
       ...(dimmed ? { filter: 'grayscale(1)', opacity: 0.45 } : null),
     }}>
       <span style={{

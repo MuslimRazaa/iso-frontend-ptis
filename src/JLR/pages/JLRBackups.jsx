@@ -91,11 +91,31 @@ function JLRBackups() {
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button type="button" onClick={fetchData}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 28, border: '1px solid #dcdce3', background: '#fff', color: '#2a2a32', fontWeight: 600, cursor: 'pointer' }}>
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 28, border: '1px solid #dcdce3', background: '#fff', color: '#2a2a32', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s ease' }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = '#d7263d'
+              e.currentTarget.style.color = '#d7263d'
+              e.currentTarget.style.transform = 'translateY(-2px)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = '#dcdce3'
+              e.currentTarget.style.color = '#2a2a32'
+              e.currentTarget.style.transform = 'translateY(0)'
+            }}>
             <RefreshCw size={16} /> Refresh
           </button>
           <button type="button" onClick={backupNow} disabled={busy}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: 28, border: 'none', background: busy ? '#e79aa5' : '#d7263d', color: '#fff', fontWeight: 700, cursor: busy ? 'not-allowed' : 'pointer', boxShadow: '0 6px 16px rgba(215,38,61,0.25)' }}>
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: 28, border: 'none', background: busy ? '#e79aa5' : '#d7263d', color: '#fff', fontWeight: 700, cursor: busy ? 'not-allowed' : 'pointer', boxShadow: '0 6px 16px rgba(215,38,61,0.25)', transition: 'transform 0.2s ease, box-shadow 0.2s ease' }}
+            onMouseEnter={e => {
+              if (busy) return
+              e.currentTarget.style.boxShadow = '0 16px 36px rgba(215, 38, 61, 0.25)'
+              e.currentTarget.style.transform = 'translateY(-2px)'
+            }}
+            onMouseLeave={e => {
+              if (busy) return
+              e.currentTarget.style.boxShadow = '0 6px 16px rgba(215,38,61,0.25)'
+              e.currentTarget.style.transform = 'translateY(0)'
+            }}>
             <HardDriveDownload size={17} /> {busy ? 'Backing up…' : 'Backup Now'}
           </button>
         </div>
@@ -154,7 +174,17 @@ function JLRBackups() {
                     <td style={{ padding: '11px 18px', color: '#54546a', whiteSpace: 'nowrap' }}>{fmtBytes(f.sizeBytes)}</td>
                     <td style={{ padding: '11px 18px', textAlign: 'right' }}>
                       <a href={`${BASE}/${encodeURIComponent(f.name)}/download`}
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 20, background: '#fdf2f3', color: '#d7263d', border: '1px solid #ffd1d8', fontWeight: 600, fontSize: 13, textDecoration: 'none' }}>
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 20, background: '#fdf2f3', color: '#d7263d', border: '1px solid #ffd1d8', fontWeight: 600, fontSize: 13, textDecoration: 'none', transition: 'all 0.2s ease' }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.background = '#ffe3e6'
+                          e.currentTarget.style.borderColor = '#d7263d'
+                          e.currentTarget.style.transform = 'translateY(-2px)'
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.background = '#fdf2f3'
+                          e.currentTarget.style.borderColor = '#ffd1d8'
+                          e.currentTarget.style.transform = 'translateY(0)'
+                        }}>
                         <Download size={14} /> Download
                       </a>
                     </td>
