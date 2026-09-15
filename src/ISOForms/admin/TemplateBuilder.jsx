@@ -299,7 +299,7 @@ function TemplateBuilder() {
                 onChange={v => updateField(field.id, { type: v })}
                 options={[]}
                 extraOptions={FIELD_TYPES}
-                style={{ padding: '10px 14px', border: '2px solid #e0e0e6', borderRadius: 10, fontSize: 14, cursor: 'pointer' }}
+                style={{ padding: '10px 14px', border: '2px solid #e0e0e6', borderRadius: 10, fontSize: 14, cursor: 'pointer', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
               />
             </div>
 
@@ -320,7 +320,7 @@ function TemplateBuilder() {
                 onChange={v => updateField(field.id, { owner: v })}
                 options={[]}
                 extraOptions={OWNERS}
-                style={{ padding: '8px 12px', border: '2px solid #e0e0e6', borderRadius: 10, fontSize: 13, cursor: 'pointer' }}
+                style={{ padding: '8px 12px', border: '2px solid #e0e0e6', borderRadius: 10, fontSize: 13, cursor: 'pointer', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
               />
             </div>
 
