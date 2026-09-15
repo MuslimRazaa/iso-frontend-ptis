@@ -4025,28 +4025,6 @@ const TestingModule = () => {
               const ttStyle = { background: '#fff', border: '1px solid #ececf0', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.08)', fontSize: 13 };
               const axStyle = { axisLine: false, tickLine: false, tick: { fill: '#9a9aaa', fontSize: 11 } };
 
-              const standardStats = {};
-              chartData.forEach(r => {
-                const std = norm(r.STANDARD);
-                if (!standardStats[std]) standardStats[std] = { standard: std, passed: 0, failed: 0 };
-                if (isPass(r.STATUS)) standardStats[std].passed++; else standardStats[std].failed++;
-              });
-              const barData = Object.values(standardStats);
-
-              const ranges = Object.fromEntries(SCORE_RANGES.map(range => [range, 0]));
-              chartData.forEach(r => { ranges[scoreRangeOf(toPctNumber(r.PERCENTAGE))]++; });
-              const histData = Object.entries(ranges).map(([range, count]) => ({ range, count }));
-
-              // Each point carries the result behind it, so clicking one can
-              // open that person's results instead of only reading a score.
-              const areaData = chartData.slice(0, 20).reverse().map((r, idx) => ({
-                test: `T${idx + 1}`,
-                score: toPctNumber(r.PERCENTAGE),
-                empId: norm(r.ID),
-                empName: norm(r.NAME),
-                standard: norm(r.STANDARD),
-              }));
-
               // Selection state for these charts, read from the same filters the
               // Results tab uses — a click here always jumps there, so the two
               // never need their own separate notion of "selected".
@@ -4063,6 +4041,45 @@ const TestingModule = () => {
               // applied, so score bands / standard bars / status segments with
               // zero matching rows dim too, not just the one the click set.
               const matchesStatus = (r, status) => (status === 'Pass' ? isPass(r.STATUS) : !isPass(r.STATUS));
+              // Each chart's own axis stays fully browsable (clicking Pass still
+              // shows Pass vs Fail, not a wall of one colour) — but it does
+              // narrow by whatever the OTHER charts have picked, so choosing a
+              // score band actually shrinks the pie and the standard bars
+              // instead of only dimming them.
+              const rowMatchesOthers = (r, exclude) => {
+                if (!exclude.standard && standardPicked && norm(r.STANDARD) !== filterStandard) return false;
+                if (!exclude.status && statusPicked && !matchesStatus(r, filterStatus)) return false;
+                if (!exclude.score && scorePicked && scoreRangeOf(toPctNumber(r.PERCENTAGE)) !== filterScoreRange) return false;
+                return true;
+              };
+
+              const pieSource = chartData.filter(r => rowMatchesOthers(r, { status: true }));
+              const piePassed = pieSource.filter(r => isPass(r.STATUS)).length;
+              const pieFailed = pieSource.length - piePassed;
+
+              const barSource = chartData.filter(r => rowMatchesOthers(r, { standard: true, status: true }));
+              const standardStats = {};
+              barSource.forEach(r => {
+                const std = norm(r.STANDARD);
+                if (!standardStats[std]) standardStats[std] = { standard: std, passed: 0, failed: 0 };
+                if (isPass(r.STATUS)) standardStats[std].passed++; else standardStats[std].failed++;
+              });
+              const barData = Object.values(standardStats);
+
+              const histSource = chartData.filter(r => rowMatchesOthers(r, { score: true }));
+              const ranges = Object.fromEntries(SCORE_RANGES.map(range => [range, 0]));
+              histSource.forEach(r => { ranges[scoreRangeOf(toPctNumber(r.PERCENTAGE))]++; });
+              const histData = Object.entries(ranges).map(([range, count]) => ({ range, count }));
+
+              // Each point carries the result behind it, so clicking one can
+              // open that person's results instead of only reading a score.
+              const areaData = chartData.slice(0, 20).reverse().map((r, idx) => ({
+                test: `T${idx + 1}`,
+                score: toPctNumber(r.PERCENTAGE),
+                empId: norm(r.ID),
+                empName: norm(r.NAME),
+                standard: norm(r.STANDARD),
+              }));
               const statusSelected = (status) => {
                 if (statusPicked) return filterStatus === status;
                 if (!standardPicked && !scorePicked) return true;
@@ -4118,7 +4135,7 @@ const TestingModule = () => {
                         <ResponsiveContainer width="100%" height={280}>
                           <PieChart>
                             <Pie
-                              data={[{ name: 'Passed', value: passedTests }, { name: 'Failed', value: failedTests }]}
+                              data={[{ name: 'Passed', value: piePassed }, { name: 'Failed', value: pieFailed }]}
                               cx="50%" cy="50%" innerRadius={70} outerRadius={110} paddingAngle={2} dataKey="value"
                               style={chartClickable}
                               onClick={(slice) => focusResults({ status: clickedRow(slice).name === 'Failed' ? 'Fail' : 'Pass' })}
@@ -4750,18 +4767,35 @@ const TestingModule = () => {
                   };
                   const ttStyle = { background: '#fff', border: '1px solid #ececf0', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.08)', fontSize: 13 };
                   const axStyle = { axisLine: false, tickLine: false, tick: { fill: '#9a9aaa', fontSize: 11 } };
-                  const fPassed = rfData.filter(r => isPass(r.STATUS)).length;
-                  const fFailed = rfData.length - fPassed;
+
+                  // Each chart's own axis stays fully browsable (clicking Pass
+                  // still shows Pass vs Fail, not a wall of one colour) — but
+                  // it does narrow by whatever the OTHER charts have picked, so
+                  // choosing a score band actually shrinks the pie and the
+                  // standard bars instead of only dimming them.
+                  const rowMatchesOthers = (r, exclude) => {
+                    if (!exclude.standard && standardPicked && norm(r.STANDARD) !== filterStandard) return false;
+                    if (!exclude.status && statusPicked && !matchesStatus(r, filterStatus)) return false;
+                    if (!exclude.score && scorePicked && scoreRangeOf(toPctNumber(r.PERCENTAGE)) !== filterScoreRange) return false;
+                    return true;
+                  };
+
+                  const pieSource = rfData.filter(r => rowMatchesOthers(r, { status: true }));
+                  const fPassed = pieSource.filter(r => isPass(r.STATUS)).length;
+                  const fFailed = pieSource.length - fPassed;
+
+                  const barSource = rfData.filter(r => rowMatchesOthers(r, { standard: true, status: true }));
                   const fStdStats = {};
-                  rfData.forEach(r => {
+                  barSource.forEach(r => {
                     const std = norm(r.STANDARD);
                     if (!fStdStats[std]) fStdStats[std] = { standard: std, passed: 0, failed: 0 };
                     if (isPass(r.STATUS)) fStdStats[std].passed++; else fStdStats[std].failed++;
                   });
                   const fBarData = Object.values(fStdStats);
 
+                  const histSource = rfData.filter(r => rowMatchesOthers(r, { score: true }));
                   const fRanges = Object.fromEntries(SCORE_RANGES.map(range => [range, 0]));
-                  rfData.forEach(r => { fRanges[scoreRangeOf(toPctNumber(r.PERCENTAGE))]++; });
+                  histSource.forEach(r => { fRanges[scoreRangeOf(toPctNumber(r.PERCENTAGE))]++; });
                   const fHistData = Object.entries(fRanges).map(([range, count]) => ({ range, count }));
 
                   // Each point carries the result behind it, so clicking one can
