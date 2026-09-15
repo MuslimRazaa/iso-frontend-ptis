@@ -4,17 +4,31 @@ import { API_ENDPOINTS, API_BASE_URL } from '../../config/api'
 import PaginationBar from '../../components/PaginationBar'
 import StyledSelect from '../../components/StyledSelect'
 import StyledDatePicker from '../../components/StyledDatePicker'
+import InfoTooltip from '../../components/InfoTooltip'
 import { BsBriefcase, BsBoxSeam, BsWallet2, BsLaptop, BsClipboardData, BsPencilSquare } from 'react-icons/bs'
 import { MdOutlineHealthAndSafety } from 'react-icons/md'
 import {
   Plus, RefreshCw, Upload, Trash2, Search, Calendar, AlertTriangle, X,
-  ClipboardList, CheckCircle2, Clock, CircleDashed, Pencil, Download, FileSpreadsheet
+  ClipboardList, CheckCircle2, Clock, CircleDashed, Pencil, Download, FileSpreadsheet,
+  ChevronRight, ChevronDown, Users
 } from 'lucide-react'
 
 /* ─────────────────────────────────────────────────────────────
    DB ↔ component field mapping helpers
    DB uses snake_case; component uses camelCase
 ───────────────────────────────────────────────────────────── */
+const fromDBInspectorChange = c => ({
+  id: c.id,
+  fieldType: c.field_type,
+  changeType: c.change_type,
+  oldValue: c.old_value || '',
+  newValue: c.new_value || '',
+  startDate: c.start_date ? c.start_date.slice(0, 10) : '',
+  endDate: c.end_date ? c.end_date.slice(0, 10) : '',
+  reason: c.reason || '',
+  createdBy: c.created_by || '',
+})
+
 const fromDB = row => ({
   id: row.id,
   sNo: row.s_no != null ? String(row.s_no) : '',
@@ -60,6 +74,7 @@ const fromDB = row => ({
   goodsIssueNote: row.goods_issue_note || '',
   consumption: row.consumption || '',
   gatePass: row.gate_pass || '',
+  inspectorChanges: Array.isArray(row.inspector_changes) ? row.inspector_changes.map(fromDBInspectorChange) : [],
 })
 
 const toDB = data => ({
@@ -368,7 +383,7 @@ const calculateDays = (startDate, endDate) => {
 
 /* ── Column group definitions ───────────────────────────────── */
 const COL_GROUPS = [
-  { label: 'Identification', span: 7, color: '#eef3ff', textColor: '#2f74bf', borderColor: '#c9dcf5' },
+  { label: 'Identification', span: 8, color: '#eef3ff', textColor: '#2f74bf', borderColor: '#c9dcf5' },
   { label: 'Job Details', span: 5, color: '#fff8ef', textColor: '#c87e1c', borderColor: '#ffe4c4' },
   { label: 'Operational Metrics', span: 6, color: '#f0fff8', textColor: '#1d814c', borderColor: '#c3ecd4' },
   { label: 'Safety Documentation', span: 4, color: '#fdf5ff', textColor: '#7c3aed', borderColor: '#ddb8f7' },
@@ -849,6 +864,33 @@ function JobLogDescription() {
   const [modalState, setModalState] = useState(emptyEntry)
   const [editingId, setEditingId] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
+
+  /* ── Add/Replace Inspector tab (edit mode only) ─────────────── */
+  const [activeTab, setActiveTab] = useState('details') // 'details' | 'inspector'
+  const [inspectorChangesList, setInspectorChangesList] = useState([])
+  const [changeMode, setChangeMode] = useState('add')       // 'add' | 'replace'
+  const [changeField, setChangeField] = useState('inspector') // 'inspector' | 'team'
+  const [changeOldValue, setChangeOldValue] = useState('')
+  const [changeNewValue, setChangeNewValue] = useState('')
+  const [changeStart, setChangeStart] = useState('')
+  const [changeEnd, setChangeEnd] = useState('')
+  const [changeReason, setChangeReason] = useState('')
+  const [changeSaving, setChangeSaving] = useState(false)
+  const [changeError, setChangeError] = useState('')
+
+  const resetInspectorChangeForm = () => {
+    setChangeMode('add'); setChangeField('inspector')
+    setChangeOldValue(''); setChangeNewValue('')
+    setChangeStart(''); setChangeEnd(''); setChangeReason('')
+    setChangeError('')
+  }
+  // Rows whose expand-history sub-row is currently open in the View table.
+  const [expandedRows, setExpandedRows] = useState(() => new Set())
+  const toggleRowExpanded = (id) => setExpandedRows(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
   // Arriving from a dashboard stat card: land already filtered to what it
   // counted, same as the status dropdown would produce by hand. The dashboard
   // sends a stable token ('closed', 'in_progress', 'pending') rather than a
@@ -1141,9 +1183,11 @@ function JobLogDescription() {
   const openAddModal = () => {
     setModalMode('add'); setEditingId(null)
     setModalState({ ...emptyEntry, sNo: nextSerial }); setIsModalOpen(true)
+    setActiveTab('details'); setInspectorChangesList([]); resetInspectorChangeForm()
   }
   const openEditModal = entry => {
     setModalMode('edit'); setEditingId(entry.id)
+    setActiveTab('details'); setInspectorChangesList(entry.inspectorChanges || []); resetInspectorChangeForm()
     const f = k => entry[k] || ''
     setModalState({
       sNo: f('sNo'), client: f('client'), workOrder: f('workOrder'),
@@ -1163,7 +1207,10 @@ function JobLogDescription() {
     })
     setIsModalOpen(true)
   }
-  const closeModal = () => { setIsModalOpen(false); setModalMode('add'); setEditingId(null); setModalState(emptyEntry) }
+  const closeModal = () => {
+    setIsModalOpen(false); setModalMode('add'); setEditingId(null); setModalState(emptyEntry)
+    setActiveTab('details'); setInspectorChangesList([]); resetInspectorChangeForm()
+  }
   const handleModalChange = (k, v) => setModalState(p => ({ ...p, [k]: v }))
 
   // Man Hours is auto-calculated: Calculated Days × Man Power × 10 (not manual).
@@ -1226,6 +1273,125 @@ function JobLogDescription() {
       alert(`Save failed: ${err.message}`)
     } finally {
       setSaving(false)
+    }
+  }
+
+  // Current comma-split roster for the field being edited on the Add/Replace
+  // Inspector tab — this is the "who's currently on it" list for Replace.
+  const currentRosterFor = (field) =>
+    (modalState[field === 'team' ? 'inspectorTeam' : 'inspectorName'] || '')
+      .split(',').map(s => s.trim()).filter(Boolean)
+
+  const splitNames = (s) => (s || '').split(',').map(v => v.trim()).filter(Boolean)
+
+  // Pair people being replaced with their replacements:
+  // equal counts → matched 1:1 in selection order; one side has exactly one
+  // entry → that single person covers/replaces every entry on the other side.
+  // Any other combination is ambiguous and rejected with a clear message.
+  const pairReplacements = (oldArr, newArr) => {
+    if (oldArr.length === newArr.length) return oldArr.map((o, i) => [o, newArr[i]])
+    if (newArr.length === 1) return oldArr.map(o => [o, newArr[0]])
+    if (oldArr.length === 1) return newArr.map(n => [oldArr[0], n])
+    return null
+  }
+
+  const postInspectorChange = async (payload) => {
+    const res = await fetch(`${API_ENDPOINTS.JOB_LOG}/${editingId}/inspector-changes?${actorQuery()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(json.error || `Server error ${res.status}`)
+    return fromDBInspectorChange(json.data)
+  }
+
+  const submitInspectorChange = async e => {
+    e.preventDefault()
+    setChangeError('')
+
+    const newArr = splitNames(changeNewValue)
+    const oldArr = splitNames(changeOldValue)
+
+    if (newArr.length === 0 || !changeStart || !changeEnd) {
+      setChangeError('At least one inspector/team member and both dates are required.')
+      return
+    }
+
+    let jobs = [] // [{ old_value, new_value }]
+    if (changeMode === 'add') {
+      jobs = newArr.map(n => ({ old_value: null, new_value: n }))
+    } else {
+      if (oldArr.length === 0 || !changeReason.trim()) {
+        setChangeError('Replace requires who is being replaced and a reason.')
+        return
+      }
+      const paired = pairReplacements(oldArr, newArr)
+      if (!paired) {
+        setChangeError('Select either the same number of people on both sides, or exactly one on one side.')
+        return
+      }
+      jobs = paired.map(([o, n]) => ({ old_value: o, new_value: n }))
+    }
+
+    try {
+      setChangeSaving(true)
+      const created = []
+      for (const job of jobs) {
+        created.push(await postInspectorChange({
+          field_type: changeField,
+          change_type: changeMode,
+          old_value: job.old_value,
+          new_value: job.new_value,
+          start_date: changeStart,
+          end_date: changeEnd,
+          reason: changeReason.trim() || null,
+        }))
+      }
+      setInspectorChangesList(prev => [...prev, ...created])
+      resetInspectorChangeForm()
+      fetchEntries() // keep the View table's cached history in sync in the background
+    } catch (err) {
+      setChangeError(err.message)
+    } finally {
+      setChangeSaving(false)
+    }
+  }
+
+  // "End Replacement" — caps an ongoing replacement's end_date at today so it
+  // stops reading as active, without deleting its history.
+  const endReplacementNow = async (change) => {
+    const today = new Date().toISOString().slice(0, 10)
+    try {
+      const res = await fetch(`${API_ENDPOINTS.JOB_LOG}/${editingId}/inspector-changes/${change.id}?${actorQuery()}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ end_date: today }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || `Server error ${res.status}`)
+      const updated = fromDBInspectorChange(json.data)
+      setInspectorChangesList(prev => prev.map(c => c.id === updated.id ? updated : c))
+      fetchEntries()
+    } catch (err) {
+      alert(`Could not end replacement: ${err.message}`)
+    }
+  }
+
+  const deleteInspectorChange = async changeId => {
+    if (!window.confirm('Delete this inspector change record?')) return
+    try {
+      const res = await fetch(`${API_ENDPOINTS.JOB_LOG}/${editingId}/inspector-changes/${changeId}?${actorQuery()}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || `Server error ${res.status}`)
+      }
+      setInspectorChangesList(prev => prev.filter(c => c.id !== changeId))
+      fetchEntries()
+    } catch (err) {
+      alert(`Delete failed: ${err.message}`)
     }
   }
 
@@ -1680,6 +1846,7 @@ function JobLogDescription() {
                 </tr>
                 {/* Column labels */}
                 <tr>
+                  <th style={{ minWidth: 32 }}></th>
                   <th style={{ minWidth: 48 }}>S#</th>
                   <th>Entry Date</th><th>Client</th><th>Work Order</th>
                   <th>Inspector Name</th><th>Inspector Team</th><th>Reference</th>
@@ -1712,7 +1879,7 @@ function JobLogDescription() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={36} style={{ padding: '60px 32px', textAlign: 'center' }}>
+                    <td colSpan={37} style={{ padding: '60px 32px', textAlign: 'center' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
                         <span style={{ fontSize: 36 }}>⏳</span>
                         <span style={{ fontSize: 15, fontWeight: 600, color: '#7a7a8c' }}>Loading job log entries…</span>
@@ -1721,7 +1888,7 @@ function JobLogDescription() {
                   </tr>
                 ) : filteredEntries.length === 0 ? (
                   <tr>
-                    <td colSpan={36} style={{ padding: '60px 32px', textAlign: 'center' }}>
+                    <td colSpan={37} style={{ padding: '60px 32px', textAlign: 'center' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
                         <ClipboardList size={44} color="#b9c0cf" />
                         <span style={{ fontSize: 16, fontWeight: 700, color: '#1f1f27' }}>No job log entries found</span>
@@ -1736,8 +1903,28 @@ function JobLogDescription() {
                 ) : (
                   paginatedEntries.map((entry, idx) => {
                     const serial = totalEntries - (pageStartIdx + idx)
+                    const changes = entry.inspectorChanges || []
+                    const inspectorReplaceReason = changes
+                      .filter(c => c.fieldType === 'inspector' && c.changeType === 'replace')
+                      .map(c => `${c.oldValue} → ${c.newValue} (${c.startDate} – ${c.endDate})\n${c.reason || ''}`.trim())
+                      .join('\n\n')
+                    const teamReplaceReason = changes
+                      .filter(c => c.fieldType === 'team' && c.changeType === 'replace')
+                      .map(c => `${c.oldValue} → ${c.newValue} (${c.startDate} – ${c.endDate})\n${c.reason || ''}`.trim())
+                      .join('\n\n')
+                    const isExpanded = expandedRows.has(entry.id)
                     return (
-                      <tr key={entry.id}>
+                      <React.Fragment key={entry.id}>
+                      <tr>
+                        <td style={{ textAlign: 'center' }}>
+                          {changes.length > 0 && (
+                            <button type="button" onClick={() => toggleRowExpanded(entry.id)}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7a7a8c', display: 'flex', alignItems: 'center' }}
+                              title="Show inspector/team change history">
+                              {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                            </button>
+                          )}
+                        </td>
                         <td className="all-records-cell-id" style={{ fontWeight: 700, color: '#595966', textAlign: 'center' }}>{serial}</td>
                         <td className="all-records-cell-date">{rv(entry.entryDate)}</td>
                         <td className="all-records-cell-text" style={{ fontWeight: 600 }}>{rv(entry.client)}</td>
@@ -1748,8 +1935,14 @@ function JobLogDescription() {
                           }}>
                             {rv(entry.workOrder)}</span>
                         </td>
-                        <td className="all-records-cell-text">{rv(entry.inspectorName)}</td>
-                        <td className="all-records-cell-text" style={{ color: '#595966' }}>{rv(entry.inspectorTeam)}</td>
+                        <td className="all-records-cell-text">
+                          {rv(entry.inspectorName)}
+                          {inspectorReplaceReason && <InfoTooltip text={inspectorReplaceReason} />}
+                        </td>
+                        <td className="all-records-cell-text" style={{ color: '#595966' }}>
+                          {rv(entry.inspectorTeam)}
+                          {teamReplaceReason && <InfoTooltip text={teamReplaceReason} />}
+                        </td>
                         <td className="all-records-cell-text" style={{ fontSize: 12, color: '#7a7a8c' }}>{rv(entry.reference)}</td>
                         <td className="all-records-cell-text">{rv(entry.location)}</td>
                         <td className="all-records-cell-description">{rv(entry.natureOfJob)}</td>
@@ -1809,6 +2002,33 @@ function JobLogDescription() {
                           </div>
                         </td>
                       </tr>
+                      {isExpanded && changes.map(c => (
+                        <tr key={`${entry.id}-change-${c.id}`} style={{ background: '#fafafd' }}>
+                          <td></td>
+                          <td colSpan={36} style={{ padding: '8px 16px', fontSize: 12.5 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                              <span style={{
+                                padding: '2px 8px', borderRadius: 6,
+                                background: '#f0f7ff', color: '#2f74bf', fontWeight: 700
+                              }}>{rv(entry.workOrder)}</span>
+                              <span style={{ color: '#7a7a8c', fontWeight: 700, textTransform: 'uppercase', fontSize: 10.5 }}>
+                                {c.fieldType === 'team' ? 'Inspector Team' : 'Inspector Name'}
+                              </span>
+                              <span style={{
+                                padding: '2px 8px', borderRadius: 999, fontWeight: 700, textTransform: 'uppercase', fontSize: 10.5,
+                                background: c.changeType === 'replace' ? '#fff5f6' : '#f0fff8',
+                                color: c.changeType === 'replace' ? '#d7263d' : '#1d814c',
+                              }}>{c.changeType}</span>
+                              <span style={{ fontWeight: 600, color: '#1f1f27' }}>
+                                {c.changeType === 'replace' ? `${c.oldValue} → ${c.newValue}` : `+ ${c.newValue}`}
+                              </span>
+                              <span style={{ color: '#595966' }}>{c.startDate} – {c.endDate}</span>
+                              {c.reason && <InfoTooltip text={c.reason} />}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      </React.Fragment>
                     )
                   })
                 )}
@@ -1854,6 +2074,29 @@ function JobLogDescription() {
               <button className="close-modal-btn" onClick={closeModal} style={{ display: 'inline-flex', alignItems: 'center' }}><X size={18} /></button>
             </div>
 
+            {modalMode === 'edit' && (
+              <div style={{ display: 'flex', gap: 8, padding: '14px 24px 0' }}>
+                {[
+                  { key: 'details', label: 'Job Details' },
+                  { key: 'inspector', label: 'Add / Replace Inspector' },
+                ].map(t => (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => setActiveTab(t.key)}
+                    style={{
+                      padding: '8px 16px', borderRadius: '8px 8px 0 0', fontSize: 13, fontWeight: 700,
+                      border: '1px solid #e0e0e6', borderBottom: activeTab === t.key ? '1px solid #fff' : '1px solid #e0e0e6',
+                      background: activeTab === t.key ? '#fff' : '#f4f4f7',
+                      color: activeTab === t.key ? '#d7263d' : '#7a7a8c',
+                      cursor: 'pointer', marginBottom: -1, position: 'relative', zIndex: activeTab === t.key ? 1 : 0,
+                    }}
+                  >{t.label}</button>
+                ))}
+              </div>
+            )}
+
+            {activeTab === 'details' && (
             <form className="modal-form" onSubmit={handleSubmit}>
 
               <ModalSection Icon={BsBriefcase} title="Operations" hint="Job & field details" />
@@ -2178,6 +2421,160 @@ function JobLogDescription() {
                 </button>
               </div>
             </form>
+            )}
+
+            {activeTab === 'inspector' && modalMode === 'edit' && (
+              <div className="modal-form">
+                <ModalSection Icon={Users} title="Add / Replace Inspector" hint="Mid-job coverage changes, with dates" />
+
+                <form onSubmit={submitInspectorChange}>
+                  {/* Step 1 — what are you doing, and to which field */}
+                  <p style={{ margin: '0 0 8px', fontSize: 12.5, fontWeight: 700, color: '#9a9aaa', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    1. What do you want to do?
+                  </p>
+                  <div className="form-row">
+                    <div className="field-col"><span>Action</span>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        {[
+                          { v: 'add', label: '+ Add someone new' },
+                          { v: 'replace', label: '⇄ Replace someone' },
+                        ].map(m => (
+                          <button key={m.v} type="button" onClick={() => { setChangeMode(m.v); setChangeOldValue(''); setChangeNewValue('') }}
+                            style={{
+                              flex: 1, padding: '10px 12px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+                              cursor: 'pointer',
+                              border: changeMode === m.v ? '1px solid #d7263d' : '1px solid #e0e0e6',
+                              background: changeMode === m.v ? '#fdf2f3' : '#fff',
+                              color: changeMode === m.v ? '#d7263d' : '#595966',
+                            }}>{m.label}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="field-col"><span>On which field?</span>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        {[{ v: 'inspector', label: 'Inspector Name' }, { v: 'team', label: 'Inspector Team' }].map(f => (
+                          <button key={f.v} type="button"
+                            onClick={() => { setChangeField(f.v); setChangeOldValue(''); setChangeNewValue('') }}
+                            style={{
+                              flex: 1, padding: '10px 12px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+                              cursor: 'pointer',
+                              border: changeField === f.v ? '1px solid #d7263d' : '1px solid #e0e0e6',
+                              background: changeField === f.v ? '#fdf2f3' : '#fff',
+                              color: changeField === f.v ? '#d7263d' : '#595966',
+                            }}>{f.label}</button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <p style={{ margin: '20px 0 8px', fontSize: 12.5, fontWeight: 700, color: '#9a9aaa', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    2. {changeMode === 'replace' ? 'Who is being replaced, and by whom?' : 'Who is being added?'}
+                  </p>
+                  {changeMode === 'replace' && (
+                    <div className="form-row">
+                      <div className="field-col"><span>Currently on the job (select one or more) *</span>
+                        <MultiSelect
+                          value={changeOldValue}
+                          options={currentRosterFor(changeField)}
+                          placeholder="Select who is being replaced…"
+                          onChange={setChangeOldValue} />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="form-row">
+                    <div className="field-col"><span>{changeMode === 'replace' ? 'Replacing with (select one or more) *' : 'New inspector(s)/team member(s) *'}</span>
+                      <MultiSelect
+                        value={changeNewValue}
+                        options={changeField === 'team' ? teamOptions : inspectorOptions}
+                        placeholder="Select one or more…"
+                        onChange={setChangeNewValue} />
+                    </div>
+                  </div>
+                  {changeMode === 'replace' && (
+                    <p style={{ margin: '4px 0 0', fontSize: 12, color: '#9a9aaa' }}>
+                      Tip: pick the same number on both sides to match them one-to-one, or leave just one side with a single person if one person is covering — or being covered by — several.
+                    </p>
+                  )}
+
+                  <p style={{ margin: '20px 0 8px', fontSize: 12.5, fontWeight: 700, color: '#9a9aaa', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    3. For which dates, and why?
+                  </p>
+                  <div className="form-row">
+                    <label><span>Start Date *</span>
+                      <StyledDatePicker value={changeStart} style={modalSelectStyle} onChange={setChangeStart} /></label>
+                    <label><span>End Date *</span>
+                      <StyledDatePicker value={changeEnd} style={modalSelectStyle} onChange={setChangeEnd} /></label>
+                  </div>
+
+                  <label><span>Reason{changeMode === 'replace' ? ' *' : ' (optional)'}</span>
+                    <textarea rows="2" value={changeReason}
+                      placeholder={changeMode === 'replace' ? 'Why is this person being replaced?' : 'Optional note…'}
+                      onChange={e => setChangeReason(e.target.value)} />
+                  </label>
+
+                  {changeError && <p style={{ color: '#d7263d', fontSize: 13, fontWeight: 600 }}>{changeError}</p>}
+
+                  <div className="modal-actions">
+                    <button type="submit" className="primary-btn" disabled={changeSaving}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {changeSaving ? 'Saving…' : changeMode === 'replace' ? 'Replace' : '+ Add'}
+                    </button>
+                  </div>
+                </form>
+
+                <ModalSection Icon={ClipboardList} title="History for this entry" hint={`${inspectorChangesList.length} record(s)`} />
+                {inspectorChangesList.length === 0 ? (
+                  <p style={{ color: '#9a9aaa', fontSize: 13 }}>No add/replace history recorded yet.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {inspectorChangesList.map(c => {
+                      const today = new Date().toISOString().slice(0, 10)
+                      const isActiveReplacement = c.changeType === 'replace' && c.endDate >= today
+                      return (
+                      <div key={c.id} style={{
+                        display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', flexWrap: 'wrap',
+                        border: '1px solid #efeff2', borderRadius: 8, fontSize: 13,
+                      }}>
+                        <span style={{
+                          padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
+                          background: c.changeType === 'replace' ? '#fff5f6' : '#f0fff8',
+                          color: c.changeType === 'replace' ? '#d7263d' : '#1d814c',
+                        }}>{c.changeType}</span>
+                        <span style={{ color: '#7a7a8c', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>
+                          {c.fieldType === 'team' ? 'Team' : 'Inspector'}
+                        </span>
+                        <span style={{ flex: 1, fontWeight: 600 }}>
+                          {c.changeType === 'replace' ? `${c.oldValue} → ${c.newValue}` : `+ ${c.newValue}`}
+                        </span>
+                        <span style={{ color: '#595966' }}>{c.startDate} – {c.endDate}</span>
+                        {c.reason && <InfoTooltip text={c.reason} />}
+                        {isActiveReplacement && canEdit('operations') && (
+                          <button type="button" className="ghost-btn" onClick={() => endReplacementNow(c)}
+                            style={{ fontSize: 12, padding: '4px 10px' }}
+                            title="Close this replacement's end date to today">
+                            End Replacement
+                          </button>
+                        )}
+                        {!isActiveReplacement && c.changeType === 'replace' && (
+                          <span style={{ fontSize: 11, color: '#9a9aaa', fontWeight: 600 }}>Ended</span>
+                        )}
+                        {(isAdminContext || jlrPerms?.full) && (
+                          <button type="button" className="action-btn delete small" onClick={() => deleteInspectorChange(c.id)} title="Delete this record entirely">
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                <div className="modal-actions">
+                  <button type="button" className="ghost-btn" onClick={closeModal}>Close</button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
