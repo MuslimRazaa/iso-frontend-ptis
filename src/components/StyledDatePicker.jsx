@@ -148,7 +148,7 @@ function StyledDatePicker({ value, onChange, min, max, placeholder = 'Select dat
         <div
           ref={panelRef}
           style={{
-            position: 'fixed', top: rect.top, left: rect.left, minWidth: rect.width, zIndex: 9999,
+            position: 'fixed', top: rect.top, left: rect.left, minWidth: rect.width, zIndex: 10500,
             background: '#fff', border: '1px solid #e0e0e6', borderRadius: 12,
             boxShadow: '0 12px 32px rgba(0,0,0,0.14)', padding: 12,
             ...panelStyle,

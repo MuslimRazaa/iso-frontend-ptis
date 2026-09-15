@@ -596,7 +596,7 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
                   onChange={(v) => setDraft(d => ({ ...d, type: v }))}
                   options={[]}
                   extraOptions={FIELD_TYPES}
-                  style={S.input}
+                  style={{ ...S.input, maxWidth: '100%', boxSizing: 'border-box' }}
                 />
 
                 {hasOptions(draft.type) && (
@@ -618,7 +618,7 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
                   onChange={(v) => setDraft(d => ({ ...d, owner: v }))}
                   options={[]}
                   extraOptions={OWNERS}
-                  style={S.input}
+                  style={{ ...S.input, maxWidth: '100%', boxSizing: 'border-box' }}
                 />
 
                 <label style={{ ...S.label, display: 'flex', alignItems: 'center', gap: 6, textTransform: 'none' }}>
@@ -744,7 +744,7 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
                     { value: 'center', label: 'Center' },
                     { value: 'right', label: 'Right' },
                   ]}
-                  style={S.input}
+                  style={{ ...S.input, maxWidth: '100%', boxSizing: 'border-box' }}
                 />
 
                 <label style={S.label}>Box size &amp; position (pt)</label>
