@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react'
 import { parsePdf, pdfToBase64, enrichSeedFieldsWithCoords } from '../utils/parsePdf'
 import { SEED_TEMPLATES } from '../seedTemplates'
+import { ownerOptionsFor } from '../utils/fieldTypes'
 import StyledSelect from '../../components/StyledSelect'
 
 const FIELD_TYPES = [
@@ -14,16 +15,12 @@ const FIELD_TYPES = [
   { value: 'employee',       label: 'Employee Picker' },
 ]
 
-const OWNERS = [
-  { value: 'requester', label: 'Requester' },
-  { value: 'approver',  label: 'Approver' },
-]
-
 // Map known form codes to their seed template
 const KNOWN_FORM_MAP = {
   'FM-001-04': SEED_TEMPLATES.find(t => t.id === 'seed-fm-001-04'),
   'FM-002-01': SEED_TEMPLATES.find(t => t.id === 'seed-fm-002-01'),
   'FM-014-09': SEED_TEMPLATES.find(t => t.id === 'seed-fm-014-09'),
+  'FM-006-03': SEED_TEMPLATES.find(t => t.id === 'seed-fm-006-03'),
 }
 
 function PdfImportModal({ onImport, onClose }) {
@@ -35,6 +32,11 @@ function PdfImportModal({ onImport, onClose }) {
   const [pdfName, setPdfName] = useState('')
   const [detectedCode, setDetectedCode] = useState(null)
   const [usingPreset, setUsingPreset] = useState(false)
+  // Named approval roles the matched preset requires (e.g. FM-006-03's 5 HOD
+  // roles) — carried through so the field-owner picker below offers them, and
+  // handed back on import so the template builder's own Approval Roles list
+  // is pre-populated instead of starting empty.
+  const [presetApprovalRoles, setPresetApprovalRoles] = useState([])
   const [usingAcroForm, setUsingAcroForm] = useState(false)
   const [selected, setSelected] = useState(new Set())
 
@@ -83,16 +85,19 @@ function PdfImportModal({ onImport, onClose }) {
         setFields(detected)
         setSelected(new Set(detected.map(f => f.id)))
         setUsingPreset(false)
+        setPresetApprovalRoles([])
       } else if (detectedFormCode && KNOWN_FORM_MAP[detectedFormCode]) {
         const rawPreset = KNOWN_FORM_MAP[detectedFormCode].fields.map(f => ({ ...f }))
         const enriched = enrichSeedFieldsWithCoords(rawPreset, allItems, geometry)
         setFields(enriched)
         setSelected(new Set(enriched.map(f => f.id)))
         setUsingPreset(true)
+        setPresetApprovalRoles(KNOWN_FORM_MAP[detectedFormCode].approvalRoles || [])
       } else {
         setFields(detected)
         setSelected(new Set(detected.map(f => f.id)))
         setUsingPreset(false)
+        setPresetApprovalRoles([])
       }
     } catch (e) {
       console.error('PDF parse error:', e)
@@ -108,6 +113,7 @@ function PdfImportModal({ onImport, onClose }) {
     setPdfBase64(null)
     setDetectedCode(null)
     setUsingPreset(false)
+    setPresetApprovalRoles([])
   }
 
   const updateField = (id, patch) =>
@@ -122,7 +128,7 @@ function PdfImportModal({ onImport, onClose }) {
 
   const handleImport = () => {
     const chosen = fields.filter(f => selected.has(f.id) && f.label.trim())
-    onImport(chosen, pdfBase64, pdfName, detectedCode)
+    onImport(chosen, pdfBase64, pdfName, detectedCode, presetApprovalRoles)
   }
 
   return (
@@ -232,7 +238,7 @@ function PdfImportModal({ onImport, onClose }) {
                   >
                     {selected.size === fields.length ? 'Deselect All' : 'Select All'}
                   </button>
-                  <button className="ghost-btn small" onClick={() => { setFields(null); setPdfBase64(null); setDetectedCode(null); setUsingPreset(false) }}>
+                  <button className="ghost-btn small" onClick={() => { setFields(null); setPdfBase64(null); setDetectedCode(null); setUsingPreset(false); setPresetApprovalRoles([]) }}>
                     Change PDF
                   </button>
                 </div>
@@ -269,7 +275,7 @@ function PdfImportModal({ onImport, onClose }) {
                         value={f.owner}
                         onChange={v => updateField(f.id, { owner: v })}
                         options={[]}
-                        extraOptions={OWNERS}
+                        extraOptions={ownerOptionsFor(presetApprovalRoles)}
                         style={{ padding: '8px 10px', border: '1px solid #e0e0e6', borderRadius: 10, fontSize: 12, cursor: 'pointer' }}
                       />
                       <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#595966' }}>

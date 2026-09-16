@@ -5,7 +5,7 @@ import { getOfflineTemplate, addOfflineTemplate, updateOfflineTemplate } from '.
 import PdfImportModal from '../components/PdfImportModal'
 import FieldPositionEditor from './FieldPositionEditor'
 import { isPlaced } from '../utils/pdfCoords'
-import { FIELD_TYPES, OWNERS, blankField, hasOptions } from '../utils/fieldTypes'
+import { FIELD_TYPES, blankField, hasOptions, blankApprovalRole, ownerOptionsFor } from '../utils/fieldTypes'
 import StyledSelect from '../../components/StyledSelect'
 
 // The template PDF is sent as a real file part, not as base64 inside the JSON
@@ -62,6 +62,30 @@ function TemplateBuilder() {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [fields, setFields] = useState([blankField()])
+  const [approvalRoles, setApprovalRoles] = useState([])
+  const [departments, setDepartments] = useState([])
+  const [employees, setEmployees] = useState([])
+
+  // For the "auto-assign from department" picker on each role — resolved to
+  // whichever employee is marked as that department's HOD at submit time.
+  // Employees are fetched too so the picker can show WHO that actually is
+  // right now, not just the bare department name.
+  useEffect(() => {
+    fetch(API_ENDPOINTS.DEPARTMENTS)
+      .then(res => (res.ok ? res.json() : Promise.reject()))
+      .then(json => setDepartments(Array.isArray(json) ? json : []))
+      .catch(() => setDepartments([]))
+    fetch(API_ENDPOINTS.EMPLOYEES)
+      .then(res => (res.ok ? res.json() : Promise.reject()))
+      .then(json => setEmployees(Array.isArray(json) ? json : []))
+      .catch(() => setEmployees([]))
+  }, [])
+
+  const hodNameFor = (deptName) => {
+    const hod = employees.find(e =>
+      e.department === deptName && (e.is_department_hod === 1 || e.is_department_hod === true))
+    return hod?.full_name || hod?.name || null
+  }
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -81,6 +105,7 @@ function TemplateBuilder() {
       setOriginalPdfBase64(json.originalPdf || '')
       setOriginalPdfName(json.originalPdfName || '')
       setFormCode(json.formCode || '')
+      setApprovalRoles(Array.isArray(json.approvalRoles) ? json.approvalRoles : [])
       const parsedFields = typeof json.fields === 'string' ? JSON.parse(json.fields) : json.fields
       const normalized = Array.isArray(parsedFields)
         ? parsedFields.map(f => ({ owner: 'requester', ...f }))
@@ -99,13 +124,21 @@ function TemplateBuilder() {
     'FM-001-04': 'Document Change Request Form',
     'FM-002-01': 'Corrective Action Request Form',
     'FM-014-09': 'Requisition Form',
+    'FM-006-03': 'Final Settlement Form',
   }
 
-  const handlePdfImport = (importedFields, pdfBase64, pdfName, detectedCode) => {
+  const handlePdfImport = (importedFields, pdfBase64, pdfName, detectedCode, importedApprovalRoles) => {
     setFields(prev => {
       const hasContent = prev.some(f => f.label.trim())
       return hasContent ? [...prev, ...importedFields] : importedFields
     })
+    // A recognised preset (e.g. FM-006-03's 5 HOD roles) brings its own
+    // approval roles — only apply them when the template doesn't already have
+    // roles of its own, so re-importing into an already-customized template
+    // doesn't clobber roles the admin added by hand.
+    if (importedApprovalRoles?.length && !approvalRoles.length) {
+      setApprovalRoles(importedApprovalRoles.map(r => ({ ...r })))
+    }
     setOriginalPdfBase64(pdfBase64)
     setOriginalPdfName(pdfName)
     // Use proper form name for recognized PTIS forms; fall back to filename
@@ -120,6 +153,17 @@ function TemplateBuilder() {
   const unplacedCount = originalPdfBase64
     ? fields.filter(f => f.label.trim() && !isPlaced(f)).length
     : 0
+
+  const addApprovalRole = () => setApprovalRoles(prev => [...prev, blankApprovalRole()])
+  const updateApprovalRole = (key, patch) =>
+    setApprovalRoles(prev => prev.map(r => (r.key === key ? { ...r, ...patch } : r)))
+  // A field owned by the role being removed would otherwise point at a role
+  // that no longer exists — fall back those fields to "Requester" rather than
+  // leaving a dangling owner.
+  const removeApprovalRole = (key) => {
+    setApprovalRoles(prev => prev.filter(r => r.key !== key))
+    setFields(prev => prev.map(f => (f.owner === key ? { ...f, owner: 'requester' } : f)))
+  }
 
   const addField = () => setFields(prev => [...prev, blankField()])
   const removeField = (fieldId) => setFields(prev => prev.filter(f => f.id !== fieldId))
@@ -152,6 +196,7 @@ function TemplateBuilder() {
       name: name.trim(),
       description: description.trim(),
       fields,
+      approvalRoles,
       originalPdf: originalPdfBase64 || undefined,
       originalPdfName: originalPdfName || undefined,
       formCode: formCode || undefined,
@@ -164,6 +209,7 @@ function TemplateBuilder() {
         name: payload.name,
         description: payload.description,
         fields,
+        approvalRoles,
         originalPdfName: originalPdfName || 'template.pdf',
         formCode: formCode || undefined,
       }))
@@ -275,6 +321,43 @@ function TemplateBuilder() {
         />
       </article>
 
+      <article className="panel" style={{ padding: 24, marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Approval Roles</h3>
+          <button type="button" onClick={addApprovalRole} className="ghost-btn small">+ Add Role</button>
+        </div>
+        <p style={{ margin: '0 0 14px', fontSize: 13, color: '#7a7a8c' }}>
+          {approvalRoles.length
+            ? 'Everyone listed here must sign off independently before this form is fully approved.'
+            : 'No named roles yet — this form uses a single "Approver". Add a role for each person who must sign off (e.g. "HOD QA", "HOD Operations").'}
+        </p>
+        {approvalRoles.map((role) => (
+          <div key={role.key} style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10 }}>
+            <input
+              type="text"
+              value={role.label}
+              onChange={e => updateApprovalRole(role.key, { label: e.target.value })}
+              placeholder="Role name, e.g. HOD QA"
+              style={{ flex: 1, padding: '10px 14px', border: '2px solid #e0e0e6', borderRadius: 10, fontSize: 14, boxSizing: 'border-box' }}
+            />
+            <StyledSelect
+              value={role.autoDepartment || ''}
+              onChange={v => updateApprovalRole(role.key, { autoDepartment: v || undefined })}
+              options={[]}
+              extraOptions={departments.map(d => {
+                const hodName = hodNameFor(d.name)
+                return { value: d.name, label: hodName ? `${d.name} — ${hodName}` : `${d.name} (no HOD marked yet)` }
+              })}
+              emptyOptionLabel="No auto-assign"
+              emptyOptionValue=""
+              placeholder="Auto-assign from department…"
+              style={{ minWidth: 200, padding: '10px 14px', border: '2px solid #e0e0e6', borderRadius: 10, fontSize: 14, cursor: 'pointer' }}
+            />
+            <button type="button" onClick={() => removeApprovalRole(role.key)} className="ghost-btn small">Remove</button>
+          </div>
+        ))}
+      </article>
+
       <article className="panel" style={{ padding: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Fields</h3>
@@ -319,7 +402,7 @@ function TemplateBuilder() {
                 value={field.owner || 'requester'}
                 onChange={v => updateField(field.id, { owner: v })}
                 options={[]}
-                extraOptions={OWNERS}
+                extraOptions={ownerOptionsFor(approvalRoles)}
                 style={{ padding: '8px 12px', border: '2px solid #e0e0e6', borderRadius: 10, fontSize: 13, cursor: 'pointer', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}
               />
             </div>
@@ -361,6 +444,7 @@ function TemplateBuilder() {
         <FieldPositionEditor
           pdfBase64={originalPdfBase64}
           fields={fields.filter(f => f.label.trim())}
+          approvalRoles={approvalRoles}
           onClose={() => setShowPositions(false)}
           onSave={(updated) => {
             setFields(prev => {

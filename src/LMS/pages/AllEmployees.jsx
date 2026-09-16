@@ -27,6 +27,7 @@ function AllEmployees() {
     email: '',
     password: '',
     department: '',
+    is_department_hod: false,
     location: '',
     status: 'Active'
   })
@@ -77,6 +78,7 @@ function AllEmployees() {
       email: employee.email || '',
       password: '',
       department: employee.department,
+      is_department_hod: Boolean(employee.is_department_hod),
       location: employee.location,
       status: employee.status || 'Active'
     })
@@ -289,6 +291,14 @@ function AllEmployees() {
                     emptyOptionLabel="Select department"
                     style={formSelectStyle}
                   />
+                </label>
+                <label className="checkbox-label" style={{ alignSelf: 'flex-end', marginBottom: 2 }}>
+                  <input
+                    type="checkbox"
+                    checked={formState.is_department_hod}
+                    onChange={(e) => handleChange('is_department_hod', e.target.checked)}
+                  />
+                  <span>Is Department HOD</span>
                 </label>
               </div>
 
