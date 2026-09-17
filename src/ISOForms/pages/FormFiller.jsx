@@ -129,28 +129,25 @@ function FormFiller() {
     return () => { active = false }
   }, [schemaId])
 
-  // Auto-fill a role's picker from its department's marked HOD, once both the
-  // template (which roles want auto-assign) and the employee list (who's
-  // marked as HOD of what) are in. Never overwrites a value already set —
-  // editing an existing entry already prefilled roleApprovers from its saved
-  // approvals, and a role the requester has already picked by hand should not
-  // be silently swapped out from under them.
+  // Pre-fill a role's picker from the template's saved default employee, once
+  // the template is in. This is only a suggestion — never overwrites a value
+  // already set, since editing an existing entry already prefilled
+  // roleApprovers from its saved approvals, and a role the requester has
+  // already picked by hand should not be silently swapped out from under them.
   useEffect(() => {
-    if (!template || !employees.length) return
+    if (!template) return
     const roles = template.approvalRoles?.length ? template.approvalRoles : []
-    const toFill = roles.filter(r => r.autoDepartment && !roleApprovers[r.key])
+    const toFill = roles.filter(r => r.defaultEmployeeId && !roleApprovers[r.key])
     if (!toFill.length) return
     setRoleApprovers(prev => {
       const next = { ...prev }
       for (const role of toFill) {
         if (next[role.key]) continue
-        const hod = employees.find(e =>
-          e.department === role.autoDepartment && (e.is_department_hod === 1 || e.is_department_hod === true))
-        if (hod) next[role.key] = String(hod.id)
+        next[role.key] = String(role.defaultEmployeeId)
       }
       return next
     })
-  }, [template, employees, roleApprovers])
+  }, [template, roleApprovers])
 
   // Employees list, for the related-employee (approver) picker
   useEffect(() => {

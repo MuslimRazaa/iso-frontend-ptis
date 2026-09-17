@@ -33,7 +33,6 @@ function AddEmployee() {
     email: '',
     password: '',
     department: '',
-    is_department_hod: false,
     location: '',
     status: 'Active'
   })
@@ -288,15 +287,6 @@ function AddEmployee() {
                 Manage
               </button>
             </div>
-          </label>
-          <label className="checkbox-label" style={{ alignSelf: 'flex-end', marginBottom: 2 }}>
-            <input
-              type="checkbox"
-              name="is_department_hod"
-              checked={formData.is_department_hod}
-              onChange={handleInputChange}
-            />
-            <span>Is Department HOD (auto-fills as that department's approver on ISO Forms)</span>
           </label>
 
           <label>

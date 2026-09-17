@@ -47,8 +47,8 @@ function StyledDatePicker({ value, onChange, min, max, placeholder = 'Select dat
   const panelRef = useRef(null)
   const yearListRef = useRef(null)
 
-  const updateRect = useCallback(() => {
-    if (!wrapperRef.current) return
+  const computeRect = useCallback(() => {
+    if (!wrapperRef.current) return null
     const r = wrapperRef.current.getBoundingClientRect()
     const margin = 24
     const panelWidth = Math.max(r.width, 260)
@@ -56,8 +56,13 @@ function StyledDatePicker({ value, onChange, min, max, placeholder = 'Select dat
     // viewport for any trigger sitting near the right edge (the date filters
     // at the end of a filter row) — pull it left just enough to stay on screen.
     const left = Math.min(r.left, window.innerWidth - margin - panelWidth)
-    setRect({ top: r.bottom + 4, left: Math.max(margin, left), width: panelWidth })
+    return { top: r.bottom + 4, left: Math.max(margin, left), width: panelWidth }
   }, [])
+
+  const updateRect = useCallback(() => {
+    const r = computeRect()
+    if (r) setRect(r)
+  }, [computeRect])
 
   useLayoutEffect(() => {
     if (!open) return
@@ -74,19 +79,41 @@ function StyledDatePicker({ value, onChange, min, max, placeholder = 'Select dat
       if (panelRef.current?.contains(e.target)) return
       setOpen(false)
     }
-    const onScrollOrResize = () => updateRect()
+    // The panel must keep following the trigger while the page scrolls (a
+    // date field near the bottom of a long form can open with the calendar
+    // partly off-screen, and closing it the moment the user scrolls to see
+    // the rest would defeat the point of scrolling there). Going through
+    // React state on every scroll tick re-renders the whole calendar grid,
+    // which can't keep up with a fast scroll — the panel visibly lags and
+    // only catches up once scrolling stops. Writing the new position
+    // straight onto the DOM node skips that render entirely, so it tracks
+    // the trigger in the same frame as the scroll, no lag. React state is
+    // still updated (without forcing a sync render) so the value is correct
+    // if anything else re-renders meanwhile.
+    const onScroll = (e) => {
+      if (panelRef.current?.contains(e.target)) return
+      const r = computeRect()
+      if (!r) return
+      if (panelRef.current) {
+        panelRef.current.style.top = `${r.top}px`
+        panelRef.current.style.left = `${r.left}px`
+        panelRef.current.style.minWidth = `${r.width}px`
+      }
+      setRect(r)
+    }
+    const onResize = () => updateRect()
     // Capture phase, not bubble: a click on a month/year cell changes `view`
     // (swapping that grid out of the DOM) before a bubble-phase listener here
     // would get to check it, so `contains()` sees an already-removed node and
     // closes the picker instead of just switching views. Capture runs first,
     // while the clicked cell is still in the tree.
     document.addEventListener('mousedown', onDocMouseDown, true)
-    window.addEventListener('scroll', onScrollOrResize, true)
-    window.addEventListener('resize', onScrollOrResize)
+    window.addEventListener('scroll', onScroll, true)
+    window.addEventListener('resize', onResize)
     return () => {
       document.removeEventListener('mousedown', onDocMouseDown, true)
-      window.removeEventListener('scroll', onScrollOrResize, true)
-      window.removeEventListener('resize', onScrollOrResize)
+      window.removeEventListener('scroll', onScroll, true)
+      window.removeEventListener('resize', onResize)
     }
   }, [open, updateRect])
 
