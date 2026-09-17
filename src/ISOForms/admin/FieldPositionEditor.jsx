@@ -9,7 +9,7 @@ import {
   DEFAULT_BOX_WIDTH,
   DEFAULT_BOX_HEIGHT,
 } from '../utils/pdfCoords'
-import { FIELD_TYPES, OWNERS, blankField, hasOptions } from '../utils/fieldTypes'
+import { FIELD_TYPES, blankField, hasOptions, ownerOptionsFor } from '../utils/fieldTypes'
 import { detectOptionMarksOnPage } from '../utils/parsePdf'
 import StyledSelect from '../../components/StyledSelect'
 
@@ -84,7 +84,7 @@ function NumInput({ value, onCommit, min, step = 1 }) {
   )
 }
 
-function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
+function FieldPositionEditor({ pdfBase64, fields, approvalRoles, onSave, onClose }) {
   const canvasRef = useRef(null)
   const canvasScrollRef = useRef(null)
   const surfaceRef = useRef(null)
@@ -617,7 +617,7 @@ function FieldPositionEditor({ pdfBase64, fields, onSave, onClose }) {
                   value={draft.owner}
                   onChange={(v) => setDraft(d => ({ ...d, owner: v }))}
                   options={[]}
-                  extraOptions={OWNERS}
+                  extraOptions={ownerOptionsFor(approvalRoles)}
                   style={{ ...S.input, maxWidth: '100%', boxSizing: 'border-box' }}
                 />
 

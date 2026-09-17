@@ -40,9 +40,12 @@ function FormDetail() {
   const [offline, setOffline] = useState(false)
   const [myEmployeeId, setMyEmployeeId] = useState(null)
 
-  const [remarks, setRemarks] = useState('')
-  const [deciding, setDeciding] = useState(false)
-  const [approverValues, setApproverValues] = useState({})
+  // Per role_key — one form can need sign-off from several roles, each with
+  // its own remarks, its own approver-owned field values, and its own
+  // approve/reject action, all independent of one another.
+  const [remarksByRole, setRemarksByRole] = useState({})
+  const [decidingRole, setDecidingRole] = useState(null)
+  const [approverValuesByRole, setApproverValuesByRole] = useState({})
   const [downloading, setDownloading] = useState(false)
   const [employees, setEmployees] = useState([])
 
@@ -120,32 +123,43 @@ function FormDetail() {
     } catch { return Array.isArray(entry.attachments) ? entry.attachments : [] }
   }, [entry])
 
-  const savedApproverValues = useMemo(() => {
-    if (!entry?.approver_data) return {}
-    try {
-      return typeof entry.approver_data === 'string' ? JSON.parse(entry.approver_data) : entry.approver_data
-    } catch { return {} }
-  }, [entry])
+  // One row per role (see IsoFormEntryApproval on the backend) — the source
+  // of truth for who's decided what, riding along on the entry itself.
+  const approvals = useMemo(() => (Array.isArray(entry?.approvals) ? entry.approvals : []), [entry])
 
-  useEffect(() => { setApproverValues(savedApproverValues) }, [savedApproverValues])
+  // Prefills each role's own field values from what it already has saved —
+  // a role that already decided keeps showing what it submitted.
+  useEffect(() => {
+    const next = {}
+    for (const a of approvals) {
+      let data = {}
+      try { data = typeof a.approver_data === 'string' ? JSON.parse(a.approver_data || '{}') : (a.approver_data || {}) }
+      catch { data = {} }
+      next[a.role_key] = data
+    }
+    setApproverValuesByRole(next)
+  }, [approvals])
 
   const requesterFields = useMemo(() => (template?.fields || []).filter(f => (f.owner || 'requester') === 'requester'), [template])
-  const approverFields  = useMemo(() => (template?.fields || []).filter(f => f.owner === 'approver'), [template])
+  const fieldsForRole = (roleKey) => (template?.fields || []).filter(f => f.owner === roleKey)
 
-  const canDecide =
-    entry?.status === 'pending' &&
-    (isAdminOverride || (myEmployeeId && String(myEmployeeId) === String(entry?.related_employee_id)))
+  // The roles I (or an admin, for any role) can actually decide right now —
+  // still pending, and assigned to me unless I'm overriding as admin.
+  const decidableApprovals = approvals.filter(a => a.status === 'pending'
+    && (isAdminOverride || (myEmployeeId && String(a.approver_employee_id) === String(myEmployeeId))))
+  const canDecideRole = (roleKey) => decidableApprovals.some(a => a.role_key === roleKey)
 
-  // Who may open this form at all: its author, the person who has to decide on
-  // it, and an ISO Forms admin. Without this the list could scope what it shows
-  // while the form itself stayed readable to anyone who typed its URL.
+  // Who may open this form at all: its author, anyone assigned to decide any
+  // role on it, and an ISO Forms admin. Without this the list could scope
+  // what it shows while the form itself stayed readable to anyone who typed
+  // its URL.
   const canView = (() => {
     if (!entry) return true
     if (isAdminOverride) return true
     const me = [myEmployeeId, localStorage.getItem('userEmail')].filter(Boolean).map(String)
     if (!me.length) return false
-    return me.includes(String(entry.created_by || '')) ||
-           me.includes(String(entry.related_employee_id || ''))
+    if (me.includes(String(entry.created_by || ''))) return true
+    return approvals.some(a => me.includes(String(a.approver_employee_id || '')))
   })()
 
   // Who may revise this form: its author while it is still pending, and an ISO
@@ -169,7 +183,17 @@ function FormDetail() {
     return Boolean(me) && String(entry.created_by || '') === String(me)
   })()
 
-  const setApproverValue = (fieldId, val) => setApproverValues(prev => ({ ...prev, [fieldId]: val }))
+  const setApproverValue = (roleKey, fieldId, val) =>
+    setApproverValuesByRole(prev => ({ ...prev, [roleKey]: { ...prev[roleKey], [fieldId]: val } }))
+
+  // Every role's field values merged into one flat object — field ids are
+  // unique across the whole template regardless of which role owns them, so
+  // merging can't collide. The PDF overlay just needs "value by field id",
+  // not which role filled it.
+  const flatApproverValues = useMemo(
+    () => Object.assign({}, ...Object.values(approverValuesByRole)),
+    [approverValuesByRole]
+  )
 
   // Who an approver signature signs as when its name is left blank.
   const signerName = resolveSignerName({ employees, employeeId: myEmployeeId })
@@ -189,7 +213,7 @@ function FormDetail() {
         return
       }
       const { skipped } = await downloadFilledPdf(
-        originalPdf, template.fields || [], formValues, approverValues, employees, filename,
+        originalPdf, template.fields || [], formValues, flatApproverValues, employees, filename,
       )
       if (skipped.length) {
         setError(`Downloaded, but ${skipped.length} filled field(s) have no position on the PDF yet and were left off: ${skipped.slice(0, 5).join(', ')}${skipped.length > 5 ? '…' : ''}. An admin can place them under Edit Template → Field Positions.`)
@@ -202,26 +226,28 @@ function FormDetail() {
     }
   }
 
-  const handleDecision = async (status) => {
-    if (status === 'rejected' && !remarks.trim()) {
+  const handleDecision = async (roleKey, status) => {
+    const roleRemarks = (remarksByRole[roleKey] || '').trim()
+    if (status === 'rejected' && !roleRemarks) {
       setError('Please add a remark explaining why this form is being rejected.')
       return
     }
+    const roleFields = fieldsForRole(roleKey)
+    const roleValues = approverValuesByRole[roleKey] || {}
     if (status === 'approved') {
-      const missing = approverFields.filter(f => f.required && isFieldEmpty(f, approverValues[f.id]))
+      const missing = roleFields.filter(f => f.required && isFieldEmpty(f, roleValues[f.id]))
       if (missing.length) { setError(`Please fill: ${missing.map(f => f.label).join(', ')}`); return }
     }
-    setDeciding(true)
+    setDecidingRole(roleKey)
     setError('')
 
-    // Seal the approver's signature fields — the same stamp the requester's
-    // side of the form carries, for the part only the approver completes: the
-    // date is set now, and the name is whatever was typed, falling back to
-    // whoever is deciding.
-    const signedApproverValues = { ...approverValues }
-    for (const field of approverFields) {
+    // Seal this role's signature fields — the same stamp the requester's side
+    // of the form carries: the date is set now, and the name is whatever was
+    // typed, falling back to whoever is deciding.
+    const signedValues = { ...roleValues }
+    for (const field of roleFields) {
       if (field.type !== 'signature') continue
-      signedApproverValues[field.id] = stampSignature(signedApproverValues[field.id], signerName)
+      signedValues[field.id] = stampSignature(signedValues[field.id], signerName)
     }
 
     try {
@@ -229,9 +255,10 @@ function FormDetail() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          status, remarks: remarks.trim(), approver_data: signedApproverValues,
+          status, remarks: roleRemarks, approver_data: signedValues, role_key: roleKey,
           actor_id: myEmployeeId || localStorage.getItem('userEmail') || null,
           actor_name: signerName,
+          admin: isAdminOverride ? '1' : undefined,
         }),
       })
       if (!res.ok) throw new Error('decision failed')
@@ -239,12 +266,12 @@ function FormDetail() {
       // No backend yet — record the decision in the local demo store instead.
       updateOfflineEntry(id, {
         status,
-        remarks: remarks.trim(),
-        approver_data: JSON.stringify(signedApproverValues),
+        remarks: roleRemarks,
+        approver_data: JSON.stringify(signedValues),
         decided_at: new Date().toISOString(),
       })
     } finally {
-      setDeciding(false)
+      setDecidingRole(null)
     }
     load()
   }
@@ -333,8 +360,14 @@ function FormDetail() {
             <div style={{ fontWeight: 700, color: '#14141c', marginTop: 4 }}>{entry.created_by_name || entry.created_by || '—'}</div>
           </div>
           <div>
-            <div style={{ fontSize: 12, color: '#7a7a8c', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Related To</div>
-            <div style={{ fontWeight: 700, color: '#14141c', marginTop: 4 }}>{entry.related_employee_name || entry.related_employee_id || '—'}</div>
+            <div style={{ fontSize: 12, color: '#7a7a8c', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              {approvals.length > 1 ? 'Approvers' : 'Related To'}
+            </div>
+            <div style={{ fontWeight: 700, color: '#14141c', marginTop: 4 }}>
+              {approvals.length
+                ? approvals.map(a => a.approver_employee_name || a.approver_employee_id).filter(Boolean).join(', ') || '—'
+                : (entry.related_employee_name || entry.related_employee_id || '—')}
+            </div>
           </div>
           <div>
             <div style={{ fontSize: 12, color: '#7a7a8c', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Submitted</div>
@@ -350,11 +383,6 @@ function FormDetail() {
           )}
         </div>
 
-        {entry.remarks && (
-          <div style={{ background: '#fafafb', border: '1px solid #ececf0', borderRadius: 12, padding: '14px 16px', fontSize: 14, color: '#595966' }}>
-            <strong style={{ color: '#14141c' }}>Remarks: </strong>{entry.remarks}
-          </div>
-        )}
       </article>
 
       <article className="panel" style={{ padding: 24, marginBottom: 20, display: 'grid', gap: 18 }}>
@@ -368,28 +396,70 @@ function FormDetail() {
         {!template && <p style={{ margin: 0, fontSize: 13, color: '#7a7a8c' }}>Template details unavailable.</p>}
       </article>
 
-      {approverFields.length > 0 && (
-        <article className="panel" style={{ padding: 24, marginBottom: 20, display: 'grid', gap: 18 }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>
-            Approver Section {entry.status === 'pending' ? '(filled when deciding)' : ''}
-          </h3>
-          {approverFields.map(field => (
-            <div key={field.id}>
-              <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, fontSize: 14 }}>
-                {field.label}{field.required && <span style={{ color: '#d7263d' }}> *</span>}
-              </label>
-              <DynamicField
-                field={field}
-                value={approverValues[field.id]}
-                onChange={(val) => setApproverValue(field.id, val)}
-                readOnly={!canDecide}
-                employees={employees}
-                signerName={signerName}
-              />
+      {approvals.map(approval => {
+        const roleFields = fieldsForRole(approval.role_key)
+        const roleValues = approverValuesByRole[approval.role_key] || {}
+        const iAmDecider = canDecideRole(approval.role_key)
+        return (
+          <article className="panel" key={approval.role_key} style={{ padding: 24, marginBottom: 20, display: 'grid', gap: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{approval.role_label || approval.role_key}</h3>
+              <StatusBadge status={approval.status} />
             </div>
-          ))}
-        </article>
-      )}
+            <div style={{ fontSize: 13, color: '#7a7a8c' }}>
+              Assigned to <strong style={{ color: '#14141c' }}>{approval.approver_employee_name || approval.approver_employee_id || '—'}</strong>
+              {approval.status !== 'pending' && approval.decided_at && (
+                <> — {approval.status} on {new Date(approval.decided_at).toLocaleString()}</>
+              )}
+            </div>
+            {approval.remarks && (
+              <div style={{ background: '#fafafb', border: '1px solid #ececf0', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#595966' }}>
+                <strong style={{ color: '#14141c' }}>Remarks: </strong>{approval.remarks}
+              </div>
+            )}
+
+            {roleFields.length > 0 && (
+              <div style={{ display: 'grid', gap: 16 }}>
+                {roleFields.map(field => (
+                  <div key={field.id}>
+                    <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, fontSize: 14 }}>
+                      {field.label}{field.required && <span style={{ color: '#d7263d' }}> *</span>}
+                    </label>
+                    <DynamicField
+                      field={field}
+                      value={roleValues[field.id]}
+                      onChange={(val) => setApproverValue(approval.role_key, field.id, val)}
+                      readOnly={!(iAmDecider && approval.status === 'pending')}
+                      employees={employees}
+                      signerName={signerName}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {iAmDecider && approval.status === 'pending' && (
+              <div>
+                <textarea
+                  value={remarksByRole[approval.role_key] || ''}
+                  onChange={e => setRemarksByRole(prev => ({ ...prev, [approval.role_key]: e.target.value }))}
+                  placeholder="Remarks (required if rejecting)"
+                  rows={3}
+                  style={{ width: '100%', padding: '12px 15px', border: '2px solid #e0e0e6', borderRadius: 12, fontSize: 14, boxSizing: 'border-box', marginBottom: 12, resize: 'vertical' }}
+                />
+                <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+                  <button type="button" className="ghost-btn" disabled={decidingRole === approval.role_key} onClick={() => handleDecision(approval.role_key, 'rejected')}>
+                    Reject
+                  </button>
+                  <button type="button" className="primary-btn" disabled={decidingRole === approval.role_key} onClick={() => handleDecision(approval.role_key, 'approved')}>
+                    Approve
+                  </button>
+                </div>
+              </div>
+            )}
+          </article>
+        )
+      })}
 
       <article className="panel" style={{ padding: 24, marginBottom: 20 }}>
         <h3 style={{ margin: '0 0 14px', fontSize: 16, fontWeight: 700 }}>Attachments</h3>
@@ -429,27 +499,6 @@ function FormDetail() {
           </div>
         )}
       </article>
-
-      {canDecide && (
-        <article className="panel" style={{ padding: 24 }}>
-          <h3 style={{ margin: '0 0 14px', fontSize: 16, fontWeight: 700 }}>Your Decision</h3>
-          <textarea
-            value={remarks}
-            onChange={e => setRemarks(e.target.value)}
-            placeholder="Remarks (required if rejecting)"
-            rows={3}
-            style={{ width: '100%', padding: '12px 15px', border: '2px solid #e0e0e6', borderRadius: 12, fontSize: 14, boxSizing: 'border-box', marginBottom: 16, resize: 'vertical' }}
-          />
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-            <button type="button" className="ghost-btn" disabled={deciding} onClick={() => handleDecision('rejected')}>
-              Reject
-            </button>
-            <button type="button" className="primary-btn" disabled={deciding} onClick={() => handleDecision('approved')}>
-              Approve
-            </button>
-          </div>
-        </article>
-      )}
 
     </div>
   )

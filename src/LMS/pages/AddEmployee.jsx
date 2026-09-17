@@ -33,6 +33,7 @@ function AddEmployee() {
     email: '',
     password: '',
     department: '',
+    is_department_hod: false,
     location: '',
     status: 'Active'
   })
@@ -140,10 +141,10 @@ function AddEmployee() {
   }
 
   const handleInputChange = (e) => {
-    const { name, value } = e.target
+    const { name, value, type, checked } = e.target
     setFormData({
       ...formData,
-      [name]: value
+      [name]: type === 'checkbox' ? checked : value
     })
   }
 
@@ -275,8 +276,8 @@ function AddEmployee() {
                 emptyOptionLabel="Select department"
                 style={{ ...formSelectStyle, flex: 1 }}
               />
-              <button 
-                type="button" 
+              <button
+                type="button"
                 className="ghost-btn"
                 onClick={() => {
                   setShowDeptModal(true)
@@ -287,6 +288,15 @@ function AddEmployee() {
                 Manage
               </button>
             </div>
+          </label>
+          <label className="checkbox-label" style={{ alignSelf: 'flex-end', marginBottom: 2 }}>
+            <input
+              type="checkbox"
+              name="is_department_hod"
+              checked={formData.is_department_hod}
+              onChange={handleInputChange}
+            />
+            <span>Is Department HOD (auto-fills as that department's approver on ISO Forms)</span>
           </label>
 
           <label>

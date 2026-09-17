@@ -44,7 +44,14 @@ function FormFiller() {
   const [values, setValues] = useState({})
   const [attachments, setAttachments] = useState([])
   const [employees, setEmployees] = useState([])
-  const [relatedEmployeeId, setRelatedEmployeeId] = useState('')
+  // One entry per approval role: { [role_key]: employee_id }. A template with
+  // no named roles still has exactly one — the legacy 'approver' role — so
+  // this always has at least one key once a template has loaded.
+  const [roleApprovers, setRoleApprovers] = useState({})
+  // Roles already decided (approved/rejected) when editing — their assignee
+  // can't be changed here (the backend leaves a decided role's row alone on
+  // resync, so letting the picker imply otherwise would be misleading).
+  const [decidedRoles, setDecidedRoles] = useState({})
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -80,7 +87,15 @@ function FormFiller() {
         setEntry(json)
         const parsed = typeof json.form_data === 'string' ? JSON.parse(json.form_data || '{}') : (json.form_data || {})
         setValues(parsed && typeof parsed === 'object' ? parsed : {})
-        setRelatedEmployeeId(json.related_employee_id != null ? String(json.related_employee_id) : '')
+        const approvals = Array.isArray(json.approvals) ? json.approvals : []
+        if (approvals.length) {
+          setRoleApprovers(Object.fromEntries(approvals.map(a => [a.role_key, a.approver_employee_id != null ? String(a.approver_employee_id) : ''])))
+          setDecidedRoles(Object.fromEntries(approvals.filter(a => a.status !== 'pending').map(a => [a.role_key, true])))
+        } else if (json.related_employee_id) {
+          // Pre-migration entry with no approvals rows yet (shouldn't happen
+          // once the backfill has run, but keeps this screen from breaking).
+          setRoleApprovers({ approver: String(json.related_employee_id) })
+        }
         const files = typeof json.attachments === 'string' ? JSON.parse(json.attachments || '[]') : (json.attachments || [])
         setStoredAttachments(Array.isArray(files) ? files : [])
       })
@@ -113,6 +128,29 @@ function FormFiller() {
       .finally(() => { if (active) setLoadingTemplate(false) })
     return () => { active = false }
   }, [schemaId])
+
+  // Auto-fill a role's picker from its department's marked HOD, once both the
+  // template (which roles want auto-assign) and the employee list (who's
+  // marked as HOD of what) are in. Never overwrites a value already set —
+  // editing an existing entry already prefilled roleApprovers from its saved
+  // approvals, and a role the requester has already picked by hand should not
+  // be silently swapped out from under them.
+  useEffect(() => {
+    if (!template || !employees.length) return
+    const roles = template.approvalRoles?.length ? template.approvalRoles : []
+    const toFill = roles.filter(r => r.autoDepartment && !roleApprovers[r.key])
+    if (!toFill.length) return
+    setRoleApprovers(prev => {
+      const next = { ...prev }
+      for (const role of toFill) {
+        if (next[role.key]) continue
+        const hod = employees.find(e =>
+          e.department === role.autoDepartment && (e.is_department_hod === 1 || e.is_department_hod === true))
+        if (hod) next[role.key] = String(hod.id)
+      }
+      return next
+    })
+  }, [template, employees, roleApprovers])
 
   // Employees list, for the related-employee (approver) picker
   useEffect(() => {
@@ -152,13 +190,22 @@ function FormFiller() {
     }
     const missing = template.fields.filter(f => f.required && isFieldEmpty(f, values[f.id]))
     if (missing.length) { setError(`Please fill: ${missing.map(f => f.label).join(', ')}`); return }
-    if (!relatedEmployeeId) { setError('Please select the employee this form is related to.'); return }
+    const roles = template.approvalRoles?.length ? template.approvalRoles : [{ key: 'approver', label: 'Approver' }]
+    const missingRole = roles.find(r => !roleApprovers[r.key])
+    if (missingRole) { setError(`Please select who fills the "${missingRole.label || missingRole.key}" role.`); return }
 
     setSubmitting(true)
-    // Names for the entry's "Created By" / "Related To" columns. The backend has
-    // no auth session, so send these explicitly (it denormalizes template_name).
-    const relatedEmployee = employees.find(emp => String(emp.id) === String(relatedEmployeeId))
-    const relatedEmployeeName = relatedEmployee?.full_name || relatedEmployee?.name || ''
+    // One row per role — who it's assigned to, by name (the backend has no
+    // auth session, so names are sent explicitly rather than looked up there).
+    const approvals = roles.map(r => {
+      const emp = employees.find(e => String(e.id) === String(roleApprovers[r.key]))
+      return {
+        role_key: r.key,
+        role_label: r.label || r.key,
+        approver_employee_id: roleApprovers[r.key],
+        approver_employee_name: emp?.full_name || emp?.name || '',
+      }
+    })
     const resolvedEmployeeId = await getCurrentEmployeeId()
 
     // Seal the requester's signature fields: the date is stamped now, and the
@@ -180,8 +227,7 @@ function FormFiller() {
       try {
         const body = new FormData()
         body.append('form_data', JSON.stringify(signedValues))
-        body.append('related_employee_id', relatedEmployeeId)
-        body.append('related_employee_name', relatedEmployeeName)
+        body.append('approvals', JSON.stringify(approvals))
         body.append('keep_attachments', JSON.stringify(storedAttachments.map(a => a.file_path)))
         if (isAdmin) body.append('admin', '1')
         if (resolvedEmployeeId || localStorage.getItem('userEmail')) {
@@ -213,8 +259,7 @@ function FormFiller() {
       formData.append('template_id', template.id)
       formData.append('template_name', template.name || '')
       formData.append('form_data', JSON.stringify(signedValues))
-      formData.append('related_employee_id', relatedEmployeeId)
-      formData.append('related_employee_name', relatedEmployeeName)
+      formData.append('approvals', JSON.stringify(approvals))
       if (createdBy) formData.append('created_by', createdBy)
       if (createdByName) formData.append('created_by_name', createdByName)
       attachments.forEach(file => { if (file) formData.append('attachments', file) })
@@ -231,13 +276,15 @@ function FormFiller() {
           data_url: await fileToDataUrl(f),
         }))
       )
+      const primary = approvals[0] || {}
       addOfflineEntry({
         id: `local-${Date.now()}`,
         template_id: template.id,
         template_name: template.name,
         form_data: JSON.stringify(signedValues),
-        related_employee_id: relatedEmployeeId,
-        related_employee_name: relatedEmployee?.full_name || relatedEmployee?.name || '',
+        related_employee_id: primary.approver_employee_id || '',
+        related_employee_name: primary.approver_employee_name || '',
+        approvals: approvals.map(a => ({ ...a, status: 'pending' })),
         created_by: resolvedEmployeeId || localStorage.getItem('userEmail') || '',
         created_by_name: localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'You (demo)',
         status: 'pending',
@@ -333,25 +380,37 @@ function FormFiller() {
         </article>
 
         <div style={{ display: 'grid', gridTemplateColumns: FIELD_COLUMNS, gap: 20, marginBottom: 20, alignItems: 'start' }}>
-          <article className="panel" style={{ padding: 24 }}>
-            <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, fontSize: 14 }}>
-              Related Employee (Approver)<span style={{ color: '#d7263d' }}> *</span>
-            </label>
-            <SearchableSelect
-              value={relatedEmployeeId}
-              onChange={setRelatedEmployeeId}
-              options={employees.map(emp => ({
-                value: String(emp.id),
-                label: `${emp.full_name || emp.name}${emp.department_name ? ` — ${emp.department_name}` : ''}`,
-              }))}
-              emptyOptionLabel="Select an employee…"
-              placeholder="Type to search…"
-              style={{ width: '100%', padding: '12px 15px', border: '2px solid #e0e0e6', borderRadius: 12, fontSize: 14, cursor: 'text', boxSizing: 'border-box' }}
-            />
-            <p style={{ margin: '8px 0 0', fontSize: 12, color: '#7a7a8c' }}>
-              This person will need to approve or reject the form once submitted.
-            </p>
-          </article>
+          {(template.approvalRoles?.length ? template.approvalRoles : [{ key: 'approver', label: 'Approver' }]).map(role => {
+            const locked = Boolean(decidedRoles[role.key])
+            const assignedEmp = locked ? employees.find(e => String(e.id) === String(roleApprovers[role.key])) : null
+            return (
+              <article className="panel" style={{ padding: 24 }} key={role.key}>
+                <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, fontSize: 14 }}>
+                  {role.label || role.key}{!locked && <span style={{ color: '#d7263d' }}> *</span>}
+                </label>
+                {locked ? (
+                  <p style={{ margin: 0, padding: '12px 15px', background: '#f4f4f7', borderRadius: 12, fontSize: 14, color: '#595966' }}>
+                    {assignedEmp?.full_name || assignedEmp?.name || roleApprovers[role.key]} — already decided, can't be reassigned.
+                  </p>
+                ) : (
+                  <SearchableSelect
+                    value={roleApprovers[role.key] || ''}
+                    onChange={(v) => setRoleApprovers(prev => ({ ...prev, [role.key]: v }))}
+                    options={employees.map(emp => ({
+                      value: String(emp.id),
+                      label: `${emp.full_name || emp.name}${emp.department_name ? ` — ${emp.department_name}` : ''}`,
+                    }))}
+                    emptyOptionLabel="Select an employee…"
+                    placeholder="Type to search…"
+                    style={{ width: '100%', padding: '12px 15px', border: '2px solid #e0e0e6', borderRadius: 12, fontSize: 14, cursor: 'text', boxSizing: 'border-box' }}
+                  />
+                )}
+                <p style={{ margin: '8px 0 0', fontSize: 12, color: '#7a7a8c' }}>
+                  This person will need to approve or reject the form once submitted.
+                </p>
+              </article>
+            )
+          })}
 
           <article className="panel" style={{ padding: 24 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 12 }}>
