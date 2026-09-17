@@ -7,6 +7,7 @@ import FieldPositionEditor from './FieldPositionEditor'
 import { isPlaced } from '../utils/pdfCoords'
 import { FIELD_TYPES, blankField, hasOptions, blankApprovalRole, ownerOptionsFor } from '../utils/fieldTypes'
 import StyledSelect from '../../components/StyledSelect'
+import SearchableSelect from '../../components/SearchableSelect'
 
 // The template PDF is sent as a real file part, not as base64 inside the JSON
 // body: shared hosting (mod_security) caps non-file request data at 128 KB and
@@ -66,10 +67,9 @@ function TemplateBuilder() {
   const [departments, setDepartments] = useState([])
   const [employees, setEmployees] = useState([])
 
-  // For the "auto-assign from department" picker on each role — resolved to
-  // whichever employee is marked as that department's HOD at submit time.
-  // Employees are fetched too so the picker can show WHO that actually is
-  // right now, not just the bare department name.
+  // For each role's Department → Employee picker: pick a department to narrow
+  // the list, then pick the specific person it defaults to. Just a default —
+  // Fill a New Form still shows the picker and lets the requester change it.
   useEffect(() => {
     fetch(API_ENDPOINTS.DEPARTMENTS)
       .then(res => (res.ok ? res.json() : Promise.reject()))
@@ -80,12 +80,6 @@ function TemplateBuilder() {
       .then(json => setEmployees(Array.isArray(json) ? json : []))
       .catch(() => setEmployees([]))
   }, [])
-
-  const hodNameFor = (deptName) => {
-    const hod = employees.find(e =>
-      e.department === deptName && (e.is_department_hod === 1 || e.is_department_hod === true))
-    return hod?.full_name || hod?.name || null
-  }
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -333,25 +327,37 @@ function TemplateBuilder() {
         </p>
         {approvalRoles.map((role) => (
           <div key={role.key} style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10 }}>
-            <input
-              type="text"
-              value={role.label}
-              onChange={e => updateApprovalRole(role.key, { label: e.target.value })}
-              placeholder="Role name, e.g. HOD QA"
-              style={{ flex: 1, padding: '10px 14px', border: '2px solid #e0e0e6', borderRadius: 10, fontSize: 14, boxSizing: 'border-box' }}
-            />
-            <StyledSelect
+            <SearchableSelect
               value={role.autoDepartment || ''}
-              onChange={v => updateApprovalRole(role.key, { autoDepartment: v || undefined })}
-              options={[]}
-              extraOptions={departments.map(d => {
-                const hodName = hodNameFor(d.name)
-                return { value: d.name, label: hodName ? `${d.name} — ${hodName}` : `${d.name} (no HOD marked yet)` }
+              onChange={v => updateApprovalRole(role.key, {
+                autoDepartment: v || undefined,
+                label: v || '',
+                defaultEmployeeId: undefined,
+                defaultEmployeeName: undefined,
               })}
-              emptyOptionLabel="No auto-assign"
+              options={departments.map(d => ({ value: d.name, label: d.name }))}
+              emptyOptionLabel="No department"
               emptyOptionValue=""
-              placeholder="Auto-assign from department…"
-              style={{ minWidth: 200, padding: '10px 14px', border: '2px solid #e0e0e6', borderRadius: 10, fontSize: 14, cursor: 'pointer' }}
+              placeholder="Type to search department…"
+              style={{ flex: 1, minWidth: 180, padding: '10px 14px', border: '2px solid #e0e0e6', borderRadius: 10, fontSize: 14, cursor: 'text', boxSizing: 'border-box' }}
+            />
+            <SearchableSelect
+              value={role.defaultEmployeeId || ''}
+              onChange={v => {
+                const emp = employees.find(e => String(e.id) === String(v))
+                updateApprovalRole(role.key, {
+                  defaultEmployeeId: v || undefined,
+                  defaultEmployeeName: emp ? (emp.full_name || emp.name) : undefined,
+                })
+              }}
+              options={employees
+                .filter(e => e.department === role.autoDepartment)
+                .map(e => ({ value: String(e.id), label: e.full_name || e.name }))}
+              emptyOptionLabel="No default person"
+              emptyOptionValue=""
+              placeholder={role.autoDepartment ? 'Type to search employee…' : 'Pick a department first'}
+              disabled={!role.autoDepartment}
+              style={{ minWidth: 200, padding: '10px 14px', border: '2px solid #e0e0e6', borderRadius: 10, fontSize: 14, cursor: 'text', boxSizing: 'border-box' }}
             />
             <button type="button" onClick={() => removeApprovalRole(role.key)} className="ghost-btn small">Remove</button>
           </div>

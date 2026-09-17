@@ -28,6 +28,17 @@ const StatusBadge = ({ status }) => {
   )
 }
 
+// A multi-role entry has one approver per role (HOD Operations, HOD QA, …),
+// not one — showing only the first left every other role's name invisible in
+// the list. Falls back to the legacy single denormalized field for entries
+// with no approvals row (offline/local-fallback data).
+const relatedToDisplay = (entry) => {
+  const approvals = Array.isArray(entry.approvals) ? entry.approvals : []
+  const names = approvals.map(a => a.approver_employee_name).filter(Boolean)
+  if (names.length) return names.join(', ')
+  return entry.related_employee_name || entry.related_employee_id || '—'
+}
+
 const inputStyle = {
   background: '#fff',
   border: '1px solid #e0e0e6',
@@ -409,7 +420,7 @@ function FormEntriesList() {
                 <tr key={entry.id} style={{ borderTop: '1px solid #ececf0' }}>
                   <td style={{ padding: '16px 20px', fontWeight: 700, color: '#14141c' }}>{entry.template_name || `Template #${entry.template_id}`}</td>
                   <td style={{ padding: '16px 20px', color: '#595966' }}>{entry.created_by_name || entry.created_by || '—'}</td>
-                  <td style={{ padding: '16px 20px', color: '#595966' }}>{entry.related_employee_name || entry.related_employee_id || '—'}</td>
+                  <td style={{ padding: '16px 20px', color: '#595966' }}>{relatedToDisplay(entry)}</td>
                   <td style={{ padding: '16px 20px' }}><StatusBadge status={entry.status} /></td>
                   <td style={{ padding: '16px 20px', color: '#595966' }}>
                     {entry.created_at ? new Date(entry.created_at).toLocaleDateString() : '—'}

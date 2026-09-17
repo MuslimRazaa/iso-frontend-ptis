@@ -723,6 +723,37 @@ function FieldPositionEditor({ pdfBase64, fields, approvalRoles, onSave, onClose
             {selected && selectedCoords && (
               <div style={S.panel}>
                 <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>{selected.label}</div>
+                <label style={S.label}>Type</label>
+                <StyledSelect
+                  value={selected.type}
+                  onChange={(v) => setLocalFields(prev => prev.map(f => (f.id === selected.id ? { ...f, type: v } : f)))}
+                  options={[]}
+                  extraOptions={FIELD_TYPES}
+                  style={{ ...S.input, maxWidth: '100%', boxSizing: 'border-box' }}
+                />
+                {hasOptions(selected.type) && (
+                  <>
+                    <label style={S.label}>Options</label>
+                    <input
+                      type="text"
+                      value={selected.options || ''}
+                      placeholder="Hardware, Software, Network"
+                      onChange={(e) => {
+                        const v = e.target.value
+                        setLocalFields(prev => prev.map(f => (f.id === selected.id ? { ...f, options: v } : f)))
+                      }}
+                      style={S.input}
+                    />
+                  </>
+                )}
+                <label style={S.label}>Filled by</label>
+                <StyledSelect
+                  value={selected.owner}
+                  onChange={(v) => setLocalFields(prev => prev.map(f => (f.id === selected.id ? { ...f, owner: v } : f)))}
+                  options={[]}
+                  extraOptions={ownerOptionsFor(approvalRoles)}
+                  style={{ ...S.input, maxWidth: '100%', boxSizing: 'border-box' }}
+                />
                 <label style={S.label}>Font size</label>
                 <input
                   type="number" min="5" max="24" step="0.5"
