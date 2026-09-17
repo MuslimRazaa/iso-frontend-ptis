@@ -469,104 +469,6 @@ function ModalSection({ Icon, title, hint }) {
   )
 }
 
-/* Dummy inspector list — replace with real employees from API later */
-const DUMMY_INSPECTORS = [
-  'Bashir Ahmed',
-  'Abdul Wahid',
-  'Muhammad Akram',
-  'Ishtiaq Ahmed Khan',
-  'Abdul Salam',
-  'Zahid Hussain',
-  'Rizwan Bashir Arain',
-  'Hussain Sharif',
-  'Naeem Ashraf',
-  'Raja Abdul Qadir',
-  'Sajid Rafiq',
-  'Muhammad Arsalan Malik',
-  'Asif Malik',
-  'Shoaib Sylvester',
-  'Nand Lal',
-  'Absar Paracha',
-  'Mohammad Owais',
-  'Shaun D’Souza (MWD)',
-  'Jamshad Abro',
-  'Fahad Ahmed Khan',
-  'Muhammad Hannan Shahid',
-  'Sanwal Khan',
-  'Waheed Imran',
-  'Mehdi Mohsin Raza',
-  'Syed Hammad Ahmed Zaidi',
-  'Maqsood Masih',
-  'Amir Maqsood',
-  'Ali Haider Khan Durrani',
-  'Ali Raza Kalimullah',
-  'Rashid Masih',
-  'Noman Bhatti',
-  'Boota Masih',
-  'Abdul Qadeer',
-  'Sarim Ali',
-  'Muhammad Haseeb',
-  'Hasan Zia',
-  'Muhammad Zeeshan',
-  'Nazir Ahmed',
-  'Amir Hussain',
-  'Muhammad Fayyaz',
-  'Zain Ali',
-  'Ali Jah',
-  'Javid Hussain',
-  'Syed Wasif Madni',
-  'Muhammad Adnan',
-  'Muhammad Moiz Khan',
-  'Mudassir Ahmad',
-  'Rashid Hussain',
-  'Allah Warayo',
-  'Taha Rajab',
-  'Rajab Ali',
-  'Mirza Ali Raza',
-  'Muhammad Awais Jamil',
-  'Syed Nouman Jilani',
-  'Bilal Ali',
-  'Haider Ali',
-  'Hussain Ali',
-  'Junaid',
-  'Sam Iqbal',
-  'Usman Waheed',
-  'Israr Hussain',
-  'Khair Muhammad',
-  'Munwar Hussain',
-  'Zeeshan Ahmed',
-  'Zeeshan Anees',
-  'Abdul Waris',
-  'Umar Younas',
-  'Abdul Jabbar',
-  'Malik Javed Maqsood',
-  'Yasir Muhammad Ali',
-  'Qamar Masih',
-  'Farooq Shahzad',
-  'Omair Asif',
-  'Nigan Ali',
-  'Sardar Hussain',
-  'Mudassir Hussain',
-  'Zahid Aslam Khan',
-  'Hasnain Haider Naeem',
-  'Muhammad Adil',
-  'Muhammad Hammas Butt',
-  'Abdul Rafay',
-  'Ahsan Haroon Abbasi',
-  'Syed Fahad Ibrahim',
-  'Ali Raza',
-  'Ali Raza',
-  'Muhammad Tayyab',
-  'Muhammad Azeem',
-  'Muhammad Haris',
-  'Tahir Amin',
-  'Atta Ul Mustafa',
-  'Shah Fahad',
-  'Muhammad Husnain',
-  'Waqar Babar',
-  'Jibran Hussain'
-];
-
 /* Searchable multi-select (select2-style) — value is a comma-separated string */
 function MultiSelect({ value, onChange, options, placeholder = 'Select…', disabled, onAdd }) {
   const [open, setOpen] = useState(false)
@@ -1006,22 +908,39 @@ function JobLogDescription() {
   const addInspector = (name) => addToList('inspectors', name, fetchInspectors,  'inspector')
   const addTeam      = (name) => addToList('teams',      name, fetchTeams,       'team member')
 
-  // Inspector Name options = base roster + admin-added inspectors.
+  // Full ERP employee roster — merged straight into the Inspector Name /
+  // Team Member dropdowns below, so every real employee is pickable with no
+  // separate "add" or "link" step. The ERP's Attendance module then
+  // recognizes a job's Inspector/Team names automatically by matching them
+  // exactly against employees.full_name — no manual linking required.
+  const [jlrEmployees, setJlrEmployees] = useState([]) // [{ id, empCode, name }]
+  const fetchJlrEmployees = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_ENDPOINTS.JOB_LOG}/employees`)
+      const json = await res.json()
+      setJlrEmployees(Array.isArray(json.data) ? json.data : [])
+    } catch { /* keep previous list on failure */ }
+  }, [])
+  useEffect(() => { fetchJlrEmployees() }, [fetchJlrEmployees])
+
+  // Inspector Name options = every ERP employee + anyone separately added
+  // via "+ Add" (labour/helpers with no ERP record — never affects
+  // attendance since their name won't match any employee's full_name).
   const inspectorOptions = useMemo(
-    () => Array.from(new Set([...DUMMY_INSPECTORS, ...jlInspectors.map(i => i.name)]))
+    () => Array.from(new Set([...jlrEmployees.map(e => e.name), ...jlInspectors.map(i => i.name)]))
       .sort((a, b) => a.localeCompare(b)),
-    [jlInspectors]
+    [jlrEmployees, jlInspectors]
   )
 
-  // Inspector Team options = the previous inspector roster (DUMMY + added
-  // inspectors) PLUS the team-member roster (seeded + admin-added).
+  // Team Member options = the same, plus the team-member roster (seeded +
+  // admin-added labour/helpers).
   const teamOptions = useMemo(
     () => Array.from(new Set([
-      ...DUMMY_INSPECTORS,
+      ...jlrEmployees.map(e => e.name),
       ...jlInspectors.map(i => i.name),
       ...jlTeams.map(t => t.name),
     ])).sort((a, b) => a.localeCompare(b)),
-    [jlInspectors, jlTeams]
+    [jlrEmployees, jlInspectors, jlTeams]
   )
 
   const appendInspector = (field, name) => {
