@@ -1,7 +1,11 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Search, Calendar, X } from 'lucide-react'
+import { Search, Calendar, X, Download } from 'lucide-react'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
+import * as XLSX from 'xlsx'
 import { API_ENDPOINTS } from '../config/api'
+import { showToast } from './Toast'
 import PaginationBar from './PaginationBar'
 import StyledSelect from './StyledSelect'
 import SearchableSelect from './SearchableSelect'
@@ -114,17 +118,131 @@ function AuditLogView({ module, title, subtitle, actions, backTo, padded = true,
   const hasActiveFilters = Boolean(action || actorName || dateFrom || dateTo || search)
   const clearFilters = () => { setAction(''); setActorName(''); setDateFrom(''); setDateTo(''); setSearch(''); setPage(1) }
 
+  const [exporting, setExporting] = useState('')
+
+  // Export downloads every row matching the current filters, not just the
+  // page on screen — a report is only useful if it's complete. The list
+  // endpoint caps a single request at 200 rows, so this pages through it.
+  const fetchAllFilteredRows = async () => {
+    const exportLimit = 200
+    const params = new URLSearchParams({ module, limit: String(exportLimit) })
+    if (action) params.set('action', action)
+    if (actorName) params.set('actorName', actorName)
+    if (dateFrom) params.set('dateFrom', dateFrom)
+    if (dateTo) params.set('dateTo', dateTo)
+    if (search.trim()) params.set('search', search.trim())
+
+    let all = []
+    let fetchPage = 1
+    while (true) {
+      params.set('page', String(fetchPage))
+      const res = await fetch(`${API_ENDPOINTS.AUDIT_LOG}?${params.toString()}`)
+      if (!res.ok) throw new Error('Failed to load')
+      const json = await res.json()
+      const pageRows = Array.isArray(json.rows) ? json.rows : []
+      all = all.concat(pageRows)
+      if (pageRows.length < exportLimit || all.length >= (json.total || 0)) break
+      fetchPage += 1
+    }
+    return all
+  }
+
+  const exportRowsToTable = (allRows) => allRows.map(row => [
+    row.created_at ? new Date(row.created_at).toLocaleString() : '—',
+    row.action || '',
+    row.entity_label || `${ENTITY_LABEL[row.entity_type] || row.entity_type} #${row.entity_id}`,
+    row.actor_name || row.actor_id || '—',
+    summariseDetails(row),
+  ])
+
+  const handleExportPdf = async () => {
+    setExporting('pdf')
+    try {
+      const allRows = await fetchAllFilteredRows()
+      const doc = new jsPDF({ orientation: 'landscape' })
+      doc.setFontSize(14)
+      doc.text(title || 'Audit Log', 14, 16)
+      autoTable(doc, {
+        startY: 22,
+        head: [['When', 'Action', 'What', 'Who', 'Details']],
+        body: exportRowsToTable(allRows),
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [20, 20, 28] },
+      })
+      doc.save(`${module}-audit-log.pdf`)
+      showToast(`Exported ${allRows.length} record${allRows.length === 1 ? '' : 's'} to PDF.`, 'success')
+    } catch {
+      showToast('Could not export the audit log.', 'error')
+    } finally {
+      setExporting('')
+    }
+  }
+
+  const handleExportExcel = async () => {
+    setExporting('excel')
+    try {
+      const allRows = await fetchAllFilteredRows()
+      const sheetRows = allRows.map(row => ({
+        When: row.created_at ? new Date(row.created_at).toLocaleString() : '—',
+        Action: row.action || '',
+        What: row.entity_label || `${ENTITY_LABEL[row.entity_type] || row.entity_type} #${row.entity_id}`,
+        Who: row.actor_name || row.actor_id || '—',
+        Details: summariseDetails(row),
+      }))
+      const worksheet = XLSX.utils.json_to_sheet(sheetRows)
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Audit Log')
+      XLSX.writeFile(workbook, `${module}-audit-log.xlsx`)
+      showToast(`Exported ${allRows.length} record${allRows.length === 1 ? '' : 's'} to Excel.`, 'success')
+    } catch {
+      showToast('Could not export the audit log.', 'error')
+    } finally {
+      setExporting('')
+    }
+  }
+
+  const exportButtons = (
+    <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
+      <button
+        type="button"
+        className="ghost-btn"
+        onClick={handleExportPdf}
+        disabled={Boolean(exporting)}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, opacity: exporting ? 0.6 : 1 }}
+      >
+        <Download size={14} /> {exporting === 'pdf' ? 'Exporting…' : 'Export PDF'}
+      </button>
+      <button
+        type="button"
+        className="ghost-btn"
+        onClick={handleExportExcel}
+        disabled={Boolean(exporting)}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, opacity: exporting ? 0.6 : 1 }}
+      >
+        <Download size={14} /> {exporting === 'excel' ? 'Exporting…' : 'Export Excel'}
+      </button>
+    </div>
+  )
+
   return (
     <div style={padded ? { padding: 'clamp(24px, 4vw, 48px)' } : undefined}>
       {backTo && (
         <Link to={backTo} style={{ fontSize: 13, color: '#7a7a8c', textDecoration: 'none' }}>← Back</Link>
       )}
-      {showHeader && (
+      {showHeader ? (
         <>
-          <p className="eyebrow" style={{ margin: '12px 0 0' }}>Admin</p>
-          <h1 style={{ margin: '4px 0 8px', fontSize: 26, fontWeight: 800, color: '#14141c' }}>{title}</h1>
-          {subtitle && <p style={{ margin: '0 0 24px', color: '#7a7a8c' }}>{subtitle}</p>}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+            <div>
+              <p className="eyebrow" style={{ margin: '12px 0 0' }}>Admin</p>
+              <h1 style={{ margin: '4px 0 8px', fontSize: 26, fontWeight: 800, color: '#14141c' }}>{title}</h1>
+              {subtitle && <p style={{ margin: 0, color: '#7a7a8c' }}>{subtitle}</p>}
+            </div>
+            <div style={{ marginTop: 12 }}>{exportButtons}</div>
+          </div>
+          <div style={{ marginBottom: 24 }} />
         </>
+      ) : (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>{exportButtons}</div>
       )}
 
       <div className="panel" style={{ padding: 20, marginBottom: 20, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>

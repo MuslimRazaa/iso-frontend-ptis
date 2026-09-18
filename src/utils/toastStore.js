@@ -1,3 +1,6 @@
+// Site-wide toast queue — one store, subscribed to by the single <ToastHost />
+// mounted in App.jsx, so any module can raise a toast without mounting its
+// own host or passing one down through props.
 const listeners = new Set();
 let toasts = [];
 
@@ -26,5 +29,5 @@ export {
   addToast,
   removeToast,
   subscribeToasts,
-  getToastsSnapshot
+  getToastsSnapshot,
 };

@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { FileText } from 'lucide-react'
 import SearchableSelect from '../../components/SearchableSelect'
+import { showToast } from '../../components/Toast'
 
 const formSelectStyle = {
   border: '1px solid #dcdce3', borderRadius: 14, padding: '12px 14px',
@@ -95,7 +96,7 @@ function Certificates() {
 
     setCertificates((prev) => [newCertificate, ...prev])
     setPassedTests((prev) => prev.map((t) => (t.id === testId ? { ...t, hasCertificate: true } : t)))
-    alert('Certificate generated successfully!')
+    showToast('Certificate generated successfully!', 'success')
   }
 
   const handleViewCertificate = (url) => {
@@ -103,7 +104,7 @@ function Certificates() {
   }
 
   const handleDownloadCertificate = (url, name) => {
-    alert(`Downloading certificate for ${name}`)
+    showToast(`Downloading certificate for ${name}`, 'info')
   }
 
   const handleUploadChange = (field, value) => {

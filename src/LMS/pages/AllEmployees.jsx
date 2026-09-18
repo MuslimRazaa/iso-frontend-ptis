@@ -5,6 +5,7 @@ import axios from 'axios'
 import { API_ENDPOINTS } from '../../config/api'
 import useLmsBase from '../useLmsBase'
 import StyledSelect from '../../components/StyledSelect'
+import { showToast } from '../../components/Toast'
 
 const formSelectStyle = {
   border: '1px solid #dcdce3', borderRadius: 14, padding: '12px 14px',
@@ -63,7 +64,7 @@ function AllEmployees() {
       setEmployees(response.data)
     } catch (error) {
       console.error('Error fetching employees:', error)
-      alert('Failed to fetch employees from server')
+      showToast('Failed to fetch employees from server', 'error')
     } finally {
       setLoading(false)
     }
@@ -95,9 +96,10 @@ function AllEmployees() {
       try {
         await axios.delete(`${API_ENDPOINTS.EMPLOYEES}/${id}`)
         setEmployees(employees.filter((emp) => emp.id !== id))
+        showToast('Employee deleted successfully!', 'success')
       } catch (error) {
         console.error('Error deleting employee:', error)
-        alert('Failed to delete employee')
+        showToast('Failed to delete employee', 'error')
       }
     }
   }
@@ -115,13 +117,14 @@ function AllEmployees() {
       }
       
       await axios.put(`${API_ENDPOINTS.EMPLOYEES}/${editingId}`, updateData)
-      
+
       // Refresh the list
       await fetchEmployees()
       closeModal()
+      showToast('Employee updated successfully!', 'success')
     } catch (error) {
       console.error('Error updating employee:', error)
-      alert('Failed to update employee')
+      showToast('Failed to update employee', 'error')
     }
   }
 

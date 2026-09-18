@@ -5,6 +5,7 @@ import { API_ENDPOINTS } from '../../config/api'
 import useLmsBase from '../useLmsBase'
 import StyledSelect from '../../components/StyledSelect'
 import SearchableSelect from '../../components/SearchableSelect'
+import { showToast } from '../../components/Toast'
 
 const formSelectStyle = {
   border: '1px solid #dcdce3', borderRadius: 14, padding: '12px 14px',
@@ -17,7 +18,6 @@ function AddCourse() {
   const lmsBase = useLmsBase()
   const [videos, setVideos] = useState([])
   const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState({ type: '', text: '' })
   const [standards, setStandards] = useState([])
   const [categories, setCategories] = useState([])
 
@@ -113,7 +113,6 @@ function AddCourse() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
-    setMessage({ type: '', text: '' })
 
     try {
       // Standard(s) validation depends on the selected mode.
@@ -124,17 +123,17 @@ function AddCourse() {
       // Validate required fields
       if (!formData.course_title || !formData.course_thumbnail || !formData.credit_hours ||
           !formData.course_category || !formData.course_description) {
-        setMessage({ type: 'error', text: 'Please fill all required fields' })
+        showToast('Please fill all required fields', 'error')
         setLoading(false)
         return
       }
       if (standardMode === 'single' && standardIds.length === 0) {
-        setMessage({ type: 'error', text: 'Please select a standard' })
+        showToast('Please select a standard', 'error')
         setLoading(false)
         return
       }
       if (standardMode === 'multiple' && standardIds.length < 2) {
-        setMessage({ type: 'error', text: 'Select at least 2 standards for a multi-standard course' })
+        showToast('Select at least 2 standards for a multi-standard course', 'error')
         setLoading(false)
         return
       }
@@ -175,8 +174,8 @@ function AddCourse() {
         }
       })
 
-      setMessage({ type: 'success', text: 'Course added successfully! Redirecting...' })
-      
+      showToast('Course added successfully!', 'success')
+
       // Redirect to All Courses page after 1.5 seconds
       setTimeout(() => {
         navigate(`${lmsBase}/all-courses`)
@@ -184,10 +183,8 @@ function AddCourse() {
 
     } catch (error) {
       console.error('Error adding course:', error)
-      setMessage({ 
-        type: 'error', 
-        text: error.response?.data?.error || 'Failed to add course. Please try again.' 
-      })
+      const msg = error.response?.data?.error || 'Failed to add course. Please try again.'
+      showToast(msg, 'error')
     } finally {
       setLoading(false)
     }
@@ -202,19 +199,6 @@ function AddCourse() {
           <p className="panel-subtitle">Publish a new course with standards, prerequisites and learning material in one form.</p>
         </div>
       </header>
-
-      {message.text && (
-        <div className={`message ${message.type}`} style={{
-          padding: '1rem',
-          marginBottom: '1rem',
-          borderRadius: '8px',
-          backgroundColor: message.type === 'success' ? '#d4edda' : '#f8d7da',
-          color: message.type === 'success' ? '#155724' : '#721c24',
-          border: `1px solid ${message.type === 'success' ? '#c3e6cb' : '#f5c6cb'}`
-        }}>
-          {message.text}
-        </div>
-      )}
 
       <form className="lms-form-grid" onSubmit={handleSubmit}>
         <label>

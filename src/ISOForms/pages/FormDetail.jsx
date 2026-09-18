@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useLocation, useNavigate } from 'react-router-dom'
 import API_BASE_URL, { API_ENDPOINTS } from '../../config/api'
+import { showToast } from '../../components/Toast'
 import { getCurrentEmployeeId } from '../utils/currentEmployee'
 import DynamicField from '../components/DynamicField'
 import { isFieldEmpty } from '../utils/fieldHelpers'
@@ -209,18 +210,24 @@ function FormDetail() {
     try {
       const originalPdf = template?.originalPdf
       if (!originalPdf) {
-        setError('This template has no PDF attached, so the form cannot be generated. Ask an admin to edit the template and import its PDF.')
+        const msg = 'This template has no PDF attached, so the form cannot be generated. Ask an admin to edit the template and import its PDF.'
+        showToast(msg, 'error')
         return
       }
       const { skipped } = await downloadFilledPdf(
         originalPdf, template.fields || [], formValues, flatApproverValues, employees, filename,
       )
       if (skipped.length) {
-        setError(`Downloaded, but ${skipped.length} filled field(s) have no position on the PDF yet and were left off: ${skipped.slice(0, 5).join(', ')}${skipped.length > 5 ? '…' : ''}. An admin can place them under Edit Template → Field Positions.`)
+        const msg = `Downloaded, but ${skipped.length} filled field(s) have no position on the PDF yet and were left off: ${skipped.slice(0, 5).join(', ')}${skipped.length > 5 ? '…' : ''}. An admin can place them under Edit Template → Field Positions.`
+        setError(msg)
+        showToast(`Downloaded, but ${skipped.length} field(s) were left off — see the note below.`, 'error')
+      } else {
+        showToast('PDF downloaded.', 'success')
       }
     } catch (err) {
       console.error('Download PDF failed:', err)
-      setError('Could not generate the PDF from the attached template. The stored PDF may be corrupt — re-import it on the template and try again.')
+      const msg = 'Could not generate the PDF from the attached template. The stored PDF may be corrupt — re-import it on the template and try again.'
+      showToast(msg, 'error')
     } finally {
       setDownloading(false)
     }
@@ -262,6 +269,7 @@ function FormDetail() {
         }),
       })
       if (!res.ok) throw new Error('decision failed')
+      showToast(`Form ${status} successfully!`, 'success')
     } catch {
       // No backend yet — record the decision in the local demo store instead.
       updateOfflineEntry(id, {
@@ -270,6 +278,7 @@ function FormDetail() {
         approver_data: JSON.stringify(signedValues),
         decided_at: new Date().toISOString(),
       })
+      showToast('Could not reach the server — decision saved in this browser only.', 'error')
     } finally {
       setDecidingRole(null)
     }
@@ -290,11 +299,15 @@ function FormDetail() {
       const res = await fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}/${id}?${params.toString()}`, { method: 'DELETE' })
       if (!res.ok) {
         const failed = await res.json().catch(() => ({}))
-        setError(failed.error || `Could not delete this form (HTTP ${res.status}).`)
+        const msg = failed.error || `Could not delete this form (HTTP ${res.status}).`
+        setError(msg)
+        showToast(msg, 'error')
         return
       }
+      showToast('Form deleted successfully!', 'success')
     } catch {
       deleteOfflineEntry(id)
+      showToast('Could not reach the server — form deleted in this browser only.', 'error')
     }
     navigate(`${base}/entries`)
   }

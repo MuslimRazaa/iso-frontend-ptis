@@ -1,4 +1,5 @@
 import React from "react";
+import { showToast } from "../../components/Toast";
 
 const industryOptions = [
   "Oil & Gas",
@@ -40,7 +41,7 @@ function AddClient() {
         className="lms-form-grid"
         onSubmit={(e) => {
           e.preventDefault();
-          alert("Client added successfully (demo only).");
+          showToast("Client added successfully (demo only).", "success");
         }}
       >
         <div className="form-row">

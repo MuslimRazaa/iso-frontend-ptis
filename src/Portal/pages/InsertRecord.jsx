@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { showToast } from '../../components/Toast'
 
 function InsertRecord() {
   const [selectedFile, setSelectedFile] = useState(null)
@@ -13,7 +14,7 @@ function InsertRecord() {
   const handleBulkUpload = (e) => {
     e.preventDefault()
     if (selectedFile) {
-      alert(`Uploading file: ${selectedFile.name} (demo only)`)
+      showToast(`Uploading file: ${selectedFile.name} (demo only)`, 'info')
     }
   }
 
@@ -56,14 +57,14 @@ function InsertRecord() {
                 <button 
                   type="button" 
                   className="btn btn-ghost"
-                  onClick={() => alert('Downloading Excel template (demo only)')}
+                  onClick={() => showToast('Downloading Excel template (demo only)', 'info')}
                 >
                   📊 Excel Template
                 </button>
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   className="btn btn-ghost"
-                  onClick={() => alert('Downloading CSV template (demo only)')}
+                  onClick={() => showToast('Downloading CSV template (demo only)', 'info')}
                 >
                   📄 CSV Template
                 </button>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { showToast } from '../../components/Toast';
 
 const UserCertificates = () => {
   const [certificates, setCertificates] = useState([]);
@@ -42,12 +43,12 @@ const UserCertificates = () => {
   };
 
   const handleDownload = (cert) => {
-    alert(`Downloading certificate: ${cert.certificateNumber}`);
+    showToast(`Downloading certificate: ${cert.certificateNumber}`, 'info');
     // Implement actual download logic
   };
 
   const handleView = (cert) => {
-    alert(`Viewing certificate: ${cert.certificateNumber}`);
+    showToast(`Viewing certificate: ${cert.certificateNumber}`, 'info');
     // Implement view in modal or new tab
   };
 

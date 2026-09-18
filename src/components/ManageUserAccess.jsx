@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { API_ENDPOINTS } from '../config/api';
+import { showToast } from './Toast';
 
 const ManageUserAccess = () => {
   const [employees, setEmployees] = useState([]);
@@ -91,16 +92,16 @@ const ManageUserAccess = () => {
       });
       
       if (response.ok) {
-        alert(`Permissions updated for ${selectedEmployee.full_name}`);
+        showToast(`Permissions updated for ${selectedEmployee.full_name}`, 'success');
         fetchEmployees(); // Refresh the list
         setShowModal(false);
         setSelectedEmployee(null);
       } else {
-        alert('Failed to update permissions');
+        showToast('Failed to update permissions', 'error');
       }
     } catch (error) {
       console.error('Error saving permissions:', error);
-      alert('Error updating permissions');
+      showToast('Error updating permissions', 'error');
     }
   };
 

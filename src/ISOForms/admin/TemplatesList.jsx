@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Eye, Plus, Pencil, Trash2, X } from 'lucide-react'
 import { API_ENDPOINTS } from '../../config/api'
+import { showToast } from '../../components/Toast'
 import { SEED_TEMPLATES, SEED_VERSION } from '../seedTemplates'
 import { ensureSeeded, getOfflineTemplates, deleteOfflineTemplate } from '../utils/offlineStore'
 import PaginationBar from '../../components/PaginationBar'
@@ -137,9 +138,11 @@ function TemplatesList() {
       const res = await fetch(`${API_ENDPOINTS.ISO_FORMS_TEMPLATES}/${id}?${params.toString()}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('delete failed')
       load()
+      showToast('Template deleted successfully!', 'success')
     } catch {
       deleteOfflineTemplate(id)
       load()
+      showToast('Could not reach the server — template deleted in this browser only.', 'error')
     }
   }
 

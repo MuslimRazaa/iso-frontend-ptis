@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import "../assets/style.css";
 import ptisLogo from "/ptisLogo.png";
 import { API_ENDPOINTS } from "../config/api";
+import { showToast } from "../components/Toast";
 
 function Login() {
   const [loginType, setLoginType] = useState("user");
@@ -40,12 +41,14 @@ function Login() {
         localStorage.setItem('userType', 'admin');
         localStorage.setItem('adminPassword', formData.password);
         setIsLoading(false);
+        showToast("Welcome back!", "success");
         navigate("/dashboard");
         return;
       }
       setShowError(true);
       setErrorMessage("Invalid admin password");
       setIsLoading(false);
+      showToast("Invalid admin password", "error");
       return;
     }
 
@@ -93,18 +96,21 @@ function Login() {
         }
 
         setIsLoading(false);
+        showToast(`Welcome back, ${employee.full_name}!`, "success");
         navigate("/user/dashboard");
       } else {
         const errorData = await response.json();
         setShowError(true);
         setErrorMessage(errorData.error || "Invalid credentials");
         setIsLoading(false);
+        showToast(errorData.error || "Invalid credentials", "error");
       }
     } catch (error) {
       console.error('Login error:', error);
       setShowError(true);
       setErrorMessage("Network error. Please try again.");
       setIsLoading(false);
+      showToast("Network error. Please try again.", "error");
     }
   };
 

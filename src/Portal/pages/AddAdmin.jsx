@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { showToast } from '../../components/Toast'
 
 const departmentOptions = [
   'Operations',
@@ -41,7 +42,7 @@ function AddAdmin() {
         className="lms-form-grid"
         onSubmit={(e) => {
           e.preventDefault()
-          alert('Admin account created successfully (demo only).')
+          showToast('Admin account created successfully (demo only).', 'success')
         }}
       >
         <div className="form-row">

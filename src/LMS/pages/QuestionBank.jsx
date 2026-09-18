@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Upload, Loader2 } from 'lucide-react'
 import { API_ENDPOINTS } from '../../config/api'
 import SearchableSelect from '../../components/SearchableSelect'
+import { showToast } from '../../components/Toast'
 
 const formSelectStyle = {
   border: '1px solid #dcdce3', borderRadius: 14, padding: '12px 14px',
@@ -231,7 +232,7 @@ function QuestionBank({ defaultTab = 'add' }) {
 
       if (!response.ok) {
         const error = await response.json()
-        alert(error.error || 'Failed to delete question')
+        showToast(error.error || 'Failed to delete question', 'error')
         return
       }
 
@@ -247,7 +248,7 @@ function QuestionBank({ defaultTab = 'add' }) {
 
     } catch (error) {
       console.error('Error deleting question:', error)
-      alert('Network error. Please try again.')
+      showToast('Network error. Please try again.', 'error')
     }
   }
 
@@ -262,7 +263,7 @@ function QuestionBank({ defaultTab = 'add' }) {
     ]
     
     if (!validTypes.includes(file.type)) {
-      alert('Please upload a valid Excel file (.xls or .xlsx)')
+      showToast('Please upload a valid Excel file (.xls or .xlsx)', 'error')
       event.target.value = ''
       return
     }
@@ -287,14 +288,13 @@ function QuestionBank({ defaultTab = 'add' }) {
         return
       }
 
-      // Show detailed import results
-      const message = `Import Complete!\n\nTotal Rows: ${result.total_rows}\nSuccessful: ${result.successful}\nFailed: ${result.failed}\n\n${
-        result.validation_errors?.length > 0 
-          ? `Validation Errors:\n${result.validation_errors.slice(0, 5).map(e => `Row ${e.row}: ${e.error}`).join('\n')}`
-          : ''
-      }`
-
-      alert(message)
+      // Show detailed import results — the toast holds a short summary, and
+      // the fuller breakdown (setFeedback below) stays on the page for the
+      // validation errors, which are too long for a toast to hold.
+      showToast(
+        `Import complete: ${result.successful} of ${result.total_rows} imported${result.failed ? `, ${result.failed} failed` : ''}.`,
+        result.failed ? 'error' : 'success'
+      )
 
       // Refresh questions list
       await fetchAllData()

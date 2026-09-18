@@ -6,6 +6,7 @@ import PaginationBar from '../../components/PaginationBar'
 import SearchableSelect from '../../components/SearchableSelect'
 import StyledSelect from '../../components/StyledSelect'
 import StyledDatePicker from '../../components/StyledDatePicker'
+import { showToast } from '../../components/Toast'
 
 const formSelectStyle = {
   border: '1px solid #dcdce3', borderRadius: 14, padding: '12px 14px',
@@ -84,7 +85,7 @@ function TaskAllocation() {
       setResultsByEmail(resMap)
     } catch (error) {
       console.error('Error fetching data:', error)
-      alert('Failed to load data. Please try again.')
+      showToast('Failed to load data. Please try again.', 'error')
     } finally {
       setLoading(false)
     }
@@ -154,17 +155,17 @@ function TaskAllocation() {
         const data = await response.json()
 
         if (!response.ok) {
-          alert(data.error || 'Failed to assign course')
+          showToast(data.error || 'Failed to assign course', 'error')
           return
         }
 
         await fetchAllData()
         setFormData({ employee_id: '', course_id: '', deadline: '' })
         setShowModal(false)
-        alert('Course assigned successfully!')
+        showToast('Course assigned successfully!', 'success')
       } catch (error) {
         console.error('Error assigning course:', error)
-        alert('Failed to assign course. Please try again.')
+        showToast('Failed to assign course. Please try again.', 'error')
       }
     }
   }
@@ -178,7 +179,7 @@ function TaskAllocation() {
     )
 
     if (!emp || !course) {
-      alert('Could not find matching employee or course. Please assign manually.')
+      showToast('Could not find matching employee or course. Please assign manually.', 'error')
       setShowModal(true)
       return
     }
@@ -209,14 +210,14 @@ function TaskAllocation() {
         }
         await fetchAllData()
         await fetchCourseRequests()
-        alert(`Course "${request.course_title}" assigned to ${request.employee_name}!`)
+        showToast(`Course "${request.course_title}" assigned to ${request.employee_name}!`, 'success')
       } else {
         const data = await response.json()
-        alert(data.error || 'Failed to approve request')
+        showToast(data.error || 'Failed to approve request', 'error')
       }
     } catch (error) {
       console.error('Error approving request:', error)
-      alert('Failed to approve. Please assign manually.')
+      showToast('Failed to approve. Please assign manually.', 'error')
     }
   }
 
@@ -252,15 +253,15 @@ function TaskAllocation() {
 
         if (!response.ok) {
           const data = await response.json()
-          alert(data.error || 'Failed to delete task')
+          showToast(data.error || 'Failed to delete task', 'error')
           return
         }
 
         setTasks(tasks.filter((task) => task.id !== id))
-        alert('Task removed successfully!')
+        showToast('Task removed successfully!', 'success')
       } catch (error) {
         console.error('Error deleting task:', error)
-        alert('Failed to delete task. Please try again.')
+        showToast('Failed to delete task. Please try again.', 'error')
       }
     }
   }

@@ -8,6 +8,7 @@ import PaginationBar from '../../components/PaginationBar'
 import StyledSelect from '../../components/StyledSelect'
 import SearchableSelect from '../../components/SearchableSelect'
 import StyledDatePicker from '../../components/StyledDatePicker'
+import { showToast } from '../../components/Toast'
 
 const PAGE_SIZE = 100
 
@@ -217,11 +218,13 @@ function FormEntriesList() {
       const res = await fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}/${entry.id}?${params.toString()}`, { method: 'DELETE' })
       if (!res.ok) {
         const failed = await res.json().catch(() => ({}))
-        alert(failed.error || `Could not delete this form (HTTP ${res.status}).`)
+        showToast(failed.error || `Could not delete this form (HTTP ${res.status}).`, 'error')
         return
       }
+      showToast('Form deleted successfully!', 'success')
     } catch {
       deleteOfflineEntry(entry.id)
+      showToast('Could not reach the server — form deleted in this browser only.', 'error')
     }
     setEntries(prev => prev.filter(e => String(e.id) !== String(entry.id)))
   }
