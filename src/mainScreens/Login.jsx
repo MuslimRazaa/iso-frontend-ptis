@@ -1,15 +1,20 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Eye, EyeOff, Phone, X, HelpCircle } from "lucide-react";
 import "../assets/style.css";
 import ptisLogo from "/ptisLogo.png";
 import { API_ENDPOINTS } from "../config/api";
 import { showToast } from "../components/Toast";
+
+const SUPPORT_NUMBERS = ["+92 329 2201880", "+92 307 2912241"];
 
 function Login() {
   const [loginType, setLoginType] = useState("user");
   const [showError, setShowError] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false);
   const [formData, setFormData] = useState({
     identifier: "", // Can be email or employee ID
     password: "",
@@ -219,15 +224,68 @@ function Login() {
 
             <div className="form-group">
               <label className="form-label">Password</label>
-              <input
-                type="password"
-                name="password"
-                className="form-input"
-                placeholder="Enter your password"
-                value={formData.password}
-                onChange={handleChange}
-                required
-              />
+              <div style={{ position: "relative" }}>
+                <style>{`
+                  @keyframes fadeSwap {
+                    0% { opacity: 0; }
+                    100% { opacity: 1; }
+                  }
+                  .password-toggle-btn {
+                    transition: color 0.2s ease, transform 0.2s ease, background 0.2s ease;
+                  }
+                  .password-toggle-btn:hover {
+                    color: #ffffff;
+                    background: rgba(255, 255, 255, 0.1);
+                    transform: translateY(-50%) scale(1.12);
+                  }
+                  .password-toggle-btn:active {
+                    transform: translateY(-50%) scale(0.92);
+                  }
+                  .password-toggle-icon {
+                    display: flex;
+                    animation: fadeSwap 0.25s ease;
+                  }
+                  .password-text-fade {
+                    animation: fadeSwap 0.25s ease;
+                  }
+                `}</style>
+                <input
+                  key={showPassword ? "text" : "password"}
+                  type={showPassword ? "text" : "password"}
+                  name="password"
+                  className="form-input password-text-fade"
+                  placeholder="Enter your password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  required
+                  autoFocus={formData.password.length > 0}
+                  style={{ paddingRight: "45px", transition: "border-color 0.2s ease, box-shadow 0.2s ease" }}
+                />
+                <button
+                  type="button"
+                  className="password-toggle-btn"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  style={{
+                    position: "absolute",
+                    right: "8px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "none",
+                    border: "none",
+                    borderRadius: "6px",
+                    color: "rgba(255, 255, 255, 0.6)",
+                    cursor: "pointer",
+                    padding: "6px",
+                    display: "flex",
+                    alignItems: "center",
+                  }}
+                >
+                  <span key={showPassword ? "on" : "off"} className="password-toggle-icon">
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </span>
+                </button>
+              </div>
             </div>
 
             {showError && (
@@ -245,7 +303,15 @@ function Login() {
             )}
 
             <div className="forgot-link">
-              <a>Need Help?</a>
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setShowHelpModal(true);
+                }}
+              >
+                Need Help?
+              </a>
             </div>
 
             <button type="submit" className="login-btn" disabled={isLoading}>
@@ -258,6 +324,131 @@ function Login() {
           </form>
         </div>
       </div>
+
+      {showHelpModal && (
+        <>
+          <style>{`
+            @keyframes helpBackdropIn {
+              from { opacity: 0; }
+              to { opacity: 1; }
+            }
+            @keyframes helpModalIn {
+              from { opacity: 0; transform: translateY(12px) scale(0.96); }
+              to { opacity: 1; transform: translateY(0) scale(1); }
+            }
+            .help-modal-backdrop {
+              animation: helpBackdropIn 0.2s ease;
+            }
+            .help-modal-card {
+              animation: helpModalIn 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+            .help-modal-close {
+              transition: color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+            }
+            .help-modal-close:hover {
+              color: #ffffff;
+              background: rgba(255, 255, 255, 0.12);
+              transform: rotate(90deg);
+            }
+            .help-modal-number {
+              transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+            }
+            .help-modal-number:hover {
+              border-color: rgba(255, 93, 93, 0.6);
+              background: rgba(255, 93, 93, 0.08);
+              transform: translateX(4px);
+            }
+          `}</style>
+          <div
+            className="help-modal-backdrop"
+            onClick={() => setShowHelpModal(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(4, 5, 10, 0.72)",
+              backdropFilter: "blur(4px)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 10000,
+              padding: 20,
+            }}
+          >
+            <div
+              className="help-modal-card"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: "100%",
+                maxWidth: 380,
+                background: "rgba(18, 20, 30, 0.98)",
+                border: "1px solid rgba(255, 255, 255, 0.12)",
+                borderRadius: 18,
+                padding: "26px 26px 22px",
+                boxShadow: "0 24px 60px rgba(0, 0, 0, 0.45)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 6 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span
+                    style={{
+                      width: 38, height: 38, borderRadius: 12,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      background: "rgba(255, 93, 93, 0.14)", color: "#ff8a8a", flexShrink: 0,
+                    }}
+                  >
+                    <HelpCircle size={20} />
+                  </span>
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#ffffff" }}>Need Help?</h3>
+                </div>
+                <button
+                  type="button"
+                  className="help-modal-close"
+                  onClick={() => setShowHelpModal(false)}
+                  aria-label="Close"
+                  style={{
+                    background: "none", border: "none", color: "rgba(255, 255, 255, 0.55)",
+                    cursor: "pointer", padding: 6, borderRadius: 8, display: "flex",
+                  }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <p style={{ margin: "0 0 18px", fontSize: 13.5, color: "rgba(255, 255, 255, 0.65)", lineHeight: 1.5 }}>
+                Trouble logging in? Reach out to IT Support and we'll get you sorted.
+              </p>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {SUPPORT_NUMBERS.map((number) => (
+                  <a
+                    key={number}
+                    href={`tel:${number.replace(/\s+/g, "")}`}
+                    className="help-modal-number"
+                    style={{
+                      display: "flex", alignItems: "center", gap: 12,
+                      padding: "12px 14px", borderRadius: 12,
+                      border: "1px solid rgba(255, 255, 255, 0.12)",
+                      background: "rgba(255, 255, 255, 0.04)",
+                      textDecoration: "none",
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 32, height: 32, borderRadius: "50%",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        background: "rgba(255, 93, 93, 0.16)", color: "#ff8a8a", flexShrink: 0,
+                      }}
+                    >
+                      <Phone size={15} />
+                    </span>
+                    <span style={{ color: "#ffffff", fontSize: 14.5, fontWeight: 600 }}>{number}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
