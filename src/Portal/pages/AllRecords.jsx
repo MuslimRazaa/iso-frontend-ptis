@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { showToast } from '../../components/Toast'
 
 const initialRecords = [
   {
@@ -131,7 +132,7 @@ function AllRecords() {
   }
 
   const handleViewPDF = (fileName) => {
-    alert(`Opening PDF: ${fileName} (demo only)`)
+    showToast(`Opening PDF: ${fileName} (demo only)`, 'info')
   }
 
   return (
@@ -249,7 +250,7 @@ function AllRecords() {
                         <button
                           type="button"
                           className="action-btn edit small"
-                          onClick={() => alert(`Edit record ${record.id} (demo only)`)}
+                          onClick={() => showToast(`Edit record ${record.id} (demo only)`, 'info')}
                           title="Edit Record"
                         >
                           Edit

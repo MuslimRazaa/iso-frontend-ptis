@@ -5,6 +5,7 @@ import PaginationBar from '../../components/PaginationBar'
 import StyledSelect from '../../components/StyledSelect'
 import StyledDatePicker from '../../components/StyledDatePicker'
 import InfoTooltip from '../../components/InfoTooltip'
+import { showToast } from '../../components/Toast'
 import { BsBriefcase, BsBoxSeam, BsWallet2, BsLaptop, BsClipboardData, BsPencilSquare } from 'react-icons/bs'
 import { MdOutlineHealthAndSafety } from 'react-icons/md'
 import {
@@ -817,7 +818,6 @@ function JobLogDescription() {
   const [entries, setEntries] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [importMsg, setImportMsg] = useState(null)
   const [saving, setSaving] = useState(false)
   const [csvMode, setCsvMode] = useState('append') // 'replace' | 'append'
   const [csvHovered, setCsvHovered] = useState(null) // 'append' | 'replace' | null — which toggle segment the pointer is over
@@ -938,7 +938,8 @@ function JobLogDescription() {
       : 'All'
     const fname = downloadJlrCsv(exportRows, label)
     setShowExport(false)
-    setImportMsg(`Exported ${exportRows.length} entr${exportRows.length === 1 ? 'y' : 'ies'} → ${fname}`)
+    const msg = `Exported ${exportRows.length} entr${exportRows.length === 1 ? 'y' : 'ies'} → ${fname}`
+    showToast(msg, 'success')
   }
 
   /* ── Fetch all entries from API ─────────────────────────── */
@@ -997,7 +998,7 @@ function JobLogDescription() {
       await refresh()
       return json.data?.name || clean
     } catch (err) {
-      alert(`Add ${label} failed: ${err.message}`)
+      showToast(`Add ${label} failed: ${err.message}`, 'error')
       return ''
     }
   }
@@ -1162,7 +1163,8 @@ function JobLogDescription() {
     if (hasActiveFilters) {
       if (filteredEntries.length === 0) return
       const fname = downloadJlrCsv(filteredEntries, 'Filtered')
-      setImportMsg(`Exported ${filteredEntries.length} filtered entr${filteredEntries.length === 1 ? 'y' : 'ies'} → ${fname}`)
+      const msg = `Exported ${filteredEntries.length} filtered entr${filteredEntries.length === 1 ? 'y' : 'ies'} → ${fname}`
+      showToast(msg, 'success')
     } else {
       // No filters → the from/to date-range modal (default behaviour).
       setExportFrom(''); setExportTo(''); setShowExport(true)
@@ -1269,8 +1271,9 @@ function JobLogDescription() {
       }
       await fetchEntries()
       closeModal()
+      showToast(modalMode === 'add' ? 'Entry added successfully!' : 'Entry updated successfully!', 'success')
     } catch (err) {
-      alert(`Save failed: ${err.message}`)
+      showToast(`Save failed: ${err.message}`, 'error')
     } finally {
       setSaving(false)
     }
@@ -1351,8 +1354,10 @@ function JobLogDescription() {
       setInspectorChangesList(prev => [...prev, ...created])
       resetInspectorChangeForm()
       fetchEntries() // keep the View table's cached history in sync in the background
+      showToast(changeMode === 'add' ? 'Inspector/team member added.' : 'Replacement recorded.', 'success')
     } catch (err) {
       setChangeError(err.message)
+      showToast(err.message, 'error')
     } finally {
       setChangeSaving(false)
     }
@@ -1373,8 +1378,9 @@ function JobLogDescription() {
       const updated = fromDBInspectorChange(json.data)
       setInspectorChangesList(prev => prev.map(c => c.id === updated.id ? updated : c))
       fetchEntries()
+      showToast('Replacement ended.', 'success')
     } catch (err) {
-      alert(`Could not end replacement: ${err.message}`)
+      showToast(`Could not end replacement: ${err.message}`, 'error')
     }
   }
 
@@ -1390,8 +1396,9 @@ function JobLogDescription() {
       }
       setInspectorChangesList(prev => prev.filter(c => c.id !== changeId))
       fetchEntries()
+      showToast('Inspector change record deleted.', 'success')
     } catch (err) {
-      alert(`Delete failed: ${err.message}`)
+      showToast(`Delete failed: ${err.message}`, 'error')
     }
   }
 
@@ -1401,8 +1408,9 @@ function JobLogDescription() {
       const res = await fetch(`${API_ENDPOINTS.JOB_LOG}/${id}?${actorQuery()}`, { method: 'DELETE' })
       if (!res.ok) throw new Error(`Server error ${res.status}`)
       setEntries(p => p.filter(e => e.id !== id))
+      showToast('Entry deleted successfully!', 'success')
     } catch (err) {
-      alert(`Delete failed: ${err.message}`)
+      showToast(`Delete failed: ${err.message}`, 'error')
     }
   }
 
@@ -1415,7 +1423,7 @@ function JobLogDescription() {
     const formData = new FormData()
     formData.append('csv', file)
     try {
-      setLoading(true); setImportMsg(null); setError(null)
+      setLoading(true); setError(null)
       const res = await fetch(`${API_ENDPOINTS.JOB_LOG}/upload-csv?mode=${csvMode}&${actorQuery()}`, {
         method: 'POST',
         body: formData,
@@ -1425,10 +1433,10 @@ function JobLogDescription() {
       const rows = json.data ?? []
       setEntries(Array.isArray(rows) ? rows.map(fromDB) : [])
       const modeLabel = csvMode === 'replace' ? 'replaced all data with' : 'added'
-      setImportMsg(`${modeLabel} ${json.inserted} record(s) — total: ${Array.isArray(rows) ? rows.length : '?'}`)
-      setTimeout(() => setImportMsg(null), 6000)
+      const msg = `${modeLabel} ${json.inserted} record(s) — total: ${Array.isArray(rows) ? rows.length : '?'}`
+      showToast(msg, 'success')
     } catch (err) {
-      setError(`CSV import failed: ${err.message}`)
+      showToast(`CSV import failed: ${err.message}`, 'error')
     } finally {
       setLoading(false)
     }
@@ -1456,10 +1464,9 @@ function JobLogDescription() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || `Server error ${res.status}`)
       setEntries([])
-      setImportMsg(`All entries deleted. You can now upload a fresh CSV.`)
-      setTimeout(() => setImportMsg(null), 8000)
+      showToast('All entries deleted.', 'success')
     } catch (err) {
-      setError(`Delete all failed: ${err.message}`)
+      showToast(`Delete all failed: ${err.message}`, 'error')
     } finally {
       setLoading(false)
     }
@@ -1697,18 +1704,6 @@ function JobLogDescription() {
       </div>
 
       {/* ══ STATUS MESSAGES ════════════════════════════════════ */}
-      {importMsg && (
-        <div style={{
-          margin: '0 32px', marginTop: 16, padding: '12px 18px', borderRadius: 12,
-          background: 'linear-gradient(135deg,#e8fff3,#d4f8e3)',
-          border: '1px solid #c3ecd4', color: '#1d814c',
-          fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 10,
-        }}>
-          <CheckCircle2 size={16} /> {importMsg}
-          <button type="button" onClick={() => setImportMsg(null)}
-            style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#1d814c', display: 'inline-flex' }}><X size={16} /></button>
-        </div>
-      )}
       {error && (
         <div style={{
           margin: '0 32px', marginTop: 16, padding: '12px 18px', borderRadius: 12,

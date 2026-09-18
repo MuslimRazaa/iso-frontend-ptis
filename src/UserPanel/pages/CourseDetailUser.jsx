@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api';
 import PdfViewer from '../../components/PdfViewer';
 import { Icon } from '../../UserLMS/lmsUI';
+import { showToast } from '../../components/Toast';
 
 const CourseDetailUser = () => {
   const { courseId } = useParams();
@@ -488,7 +489,7 @@ const CourseDetailUser = () => {
       const userEmail = localStorage.getItem('userEmail');
       
       if (!userEmail) {
-        alert('Please log in to start learning');
+        showToast('Please log in to start learning', 'info');
         navigate('/login');
         return;
       }
@@ -508,16 +509,16 @@ const CourseDetailUser = () => {
 
       if (response.ok) {
         setIsEnrolled(true);
-        alert('Course started! You can now access all videos and materials.');
+        showToast('Course started! You can now access all videos and materials.', 'success');
         // Start the progress tracking
         startProgressTracking();
       } else {
         const error = await response.json();
-        alert(error.message || 'Failed to enroll in course');
+        showToast(error.message || 'Failed to enroll in course', 'error');
       }
     } catch (error) {
       console.error('Error enrolling in course:', error);
-      alert('Failed to start course. Please try again.');
+      showToast('Failed to start course. Please try again.', 'error');
     } finally {
       setEnrollmentLoading(false);
     }
@@ -670,10 +671,10 @@ const CourseDetailUser = () => {
   // Handle PPT viewer - track view time
   const handlePPTviewer = (url) => {
     if (!isEnrolled) {
-      alert('Please click "Start Learning" to access course materials');
+      showToast('Please click "Start Learning" to access course materials', 'info');
       return;
     }
-    
+
     setPptUrl(url);
     setShowModal(true);
     // Start PPT tracking
@@ -1376,7 +1377,7 @@ const CourseDetailUser = () => {
                             if (isEnrolled) {
                               setSelectedVideo(index);
                             } else {
-                              alert('Please click "Start Learning" to access videos');
+                              showToast('Please click "Start Learning" to access videos', 'info');
                             }
                           }}
                           style={{

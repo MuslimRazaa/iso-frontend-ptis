@@ -5,6 +5,7 @@ import { API_ENDPOINTS, API_BASE_URL } from '../../config/api'
 import PaginationBar from '../../components/PaginationBar'
 import StyledSelect from '../../components/StyledSelect'
 import StyledDatePicker from '../../components/StyledDatePicker'
+import { showToast } from '../../components/Toast'
 
 const formSelectStyle = {
   border: '1px solid #dcdce3', borderRadius: 14, padding: '12px 14px',
@@ -100,7 +101,7 @@ function AllCourses() {
       setCourses(transformedCourses)
     } catch (error) {
       console.error('Error fetching courses:', error)
-      alert('Failed to fetch courses from server')
+      showToast('Failed to fetch courses from server', 'error')
     } finally {
       setLoading(false)
     }
@@ -111,9 +112,10 @@ function AllCourses() {
       try {
         await axios.delete(`${API_ENDPOINTS.COURSES}/${id}`)
         setCourses(courses.filter((course) => course.id !== id))
+        showToast('Course deleted successfully!', 'success')
       } catch (error) {
         console.error('Error deleting course:', error)
-        alert('Failed to delete course')
+        showToast('Failed to delete course', 'error')
       }
     }
   }
@@ -164,7 +166,7 @@ function AllCourses() {
   // change vanished on the next load — the course was never sent to the server.
   const saveEdit = async () => {
     if (!editForm.title.trim()) {
-      alert('Course title is required')
+      showToast('Course title is required', 'error')
       return
     }
 
@@ -191,9 +193,10 @@ function AllCourses() {
       await axios.put(`${API_ENDPOINTS.COURSES}/${editingId}`, data)
       await fetchCourses()
       cancelEdit()
+      showToast('Course updated successfully!', 'success')
     } catch (error) {
       console.error('Error updating course:', error)
-      alert(error.response?.data?.error || 'Failed to save the course')
+      showToast(error.response?.data?.error || 'Failed to save the course', 'error')
     } finally {
       setSaving(false)
     }

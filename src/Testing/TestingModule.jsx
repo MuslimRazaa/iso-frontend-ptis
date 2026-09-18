@@ -39,143 +39,13 @@ import StandardsAdminPage from './admin/StandardsAdminPage';
 import QuestionsAdminPage from './admin/QuestionsAdminPage';
 import ptisLogo from './assets/ptisLogo.png';
 import './LoginPage.css';
-import { addToast, removeToast, subscribeToasts, getToastsSnapshot } from './utils/toastStore';
+import { showToast as showSiteToast } from '../components/Toast';
 import { API_BASE_URL as HOST_API_BASE_URL } from '../config/api';
 import PaginationBar from '../components/PaginationBar';
 import AuditLogView from '../components/AuditLogView';
 import StyledSelect from '../components/StyledSelect';
 import SearchableSelect from '../components/SearchableSelect';
 import StyledDatePicker from '../components/StyledDatePicker';
-
-// Toast Notification Component
-const Toast = ({ message, type = 'info', onClose, isDarkMode }) => {
-  const [isVisible, setIsVisible] = useState(false);
-
-  useEffect(() => {
-    // Trigger enter animation
-    setTimeout(() => setIsVisible(true), 10);
-    
-    // Auto close after 4 seconds
-    const timer = setTimeout(() => {
-      setIsVisible(false);
-      setTimeout(onClose, 300);
-    }, 4000);
-
-    return () => clearTimeout(timer);
-  }, [onClose]);
-
-  const getToastStyles = () => {
-    const isNarrowViewport = typeof window !== 'undefined' && window.innerWidth <= 768;
-    const baseStyles = {
-      position: 'fixed',
-      top: isNarrowViewport ? '12px' : '20px',
-      right: isVisible ? (isNarrowViewport ? '12px' : '20px') : '-400px',
-      zIndex: 999999,
-      minWidth: isNarrowViewport ? 'calc(100vw - 24px)' : '300px',
-      maxWidth: isNarrowViewport ? 'calc(100vw - 24px)' : '450px',
-      padding: '12px 16px',
-      borderRadius: '10px',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '10px',
-      fontSize: '14px',
-      fontWeight: '500',
-      boxShadow: '0 6px 20px rgba(0, 0, 0, 0.4)',
-      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-      backdropFilter: 'blur(8px)',
-      border: '1px solid',
-    };
-
-    const types = {
-      success: {
-        background: isDarkMode 
-          ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.9) 0%, rgba(5, 150, 105, 0.9) 100%)'
-          : 'linear-gradient(135deg, rgba(16, 185, 129, 0.95) 0%, rgba(5, 150, 105, 0.95) 100%)',
-        borderColor: isDarkMode ? 'rgba(16, 185, 129, 0.6)' : 'rgba(16, 185, 129, 0.5)',
-        color: isDarkMode ? '#ffffff' : '#ffffff',
-        icon: <CheckCircle size={20} />,
-      },
-      error: {
-        background: isDarkMode 
-          ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.9) 0%, rgba(220, 38, 38, 0.9) 100%)'
-          : 'linear-gradient(135deg, rgba(239, 68, 68, 0.95) 0%, rgba(220, 38, 38, 0.95) 100%)',
-        borderColor: isDarkMode ? 'rgba(239, 68, 68, 0.6)' : 'rgba(239, 68, 68, 0.5)',
-        color: isDarkMode ? '#ffffff' : '#ffffff',
-        icon: <XCircle size={20} />,
-      },
-      info: {
-        background: isDarkMode 
-          ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.9) 0%, rgba(37, 99, 235, 0.9) 100%)'
-          : 'linear-gradient(135deg, rgba(59, 130, 246, 0.95) 0%, rgba(37, 99, 235, 0.95) 100%)',
-        borderColor: isDarkMode ? 'rgba(59, 130, 246, 0.6)' : 'rgba(59, 130, 246, 0.5)',
-        color: isDarkMode ? '#ffffff' : '#ffffff',
-        icon: <Info size={20} />,
-      },
-      loading: {
-        background: isDarkMode 
-          ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.9) 0%, rgba(147, 51, 234, 0.9) 100%)'
-          : 'linear-gradient(135deg, rgba(168, 85, 247, 0.95) 0%, rgba(147, 51, 234, 0.95) 100%)',
-        borderColor: isDarkMode ? 'rgba(168, 85, 247, 0.6)' : 'rgba(168, 85, 247, 0.5)',
-        color: isDarkMode ? '#ffffff' : '#ffffff',
-        icon: <Loader size={20} className="spin-animation" />,
-      },
-    };
-
-    const typeStyle = types[type] || types.info;
-
-    return {
-      ...baseStyles,
-      background: typeStyle.background,
-      borderColor: typeStyle.borderColor,
-      color: typeStyle.color,
-      icon: typeStyle.icon,
-    };
-  };
-
-  const styles = getToastStyles();
-
-  return (
-    <>
-      <style>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        .spin-animation {
-          animation: spin 1s linear infinite;
-        }
-      `}</style>
-      <div style={styles}>
-        <div style={{ flexShrink: 0 }}>
-          {styles.icon}
-        </div>
-        <div style={{ flex: 1, lineHeight: '1.4' }}>
-          {message}
-        </div>
-      </div>
-    </>
-  );
-};
-
-const ToastHost = ({ isDarkMode }) => {
-  const [toasts, setToasts] = useState(() => getToastsSnapshot());
-
-  useEffect(() => subscribeToasts(setToasts), []);
-
-  return (
-    <>
-      {toasts.map((toast) => (
-        <Toast
-          key={toast.id}
-          message={toast.message}
-          type={toast.type}
-          onClose={() => removeToast(toast.id)}
-          isDarkMode={isDarkMode}
-        />
-      ))}
-    </>
-  );
-};
 
 // HomePage Component - Moved outside to prevent re-creation
 const HomePage = React.memo(({ 
@@ -524,8 +394,7 @@ const TestingModule = () => {
 
   // Toast Helper Function
   const showToast = useCallback((message, type = 'info') => {
-    const id = Date.now() + Math.floor(Math.random() * 1000);
-    addToast({ id, message, type });
+    showSiteToast(message, type);
   }, []);
 
   // An employee specifically granted "Testing: Admin" from Manage User Access
@@ -7957,10 +7826,10 @@ const TestingModule = () => {
   // Main Render
   return (
     <>
-      {/* Toast Notifications */}
-      <ToastHost isDarkMode={isDarkMode} />
+      {/* Toast Notifications render via the single site-wide <ToastHost />
+          mounted in App.jsx, so nothing needs to be rendered here. */}
 
-      {currentPage === 'home' && <HomePage 
+      {currentPage === 'home' && <HomePage
         activeLoginForm={activeLoginForm}
         setActiveLoginForm={setActiveLoginForm}
         selectedEmployee={selectedEmployee}

@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { showToast } from '../../components/Toast'
 
 const initialPdfRecords = [
   {
@@ -72,7 +73,7 @@ function UnprocessedRecords() {
       record.id === id ? { ...record, status: 'Processing' } : record
     ))
     setTimeout(() => {
-      alert(`Processing ${id} completed (demo only)`)
+      showToast(`Processing ${id} completed (demo only)`, 'success')
       setRecords(records.filter(record => record.id !== id))
     }, 1000)
   }

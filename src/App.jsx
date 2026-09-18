@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import Login from './mainScreens/Login'
 import VideoLoader from './components/VideoLoader'
+import { ToastHost } from './components/Toast'
 import './assets/style.css'
 
 // ============================================
@@ -101,6 +102,7 @@ function App() {
 
   return (
     <>
+      <ToastHost />
       {showLoader && !hasSeenLoader ? (
         <VideoLoader onLoadingComplete={handleLoadingComplete} />
       ) : (

@@ -9,6 +9,7 @@ import { getCurrentEmployeeId } from '../utils/currentEmployee'
 import { resolveSignerName, stampSignature } from '../utils/signature'
 import { fileToDataUrl } from '../utils/fileToDataUrl'
 import SearchableSelect from '../../components/SearchableSelect'
+import { showToast } from '../../components/Toast'
 
 // One column per ~340px of available width, so the same markup is a single
 // column on a laptop-narrow pane and four across on a wide monitor.
@@ -235,16 +236,19 @@ function FormFiller() {
         const res = await fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}/${entryId}`, { method: 'PUT', body })
         if (!res.ok) {
           const failed = await res.json().catch(() => ({}))
-          setError(failed.error || `Could not save the changes (HTTP ${res.status}).`)
+          const message = failed.error || `Could not save the changes (HTTP ${res.status}).`
+          showToast(message, 'error')
           setSubmitting(false)
           return
         }
       } catch {
-        setError('Could not reach the server to save the changes.')
+        const message = 'Could not reach the server to save the changes.'
+        showToast(message, 'error')
         setSubmitting(false)
         return
       }
       setSubmitting(false)
+      showToast('Changes saved.', 'success')
       navigate(`${base}/entries/${entryId}`)
       return
     }
@@ -263,6 +267,7 @@ function FormFiller() {
 
       const res = await fetch(API_ENDPOINTS.ISO_FORMS_ENTRIES, { method: 'POST', body: formData })
       if (!res.ok) throw new Error('submit failed')
+      showToast('Form submitted.', 'success')
     } catch {
       // No backend yet — record the submission in the local demo store instead.
       // Inline the actual file content as a data URL so "View" works without a backend.
@@ -289,6 +294,7 @@ function FormFiller() {
         attachments: JSON.stringify(storedAttachments),
         created_at: new Date().toISOString(),
       })
+      showToast('Could not reach the server — saved to this browser only (demo mode).', 'error')
     } finally {
       setSubmitting(false)
     }

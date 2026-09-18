@@ -4,6 +4,7 @@ import { Trash2 } from 'lucide-react'
 import { API_ENDPOINTS } from '../../config/api'
 import StyledSelect from '../../components/StyledSelect'
 import SearchableSelect from '../../components/SearchableSelect'
+import { showToast } from '../../components/Toast'
 
 const timeLimitPresets = [30, 45, 60, 75, 90, 120]
 
@@ -17,7 +18,6 @@ function SetStandards() {
     passing_criteria: '',
     time_limit: '',
   })
-  const [message, setMessage] = useState({ type: '', text: '' })
   const [selectedStandardId, setSelectedStandardId] = useState('all')
 
   // Fetch standards from backend
@@ -32,7 +32,7 @@ function SetStandards() {
       setStandards(response.data)
     } catch (error) {
       console.error('Error fetching standards:', error)
-      setMessage({ type: 'error', text: 'Failed to fetch standards from server' })
+      showToast('Failed to fetch standards from server', 'error')
     } finally {
       setLoading(false)
     }
@@ -60,12 +60,11 @@ function SetStandards() {
   const handleSubmit = async (event) => {
     event.preventDefault()
     setLoading(true)
-    setMessage({ type: '', text: '' })
 
     try {
-      if (!formData.standard_name || !formData.short_name || !formData.conducted_questions || 
+      if (!formData.standard_name || !formData.short_name || !formData.conducted_questions ||
           !formData.passing_criteria || !formData.time_limit) {
-        setMessage({ type: 'error', text: 'Fill in all required fields to record the standard.' })
+        showToast('Fill in all required fields to record the standard.', 'error')
         setLoading(false)
         return
       }
@@ -73,7 +72,7 @@ function SetStandards() {
       // Validate passing criteria
       const passingCriteria = Number(formData.passing_criteria)
       if (passingCriteria < 0 || passingCriteria > 100) {
-        setMessage({ type: 'error', text: 'Passing criteria must be between 0 and 100' })
+        showToast('Passing criteria must be between 0 and 100', 'error')
         setLoading(false)
         return
       }
@@ -88,19 +87,17 @@ function SetStandards() {
 
       await axios.post(API_ENDPOINTS.STANDARDS, standardData)
 
-      setMessage({ type: 'success', text: 'Standard saved for upcoming assessments.' })
+      showToast('Standard saved for upcoming assessments.', 'success')
       resetForm()
       setSelectedStandardId('all')
-      
+
       // Refresh the list
       await fetchStandards()
 
     } catch (error) {
       console.error('Error creating standard:', error)
-      setMessage({ 
-        type: 'error', 
-        text: error.response?.data?.error || 'Failed to save standard. Please try again.' 
-      })
+      const msg = error.response?.data?.error || 'Failed to save standard. Please try again.'
+      showToast(msg, 'error')
     } finally {
       setLoading(false)
     }
@@ -112,10 +109,10 @@ function SetStandards() {
     try {
       await axios.delete(`${API_ENDPOINTS.STANDARDS}/${id}`)
       setStandards(standards.filter(s => s.id !== id))
-      setMessage({ type: 'success', text: 'Standard deleted successfully' })
+      showToast('Standard deleted successfully!', 'success')
     } catch (error) {
       console.error('Error deleting standard:', error)
-      setMessage({ type: 'error', text: 'Failed to delete standard' })
+      showToast('Failed to delete standard', 'error')
     }
   }
 
@@ -129,19 +126,6 @@ function SetStandards() {
             <p className="panel-subtitle">Capture every requirement once so assessments follow the exact same benchmark.</p>
           </div>
         </header>
-
-        {message.text && (
-          <div className={`message ${message.type}`} style={{
-            padding: '1rem',
-            marginBottom: '1rem',
-            borderRadius: '8px',
-            backgroundColor: message.type === 'success' ? '#d4edda' : '#f8d7da',
-            color: message.type === 'success' ? '#155724' : '#721c24',
-            border: `1px solid ${message.type === 'success' ? '#c3e6cb' : '#f5c6cb'}`
-          }}>
-            {message.text}
-          </div>
-        )}
 
         <form className="standards-form" onSubmit={handleSubmit}>
           <div className="form-row">

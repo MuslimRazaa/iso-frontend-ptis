@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { API_BASE_URL } from '../../config/api'
 import { Database, Download, RefreshCw, CheckCircle2, AlertTriangle, HardDriveDownload, Clock } from 'lucide-react'
+import { showToast } from '../../components/Toast'
 
 const BASE = `${API_BASE_URL}/api/backups`
 
@@ -34,15 +35,20 @@ function JLRBackups() {
   const [error, setError] = useState(null)
   const [runningNow, setRunningNow] = useState(false)
 
-  const fetchData = useCallback(async () => {
+  // `manual` distinguishes a click on the Refresh button from the initial
+  // load and the 30s auto-refresh — those two should never pop a toast, or
+  // the page would notify on its own every 30 seconds.
+  const fetchData = useCallback(async (manual = false) => {
     try {
       const res = await fetch(BASE)
       if (!res.ok) throw new Error(`Server error ${res.status}`)
       const json = await res.json()
       setData(json)
       setError(null)
+      if (manual) showToast('Refreshed.', 'success')
     } catch (err) {
       setError(err.message)
+      if (manual) showToast(`Could not refresh: ${err.message}`, 'error')
     } finally {
       setLoading(false)
     }
@@ -56,6 +62,8 @@ function JLRBackups() {
     return () => clearInterval(id)
   }, [fetchData])
 
+  const handleRefreshClick = () => fetchData(true)
+
   const backupNow = async () => {
     setRunningNow(true)
     try {
@@ -63,12 +71,15 @@ function JLRBackups() {
       const json = await res.json()
       if (!json.success) throw new Error(json.error || 'Backup failed')
       await fetchData()
+      showToast('Backup completed.', 'success')
     } catch (err) {
-      alert(`Backup failed: ${err.message}`)
+      showToast(`Backup failed: ${err.message}`, 'error')
     } finally {
       setRunningNow(false)
     }
   }
+
+  const handleDownloadClick = (fileName) => showToast(`Downloading ${fileName}…`, 'info')
 
   const status = data?.status || {}
   const config = data?.config || status.config || {}
@@ -90,7 +101,7 @@ function JLRBackups() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button type="button" onClick={fetchData}
+          <button type="button" onClick={handleRefreshClick}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 28, border: '1px solid #dcdce3', background: '#fff', color: '#2a2a32', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s ease' }}
             onMouseEnter={e => {
               e.currentTarget.style.borderColor = '#d7263d'
@@ -174,6 +185,7 @@ function JLRBackups() {
                     <td style={{ padding: '11px 18px', color: '#54546a', whiteSpace: 'nowrap' }}>{fmtBytes(f.sizeBytes)}</td>
                     <td style={{ padding: '11px 18px', textAlign: 'right' }}>
                       <a href={`${BASE}/${encodeURIComponent(f.name)}/download`}
+                        onClick={() => handleDownloadClick(f.name)}
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 20, background: '#fdf2f3', color: '#d7263d', border: '1px solid #ffd1d8', fontWeight: 600, fontSize: 13, textDecoration: 'none', transition: 'all 0.2s ease' }}
                         onMouseEnter={e => {
                           e.currentTarget.style.background = '#ffe3e6'

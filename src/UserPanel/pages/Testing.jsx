@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { API_BASE_URL } from '../../config/api';
+import { showToast } from '../../components/Toast';
 
 const Testing = () => {
   const navigate = useNavigate();
@@ -159,9 +160,9 @@ const Testing = () => {
           setTabSwitchCount(prev => {
             const newCount = prev + 1;
             if (newCount >= 3) {
-              alert('⚠️ WARNING: Multiple tab switches detected! This may be reported to your instructor.');
+              showToast('WARNING: Multiple tab switches detected! This may be reported to your instructor.', 'error');
             } else {
-              alert(`⚠️ Tab switch detected! (${newCount}/3 warnings)`);
+              showToast(`Tab switch detected! (${newCount}/3 warnings)`, 'error');
             }
             return newCount;
           });
@@ -181,19 +182,19 @@ const Testing = () => {
     if (testStarted && !testCompleted) {
       const preventCopy = (e) => {
         e.preventDefault();
-        alert('❌ Copying is disabled during the test.');
+        showToast('Copying is disabled during the test.', 'error');
         return false;
       };
 
       const preventPaste = (e) => {
         e.preventDefault();
-        alert('❌ Pasting is disabled during the test.');
+        showToast('Pasting is disabled during the test.', 'error');
         return false;
       };
 
       const preventRightClick = (e) => {
         e.preventDefault();
-        alert('❌ Right-click is disabled during the test.');
+        showToast('Right-click is disabled during the test.', 'error');
         return false;
       };
 
@@ -367,7 +368,7 @@ const Testing = () => {
     
     if (questions.length === 0) {
       console.error('❌ NO QUESTIONS LOADED!');
-      alert('❌ No questions loaded! Please refresh and try again.');
+      showToast('No questions loaded! Please refresh and try again.', 'error');
       return;
     }
     

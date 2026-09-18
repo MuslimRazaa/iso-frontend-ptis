@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { API_ENDPOINTS } from '../../config/api'
+import { showToast } from '../../components/Toast'
 import { getOfflineTemplate, addOfflineTemplate, updateOfflineTemplate } from '../utils/offlineStore'
 import PdfImportModal from '../components/PdfImportModal'
 import FieldPositionEditor from './FieldPositionEditor'
@@ -232,6 +233,7 @@ function TemplateBuilder() {
       if (isEdit) updateOfflineTemplate(id, payload)
       else addOfflineTemplate({ id: `local-${Date.now()}`, created_by_name: 'You (demo)', ...payload })
       setSaving(false)
+      showToast('Could not reach the server — template saved in this browser only.', 'error')
       navigate(`${base}/templates`)
       return
     }
@@ -246,6 +248,7 @@ function TemplateBuilder() {
     }
 
     setSaving(false)
+    showToast(isEdit ? 'Template updated successfully!' : 'Template created successfully!', 'success')
     navigate(`${base}/templates`)
   }
 

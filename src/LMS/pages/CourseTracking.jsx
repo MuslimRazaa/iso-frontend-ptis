@@ -8,6 +8,7 @@ import { API_ENDPOINTS } from '../../config/api'
 import { rowState } from '../utils/courseProgressState'
 import PaginationBar from '../../components/PaginationBar'
 import StyledSelect from '../../components/StyledSelect'
+import { showToast } from '../../components/Toast'
 
 const PAGE_SIZE = 100
 
@@ -107,7 +108,9 @@ function CourseTracking() {
     ['in_progress', 'completed', 'enrolled', 'overdue'].includes(requestedStatus) ? requestedStatus : 'all')
   const [currentPage, setCurrentPage] = useState(1)
 
-  const fetchProgress = async () => {
+  // `manual` distinguishes a click on the Refresh button from the initial
+  // load and the 30s auto-refresh — those two should never pop a toast.
+  const fetchProgress = async (manual = false) => {
     try {
       setLoading(true)
       setError(null)
@@ -115,8 +118,11 @@ function CourseTracking() {
       const json = await res.json()
       if (!res.ok || json.success === false) throw new Error(json.message || 'Failed to load')
       setRows(Array.isArray(json.data) ? json.data : [])
+      if (manual) showToast('Refreshed.', 'success')
     } catch (err) {
-      setError(err.message || 'Failed to load course tracking data')
+      const msg = err.message || 'Failed to load course tracking data'
+      setError(msg)
+      if (manual) showToast(msg, 'error')
     } finally {
       setLoading(false)
     }
@@ -176,7 +182,7 @@ function CourseTracking() {
             Every user's course activity — who started what, time spent, time left and deadlines.
           </p>
         </div>
-        <button className="ghost-btn" onClick={fetchProgress} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+        <button className="ghost-btn" onClick={() => fetchProgress(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
           <RefreshCw size={16} /> Refresh
         </button>
       </header>
