@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { API_ENDPOINTS } from '../../config/api'
 import { showToast } from '../../components/Toast'
+import { getActorId, getActorName } from '../../utils/actorIdentity'
 import { getOfflineTemplate, addOfflineTemplate, updateOfflineTemplate } from '../utils/offlineStore'
 import PdfImportModal from '../components/PdfImportModal'
 import FieldPositionEditor from './FieldPositionEditor'
@@ -211,10 +212,9 @@ function TemplateBuilder() {
       body.append('pdf', base64ToBlob(originalPdfBase64), originalPdfName || 'template.pdf')
       // For the audit trail — templates carry no "who is editing this" field
       // of their own, unlike an entry's created_by.
-      const actorId = localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || ''
-      const actorName = localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin'
+      const actorId = getActorId()
       if (actorId) body.append('actorId', actorId)
-      body.append('actorName', actorName)
+      body.append('actorName', getActorName())
     } catch {
       setError('The attached PDF could not be read. Re-import it and try again.')
       setSaving(false)

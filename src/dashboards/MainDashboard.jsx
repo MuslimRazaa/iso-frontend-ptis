@@ -380,6 +380,16 @@ function MainDashboard() {
   const toggleUserMenu = () => setShowUserMenu((prev) => !prev);
   const handleLogout = () => {
     setShowUserMenu(false);
+    // Clear identity, not the dashboard's own layout prefs (tile order/hidden
+    // tiles) — those are per-browser UI customization, not session state.
+    // Leaving identity behind is what let one admin's audit-log actions show
+    // up under whichever employee had last logged in on that same laptop.
+    localStorage.removeItem('userType');
+    localStorage.removeItem('adminPassword');
+    localStorage.removeItem('userEmail');
+    localStorage.removeItem('userEmployeeId');
+    localStorage.removeItem('userFullName');
+    localStorage.removeItem('userPermissions');
     navigate("/");
   };
 

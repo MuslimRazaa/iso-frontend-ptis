@@ -3,6 +3,7 @@ import { Edit2, Trash2, BookOpen, X } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { API_BASE_URL as HOST_API_BASE_URL } from '../../config/api';
 import PaginationBar from '../../components/PaginationBar';
+import { getActorId, getActorName } from '../../utils/actorIdentity';
 import '../PTIS_App.css';
 
 const StandardsAdminPage = ({ onBack, showToast, onSaved }) => {
@@ -186,8 +187,8 @@ const StandardsAdminPage = ({ onBack, showToast, onSaved }) => {
     }
 
     try {
-      const actorId = localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || '';
-      const actorName = localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin';
+      const actorId = getActorId();
+      const actorName = getActorName();
       await fetch(`${API_BASE_URL}/api/standards/legacy/${encodeURIComponent(standardName)}?actorId=${encodeURIComponent(actorId)}&actorName=${encodeURIComponent(actorName)}`, {
         method: 'DELETE'
       });
@@ -306,8 +307,8 @@ const StandardsAdminPage = ({ onBack, showToast, onSaved }) => {
         Minutes: parseInt(formData.Minutes),
         Seconds: parseInt(formData.Seconds),
         Practical_Required: formData.Practical_Required,
-        actorId: localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || '',
-        actorName: localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin'
+        actorId: getActorId(),
+        actorName: getActorName()
       };
 
       // Persist locally too — backend may not have a column for this yet,

@@ -6,6 +6,7 @@ import StyledSelect from '../../components/StyledSelect'
 import StyledDatePicker from '../../components/StyledDatePicker'
 import InfoTooltip from '../../components/InfoTooltip'
 import { showToast } from '../../components/Toast'
+import { getActorId, getActorName } from '../../utils/actorIdentity'
 import { BsBriefcase, BsBoxSeam, BsWallet2, BsLaptop, BsClipboardData, BsPencilSquare } from 'react-icons/bs'
 import { MdOutlineHealthAndSafety } from 'react-icons/md'
 import {
@@ -1156,9 +1157,8 @@ function JobLogDescription() {
   // from server-side, so it rides along as a query param on every mutating
   // request, the same way ISO Forms already does it.
   const actorQuery = () => {
-    const actorId = localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || ''
-    const actorName = localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin'
-    const params = new URLSearchParams({ actorName })
+    const actorId = getActorId()
+    const params = new URLSearchParams({ actorName: getActorName() })
     if (actorId) params.set('actorId', actorId)
     return params.toString()
   }

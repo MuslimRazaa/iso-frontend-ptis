@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { Eye, Plus, Pencil, Trash2, X } from 'lucide-react'
 import { API_ENDPOINTS } from '../../config/api'
 import { showToast } from '../../components/Toast'
+import { getActorId, getActorName } from '../../utils/actorIdentity'
 import { SEED_TEMPLATES, SEED_VERSION } from '../seedTemplates'
 import { ensureSeeded, getOfflineTemplates, deleteOfflineTemplate } from '../utils/offlineStore'
 import PaginationBar from '../../components/PaginationBar'
@@ -130,9 +131,8 @@ function TemplatesList() {
 
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this template? Forms already submitted from it will keep their data.')) return
-    const actorId = localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || ''
-    const actorName = localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin'
-    const params = new URLSearchParams({ actorName })
+    const actorId = getActorId()
+    const params = new URLSearchParams({ actorName: getActorName() })
     if (actorId) params.set('actorId', actorId)
     try {
       const res = await fetch(`${API_ENDPOINTS.ISO_FORMS_TEMPLATES}/${id}?${params.toString()}`, { method: 'DELETE' })

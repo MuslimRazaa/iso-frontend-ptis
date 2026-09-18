@@ -6,6 +6,7 @@ import { API_BASE_URL as HOST_API_BASE_URL } from '../../config/api';
 import PaginationBar from '../../components/PaginationBar';
 import StyledSelect from '../../components/StyledSelect';
 import SearchableSelect from '../../components/SearchableSelect';
+import { getActorId, getActorName } from '../../utils/actorIdentity';
 import '../PTIS_App.css';
 
 const QuestionsAdminPage = ({ onBack, showToast }) => {
@@ -197,8 +198,8 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
     }
 
     try {
-      const actorId = localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || '';
-      const actorName = localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin';
+      const actorId = getActorId();
+      const actorName = getActorName();
       const response = await fetch(`${API_BASE_URL}/api/questions/legacy/${questionNo}?actorId=${encodeURIComponent(actorId)}&actorName=${encodeURIComponent(actorName)}`, {
         method: 'DELETE'
       });
@@ -222,8 +223,8 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           nos: Array.from(selectedNos),
-          actorId: localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || '',
-          actorName: localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin'
+          actorId: getActorId(),
+          actorName: getActorName()
         })
       });
       const data = await response.json().catch(() => ({}));
@@ -291,8 +292,8 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
 
     const payload = {
       ...formData,
-      actorId: localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || '',
-      actorName: localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin'
+      actorId: getActorId(),
+      actorName: getActorName()
     };
 
     try {
