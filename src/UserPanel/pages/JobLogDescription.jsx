@@ -771,7 +771,7 @@ function JobLogDescription() {
   /* ── Add/Replace Inspector tab (edit mode only) ─────────────── */
   const [activeTab, setActiveTab] = useState('details') // 'details' | 'inspector'
   const [inspectorChangesList, setInspectorChangesList] = useState([])
-  const [changeMode, setChangeMode] = useState('add')       // 'add' | 'replace'
+  const [changeMode, setChangeMode] = useState('add')       // 'add' | 'replace' | 'remove'
   const [changeField, setChangeField] = useState('inspector') // 'inspector' | 'team'
   const [changeOldValue, setChangeOldValue] = useState('')
   const [changeNewValue, setChangeNewValue] = useState('')
@@ -1206,6 +1206,19 @@ function JobLogDescription() {
 
   const splitNames = (s) => (s || '').split(',').map(v => v.trim()).filter(Boolean)
 
+  // Who can be taken off this job for the chosen field: the current roster
+  // plus anyone brought in by an add/replace record, minus people who
+  // already have a removal record (the server allows one removal per person;
+  // delete that record from the history below to change it).
+  const removableMembersFor = (field) => {
+    const roster = currentRosterFor(field)
+    const brought = inspectorChangesList
+      .filter(c => c.fieldType === field && (c.changeType === 'add' || c.changeType === 'replace'))
+      .map(c => c.newValue)
+    const gone = new Set(inspectorChangesList.filter(c => c.changeType === 'remove').map(c => c.oldValue.trim().toLowerCase()))
+    return Array.from(new Set([...roster, ...brought].filter(Boolean))).filter(n => !gone.has(n.trim().toLowerCase()))
+  }
+
   // Pair people being replaced with their replacements:
   // equal counts → matched 1:1 in selection order; one side has exactly one
   // entry → that single person covers/replaces every entry on the other side.
@@ -1231,6 +1244,41 @@ function JobLogDescription() {
   const submitInspectorChange = async e => {
     e.preventDefault()
     setChangeError('')
+
+    if (changeMode === 'remove') {
+      // Attendance in the ERP is counted day by day from these two dates, so
+      // every check that can be made here is made before anything is saved.
+      const member = changeOldValue.trim()
+      if (!member) { setChangeError('Select who is being removed from this job.'); return }
+      if (!changeStart || !changeEnd) { setChangeError('Both dates are required: the day they started on this job, and the last day they were on it.'); return }
+      if (!modalState.startDate) { setChangeError("Set this job's Start Date first (Job Details tab) — a person's days on the job are counted from it."); return }
+      if (changeStart > changeEnd) { setChangeError('"On the job from" cannot be after "Last day on the job".'); return }
+      if (changeStart < modalState.startDate) { setChangeError(`They cannot have started before the job did (job start: ${modalState.startDate}).`); return }
+      if (modalState.endDate && changeEnd > modalState.endDate) { setChangeError(`They cannot stay past the job's end date (${modalState.endDate}).`); return }
+      if (!window.confirm(`Remove ${member} from this job?\n\nTheir field attendance for this job will be counted only from ${changeStart} to ${changeEnd}. Days after ${changeEnd} will no longer count for them.`)) return
+      try {
+        setChangeSaving(true)
+        const created = await postInspectorChange({
+          field_type: changeField,
+          change_type: 'remove',
+          old_value: member,
+          new_value: null,
+          start_date: changeStart,
+          end_date: changeEnd,
+          reason: changeReason.trim() || null,
+        })
+        setInspectorChangesList(prev => [...prev, created])
+        resetInspectorChangeForm()
+        fetchEntries()
+        showToast(`${member} removed from the job.`, 'success')
+      } catch (err) {
+        setChangeError(err.message)
+        showToast(err.message, 'error')
+      } finally {
+        setChangeSaving(false)
+      }
+      return
+    }
 
     const newArr = splitNames(changeNewValue)
     const oldArr = splitNames(changeOldValue)
@@ -1930,13 +1978,13 @@ function JobLogDescription() {
                               </span>
                               <span style={{
                                 padding: '2px 8px', borderRadius: 999, fontWeight: 700, textTransform: 'uppercase', fontSize: 10.5,
-                                background: c.changeType === 'replace' ? '#fff5f6' : '#f0fff8',
-                                color: c.changeType === 'replace' ? '#d7263d' : '#1d814c',
+                                background: c.changeType === 'replace' ? '#fff5f6' : c.changeType === 'remove' ? '#fff7e6' : '#f0fff8',
+                                color: c.changeType === 'replace' ? '#d7263d' : c.changeType === 'remove' ? '#b26a00' : '#1d814c',
                               }}>{c.changeType}</span>
                               <span style={{ fontWeight: 600, color: '#1f1f27' }}>
-                                {c.changeType === 'replace' ? `${c.oldValue} → ${c.newValue}` : `+ ${c.newValue}`}
+                                {c.changeType === 'replace' ? `${c.oldValue} → ${c.newValue}` : c.changeType === 'remove' ? `− ${c.oldValue}` : `+ ${c.newValue}`}
                               </span>
-                              <span style={{ color: '#595966' }}>{c.startDate} – {c.endDate}</span>
+                              <span style={{ color: '#595966' }}>{c.changeType === 'remove' ? `on the job ${c.startDate} – ${c.endDate}` : `${c.startDate} – ${c.endDate}`}</span>
                               {c.reason && <InfoTooltip text={c.reason} />}
                             </div>
                           </td>
@@ -1992,7 +2040,7 @@ function JobLogDescription() {
               <div style={{ display: 'flex', gap: 8, padding: '14px 24px 0' }}>
                 {[
                   { key: 'details', label: 'Job Details' },
-                  { key: 'inspector', label: 'Add / Replace Inspector' },
+                  { key: 'inspector', label: 'Add / Replace / Remove Inspector' },
                 ].map(t => (
                   <button
                     key={t.key}
@@ -2339,7 +2387,7 @@ function JobLogDescription() {
 
             {activeTab === 'inspector' && modalMode === 'edit' && (
               <div className="modal-form">
-                <ModalSection Icon={Users} title="Add / Replace Inspector" hint="Mid-job coverage changes, with dates" />
+                <ModalSection Icon={Users} title="Add / Replace / Remove Inspector" hint="Mid-job team changes, with dates" />
 
                 <form onSubmit={submitInspectorChange}>
                   {/* Step 1 — what are you doing, and to which field */}
@@ -2352,6 +2400,7 @@ function JobLogDescription() {
                         {[
                           { v: 'add', label: '+ Add someone new' },
                           { v: 'replace', label: '⇄ Replace someone' },
+                          { v: 'remove', label: '− Remove someone' },
                         ].map(m => (
                           <button key={m.v} type="button" onClick={() => { setChangeMode(m.v); setChangeOldValue(''); setChangeNewValue('') }}
                             style={{
@@ -2382,8 +2431,23 @@ function JobLogDescription() {
                   </div>
 
                   <p style={{ margin: '20px 0 8px', fontSize: 12.5, fontWeight: 700, color: '#9a9aaa', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                    2. {changeMode === 'replace' ? 'Who is being replaced, and by whom?' : 'Who is being added?'}
+                    2. {changeMode === 'replace' ? 'Who is being replaced, and by whom?' : changeMode === 'remove' ? 'Who is being removed from this job?' : 'Who is being added?'}
                   </p>
+                  {changeMode === 'remove' && (
+                    <div className="form-row">
+                      <div className="field-col"><span>Person currently on the job *</span>
+                        <StyledSelect
+                          style={modalSelectStyle}
+                          value={changeOldValue}
+                          options={removableMembersFor(changeField)}
+                          placeholder="Select who is being removed…"
+                          onChange={v => {
+                            setChangeOldValue(v)
+                            if (!changeStart && modalState.startDate) setChangeStart(modalState.startDate) // usually they were on it from day one
+                          }} />
+                      </div>
+                    </div>
+                  )}
                   {changeMode === 'replace' && (
                     <div className="form-row">
                       <div className="field-col"><span>Currently on the job (select one or more) *</span>
@@ -2396,6 +2460,7 @@ function JobLogDescription() {
                     </div>
                   )}
 
+                  {changeMode !== 'remove' && (
                   <div className="form-row">
                     <div className="field-col"><span>{changeMode === 'replace' ? 'Replacing with (select one or more) *' : 'New inspector(s)/team member(s) *'}</span>
                       <MultiSelect
@@ -2405,6 +2470,7 @@ function JobLogDescription() {
                         onChange={setChangeNewValue} />
                     </div>
                   </div>
+                  )}
                   {changeMode === 'replace' && (
                     <p style={{ margin: '4px 0 0', fontSize: 12, color: '#9a9aaa' }}>
                       Tip: pick the same number on both sides to match them one-to-one, or leave just one side with a single person if one person is covering — or being covered by — several.
@@ -2412,18 +2478,27 @@ function JobLogDescription() {
                   )}
 
                   <p style={{ margin: '20px 0 8px', fontSize: 12.5, fontWeight: 700, color: '#9a9aaa', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                    3. For which dates, and why?
+                    3. {changeMode === 'remove' ? 'For which days was this person on the job?' : 'For which dates, and why?'}
                   </p>
                   <div className="form-row">
-                    <label><span>Start Date *</span>
-                      <StyledDatePicker value={changeStart} style={modalSelectStyle} onChange={setChangeStart} /></label>
-                    <label><span>End Date *</span>
-                      <StyledDatePicker value={changeEnd} style={modalSelectStyle} onChange={setChangeEnd} /></label>
+                    <label><span>{changeMode === 'remove' ? 'On the job from *' : 'Start Date *'}</span>
+                      <StyledDatePicker value={changeStart} style={modalSelectStyle} onChange={setChangeStart}
+                        min={changeMode === 'remove' ? (modalState.startDate || undefined) : undefined}
+                        max={changeMode === 'remove' ? (modalState.endDate || undefined) : undefined} /></label>
+                    <label><span>{changeMode === 'remove' ? 'Last day on the job *' : 'End Date *'}</span>
+                      <StyledDatePicker value={changeEnd} style={modalSelectStyle} onChange={setChangeEnd}
+                        min={changeMode === 'remove' ? (changeStart || modalState.startDate || undefined) : undefined}
+                        max={changeMode === 'remove' ? (modalState.endDate || undefined) : undefined} /></label>
                   </div>
+                  {changeMode === 'remove' && (
+                    <p style={{ margin: '4px 0 0', fontSize: 12, color: '#9a9aaa' }}>
+                      Field attendance for this person is counted only from the first date to the last date here (Sundays and holidays in between included, unless they are on leave). Days after the last date no longer count for them; the rest of the team is not affected.
+                    </p>
+                  )}
 
                   <label><span>Reason{changeMode === 'replace' ? ' *' : ' (optional)'}</span>
                     <textarea rows="2" value={changeReason}
-                      placeholder={changeMode === 'replace' ? 'Why is this person being replaced?' : 'Optional note…'}
+                      placeholder={changeMode === 'replace' ? 'Why is this person being replaced?' : changeMode === 'remove' ? 'Why are they leaving the job? (optional)' : 'Optional note…'}
                       onChange={e => setChangeReason(e.target.value)} />
                   </label>
 
@@ -2432,14 +2507,14 @@ function JobLogDescription() {
                   <div className="modal-actions">
                     <button type="submit" className="primary-btn" disabled={changeSaving}
                       style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {changeSaving ? 'Saving…' : changeMode === 'replace' ? 'Replace' : '+ Add'}
+                      {changeSaving ? 'Saving…' : changeMode === 'replace' ? 'Replace' : changeMode === 'remove' ? 'Remove from Job' : '+ Add'}
                     </button>
                   </div>
                 </form>
 
                 <ModalSection Icon={ClipboardList} title="History for this entry" hint={`${inspectorChangesList.length} record(s)`} />
                 {inspectorChangesList.length === 0 ? (
-                  <p style={{ color: '#9a9aaa', fontSize: 13 }}>No add/replace history recorded yet.</p>
+                  <p style={{ color: '#9a9aaa', fontSize: 13 }}>No add / replace / remove history recorded yet.</p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {inspectorChangesList.map(c => {
@@ -2452,16 +2527,16 @@ function JobLogDescription() {
                       }}>
                         <span style={{
                           padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
-                          background: c.changeType === 'replace' ? '#fff5f6' : '#f0fff8',
-                          color: c.changeType === 'replace' ? '#d7263d' : '#1d814c',
+                          background: c.changeType === 'replace' ? '#fff5f6' : c.changeType === 'remove' ? '#fff7e6' : '#f0fff8',
+                          color: c.changeType === 'replace' ? '#d7263d' : c.changeType === 'remove' ? '#b26a00' : '#1d814c',
                         }}>{c.changeType}</span>
                         <span style={{ color: '#7a7a8c', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>
                           {c.fieldType === 'team' ? 'Team' : 'Inspector'}
                         </span>
                         <span style={{ flex: 1, fontWeight: 600 }}>
-                          {c.changeType === 'replace' ? `${c.oldValue} → ${c.newValue}` : `+ ${c.newValue}`}
+                          {c.changeType === 'replace' ? `${c.oldValue} → ${c.newValue}` : c.changeType === 'remove' ? `− ${c.oldValue}` : `+ ${c.newValue}`}
                         </span>
-                        <span style={{ color: '#595966' }}>{c.startDate} – {c.endDate}</span>
+                        <span style={{ color: '#595966' }}>{c.changeType === 'remove' ? `on the job ${c.startDate} – ${c.endDate}` : `${c.startDate} – ${c.endDate}`}</span>
                         {c.reason && <InfoTooltip text={c.reason} />}
                         {isActiveReplacement && canEdit('operations') && (
                           <button type="button" className="ghost-btn" onClick={() => endReplacementNow(c)}
