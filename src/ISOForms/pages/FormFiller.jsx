@@ -10,6 +10,7 @@ import { resolveSignerName, stampSignature } from '../utils/signature'
 import { fileToDataUrl } from '../utils/fileToDataUrl'
 import SearchableSelect from '../../components/SearchableSelect'
 import { showToast } from '../../components/Toast'
+import { getActorId, getActorName } from '../../utils/actorIdentity'
 
 // One column per ~340px of available width, so the same markup is a single
 // column on a laptop-narrow pane and four across on a wide monitor.
@@ -253,8 +254,8 @@ function FormFiller() {
       return
     }
 
-    const createdBy = resolvedEmployeeId || localStorage.getItem('userEmail') || ''
-    const createdByName = localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || ''
+    const createdBy = resolvedEmployeeId || getActorId()
+    const createdByName = getActorName()
     try {
       const formData = new FormData()
       formData.append('template_id', template.id)
@@ -287,8 +288,8 @@ function FormFiller() {
         related_employee_id: primary.approver_employee_id || '',
         related_employee_name: primary.approver_employee_name || '',
         approvals: approvals.map(a => ({ ...a, status: 'pending' })),
-        created_by: resolvedEmployeeId || localStorage.getItem('userEmail') || '',
-        created_by_name: localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'You (demo)',
+        created_by: resolvedEmployeeId || getActorId(),
+        created_by_name: getActorName(),
         status: 'pending',
         remarks: '',
         attachments: JSON.stringify(storedAttachments),

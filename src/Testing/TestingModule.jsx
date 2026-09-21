@@ -40,6 +40,7 @@ import QuestionsAdminPage from './admin/QuestionsAdminPage';
 import ptisLogo from './assets/ptisLogo.png';
 import './LoginPage.css';
 import { showToast as showSiteToast } from '../components/Toast';
+import { getActorId, getActorName } from '../utils/actorIdentity';
 import { API_BASE_URL as HOST_API_BASE_URL } from '../config/api';
 import PaginationBar from '../components/PaginationBar';
 import AuditLogView from '../components/AuditLogView';
@@ -1293,8 +1294,8 @@ const TestingModule = () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ID, Name,
-        actorId: localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || '',
-        actorName: localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin'
+        actorId: getActorId(),
+        actorName: getActorName()
       })
     });
     if (!resp.ok) throw new Error(await resp.text());
@@ -1302,8 +1303,8 @@ const TestingModule = () => {
   };
 
   const deleteEmployee = async (ID) => {
-    const actorId = localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || '';
-    const actorName = localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin';
+    const actorId = getActorId();
+    const actorName = getActorName();
     const resp = await fetch(`${API_BASE_URL}/api/employees/legacy/${encodeURIComponent(ID)}?actorId=${encodeURIComponent(actorId)}&actorName=${encodeURIComponent(actorName)}`, {
       method: 'DELETE'
     });
@@ -2597,8 +2598,8 @@ const TestingModule = () => {
         DATE: composedDateTime,
         answers: {},
         questions: [],
-        actorId: localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || '',
-        actorName: localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin'
+        actorId: getActorId(),
+        actorName: getActorName()
       };
 
       if (resultEditMode && resultEditTarget?.DATE) {
@@ -2979,8 +2980,8 @@ const TestingModule = () => {
             if (extras.photo) {
               formData.append('photo', extras.photo);
             }
-            formData.append('actorId', localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || '');
-            formData.append('actorName', localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin');
+            formData.append('actorId', getActorId());
+            formData.append('actorName', getActorName());
 
             // Call backend API to generate certificate
             const response = await fetch(`${API_BASE_URL}/api/certificates/legacy/generate`, {
@@ -4854,8 +4855,8 @@ const TestingModule = () => {
                             const handleDeleteResult = async () => {
                               if (!window.confirm(`Are you sure you want to delete this test result for ${result.NAME}?`)) return;
                               try {
-                                const actorId = localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || '';
-                                const actorName = localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin';
+                                const actorId = getActorId();
+                                const actorName = getActorName();
                                 const response = await fetch(
                                   `${API_BASE_URL}/api/test-results/legacy/${encodeURIComponent(result.ID)}/${encodeURIComponent(result.STANDARD)}/${encodeURIComponent(result.DATE)}?actorId=${encodeURIComponent(actorId)}&actorName=${encodeURIComponent(actorName)}`,
                                   { method: 'DELETE' }
@@ -6229,8 +6230,8 @@ const TestingModule = () => {
         DATE: editMode ? currentResult.DATE : getPakistanDateTime(),
         answers: {},
         questions: [],
-        actorId: localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || '',
-        actorName: localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin'
+        actorId: getActorId(),
+        actorName: getActorName()
       };
 
       try {
@@ -6302,8 +6303,8 @@ const TestingModule = () => {
       }
 
       try {
-        const actorId = localStorage.getItem('userEmployeeId') || localStorage.getItem('userEmail') || '';
-        const actorName = localStorage.getItem('userFullName') || localStorage.getItem('userEmail') || 'Admin';
+        const actorId = getActorId();
+        const actorName = getActorName();
         const response = await fetch(
           `${API_BASE_URL}/api/test-results/legacy/${result.ID}/${encodeURIComponent(result.STANDARD)}/${encodeURIComponent(result.DATE)}?actorId=${encodeURIComponent(actorId)}&actorName=${encodeURIComponent(actorName)}`,
           { method: 'DELETE' }

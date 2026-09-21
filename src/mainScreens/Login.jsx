@@ -43,6 +43,16 @@ function Login() {
     if (loginType === "admin") {
       if (formData.password === "admin123") {
         setShowError(false);
+        // A previous employee login on this same browser (or an admin who
+        // signed in as a specific person to test something) leaves their
+        // identity in localStorage. Every audit log entry (JLR, ISO Forms,
+        // etc.) reads that identity as "who did this" — left uncleared, it
+        // silently attributes an admin's actions to whoever logged in last,
+        // instead of "Admin".
+        localStorage.removeItem('userEmail');
+        localStorage.removeItem('userEmployeeId');
+        localStorage.removeItem('userFullName');
+        localStorage.removeItem('userPermissions');
         localStorage.setItem('userType', 'admin');
         localStorage.setItem('adminPassword', formData.password);
         setIsLoading(false);
