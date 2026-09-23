@@ -1,11 +1,12 @@
-import React, { useEffect, useState } from 'react'
+import React, { forwardRef, useEffect, useImperativeHandle, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Search, Calendar, X, Download } from 'lucide-react'
+import { Search, Calendar, Download } from 'lucide-react'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import * as XLSX from 'xlsx'
 import { API_ENDPOINTS } from '../config/api'
 import { showToast } from './Toast'
+import ClearFilterButton from './ClearFilterButton'
 import PaginationBar from './PaginationBar'
 import StyledSelect from './StyledSelect'
 import SearchableSelect from './SearchableSelect'
@@ -59,7 +60,16 @@ const ENTITY_LABEL = {
   certificate: 'Certificate', employee: 'Employee',
 }
 
-function AuditLogView({ module, title, subtitle, actions, backTo, padded = true, showHeader = true }) {
+// `exportRef` and `onExportingChange` let a caller that renders its own page
+// header (Testing module — it draws its own "Audit Log" title bar outside
+// this component) put the Export PDF/Excel buttons in THAT header's action
+// row instead of the extra standalone row this component would otherwise
+// render above the filters. Pass `hideOwnExportButtons` in that case so the
+// buttons aren't shown twice.
+const AuditLogView = forwardRef(function AuditLogView(
+  { module, title, subtitle, actions, backTo, padded = true, showHeader = true, hideOwnExportButtons = false, onExportingChange },
+  exportRef
+) {
   const [rows, setRows] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -119,6 +129,8 @@ function AuditLogView({ module, title, subtitle, actions, backTo, padded = true,
   const clearFilters = () => { setAction(''); setActorName(''); setDateFrom(''); setDateTo(''); setSearch(''); setPage(1) }
 
   const [exporting, setExporting] = useState('')
+
+  useEffect(() => { onExportingChange?.(exporting) }, [exporting]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Export downloads every row matching the current filters, not just the
   // page on screen — a report is only useful if it's complete. The list
@@ -201,7 +213,11 @@ function AuditLogView({ module, title, subtitle, actions, backTo, padded = true,
     }
   }
 
-  const exportButtons = (
+  // Exposed so a caller with `hideOwnExportButtons` can trigger these from
+  // buttons it renders in its own header instead.
+  useImperativeHandle(exportRef, () => ({ exportPdf: handleExportPdf, exportExcel: handleExportExcel }))
+
+  const exportButtons = hideOwnExportButtons ? null : (
     <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
       <button
         type="button"
@@ -242,7 +258,7 @@ function AuditLogView({ module, title, subtitle, actions, backTo, padded = true,
           <div style={{ marginBottom: 24 }} />
         </>
       ) : (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>{exportButtons}</div>
+        exportButtons && <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>{exportButtons}</div>
       )}
 
       <div className="panel" style={{ padding: 20, marginBottom: 20, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -277,11 +293,7 @@ function AuditLogView({ module, title, subtitle, actions, backTo, padded = true,
           <span style={{ color: '#9a9aaa' }}>to</span>
           <StyledDatePicker value={dateTo} onChange={onDateToChange} min={dateFrom || undefined} style={{ ...inputStyle, padding: '10px 10px' }} />
         </div>
-        {hasActiveFilters && (
-          <button type="button" className="ghost-btn" onClick={clearFilters} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-            <X size={14} /> Clear
-          </button>
-        )}
+        <ClearFilterButton visible={hasActiveFilters} onClick={clearFilters} />
       </div>
 
       {error && (
@@ -339,6 +351,6 @@ function AuditLogView({ module, title, subtitle, actions, backTo, padded = true,
       </article>
     </div>
   )
-}
+})
 
 export default AuditLogView

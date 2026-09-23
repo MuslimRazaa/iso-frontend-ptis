@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Search, Calendar, X, Trash2, Pencil } from 'lucide-react'
+import { Search, Calendar, Trash2, Pencil } from 'lucide-react'
 import { API_ENDPOINTS } from '../../config/api'
 import { getCurrentEmployeeId } from '../utils/currentEmployee'
 import { getOfflineEntries, deleteOfflineEntry } from '../utils/offlineStore'
 import PaginationBar from '../../components/PaginationBar'
+import ClearFilterButton from '../../components/ClearFilterButton'
 import StyledSelect from '../../components/StyledSelect'
 import SearchableSelect from '../../components/SearchableSelect'
 import StyledDatePicker from '../../components/StyledDatePicker'
@@ -284,12 +285,13 @@ function FormEntriesList() {
         </div>
 
         {/* Template / Form name */}
-        <StyledSelect
-          style={{ ...inputStyle, minWidth: 160, cursor: 'pointer' }}
+        <SearchableSelect
+          style={{ ...inputStyle, minWidth: 160, cursor: 'text' }}
           value={templateFilter}
           onChange={onTemplateFilterChange}
           options={templateOptions}
           emptyOptionLabel="All Forms"
+          placeholder="Type to search…"
         />
 
         {/* Status */}
@@ -361,31 +363,7 @@ function FormEntriesList() {
         )}
 
         {/* Clear */}
-        {hasActiveFilters && (
-          <button
-            type="button"
-            onClick={clearFilters}
-            style={{
-              background: 'transparent', border: '1px solid #e0e0e6',
-              color: '#595966', padding: '10px 16px', borderRadius: 16,
-              fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap',
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              transition: 'all 0.2s ease',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.borderColor = '#d7263d'
-              e.currentTarget.style.color = '#d7263d'
-              e.currentTarget.style.transform = 'translateY(-2px)'
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.borderColor = '#e0e0e6'
-              e.currentTarget.style.color = '#595966'
-              e.currentTarget.style.transform = 'translateY(0)'
-            }}
-          >
-            <X size={14} /> Clear
-          </button>
-        )}
+        <ClearFilterButton visible={hasActiveFilters} onClick={clearFilters} />
       </div>
 
       {offline && (

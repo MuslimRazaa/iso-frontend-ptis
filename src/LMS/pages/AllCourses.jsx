@@ -3,6 +3,7 @@ import axios from 'axios'
 import { Pencil, Trash2, Search } from 'lucide-react'
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api'
 import PaginationBar from '../../components/PaginationBar'
+import ClearFilterButton from '../../components/ClearFilterButton'
 import StyledSelect from '../../components/StyledSelect'
 import StyledDatePicker from '../../components/StyledDatePicker'
 import { showToast } from '../../components/Toast'
@@ -315,29 +316,7 @@ function AllCourses() {
           <StyledDatePicker value={dateTo} onChange={onDateToChange} min={dateFrom || undefined}
             style={{ padding: '10px 10px', borderRadius: 10, border: '1px solid #e2e2ea', fontSize: 14, background: '#fff', cursor: 'pointer' }} />
         </div>
-        {hasActiveFilters && (
-          <button
-            type="button"
-            onClick={clearFilters}
-            style={{
-              background: 'transparent', border: '1px solid #e2e2ea', color: '#595966',
-              padding: '10px 16px', borderRadius: 10, fontSize: 14, cursor: 'pointer',
-              whiteSpace: 'nowrap', transition: 'all 0.2s ease', flexShrink: 0,
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.borderColor = '#d7263d'
-              e.currentTarget.style.color = '#d7263d'
-              e.currentTarget.style.transform = 'translateY(-2px)'
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.borderColor = '#e2e2ea'
-              e.currentTarget.style.color = '#595966'
-              e.currentTarget.style.transform = 'translateY(0)'
-            }}
-          >
-            Clear
-          </button>
-        )}
+        <ClearFilterButton visible={hasActiveFilters} onClick={clearFilters} />
         <span style={{ color: '#9a9aaa', fontSize: 13, width: '100%' }}>
           {filteredCourses.length} of {courses.length} courses
         </span>

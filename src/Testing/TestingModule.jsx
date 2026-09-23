@@ -43,6 +43,7 @@ import { showToast as showSiteToast } from '../components/Toast';
 import { getActorId, getActorName } from '../utils/actorIdentity';
 import { API_BASE_URL as HOST_API_BASE_URL } from '../config/api';
 import PaginationBar from '../components/PaginationBar';
+import ClearFilterButton from '../components/ClearFilterButton';
 import AuditLogView from '../components/AuditLogView';
 import StyledSelect from '../components/StyledSelect';
 import SearchableSelect from '../components/SearchableSelect';
@@ -451,7 +452,12 @@ const TestingModule = () => {
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [activeLoginForm, setActiveLoginForm] = useState('employee'); // 'employee' or 'admin'
   const [adminActiveTab, setAdminActiveTab] = useState('dashboard'); // 'dashboard', 'results', 'standards', 'questions', 'employees'
-  
+  // Audit Log's Export PDF/Excel buttons live in the page's own header (next
+  // to the title) rather than in their own row inside AuditLogView, so they
+  // are triggered through this ref instead of AuditLogView rendering them itself.
+  const auditExportRef = useRef(null);
+  const [auditExporting, setAuditExporting] = useState('');
+
   // --- Add/Update Employee states (Admin)
   const [newEmpId, setNewEmpId] = useState('');
   const [newEmpName, setNewEmpName] = useState('');
@@ -2853,8 +2859,13 @@ const TestingModule = () => {
         // added/deleted practicals reflect immediately).
         const results = resultsRef.current;
         const standards = standardsRef.current;
-        const [searchType, setSearchType] = useState('id'); // 'id' or 'name'
-        const [searchQuery, setSearchQuery] = useState('');
+        // A free-text box searches everything at once; the two dropdowns are
+        // for narrowing to one specific person once you know their ID/name.
+        const [generalSearch, setGeneralSearch] = useState('');
+        const [filterEmpId, setFilterEmpId] = useState('');
+        const [filterEmpName, setFilterEmpName] = useState('');
+        const empIdOptions = useMemo(() => [...new Set(results.map(r => norm(r.ID)).filter(Boolean))].sort(), [results]);
+        const empNameOptions = useMemo(() => [...new Set(results.map(r => norm(r.NAME)).filter(Boolean))].sort(), [results]);
         const [certificateCurrentPage, setCertificateCurrentPage] = useState(1);
         const [certTypes, setCertTypes] = useState({}); // key: stable certificate row id, value: 'New' or 'Recertification'
         const [previousCertNumbers, setPreviousCertNumbers] = useState({}); // key: stable certificate row id, value: manual previous certificate no
@@ -3069,16 +3080,19 @@ const TestingModule = () => {
           return recordedAt(candidate) >= recordedAt(current);
         };
         
-        if (searchQuery) {
-          if (searchType === 'id') {
-            passed = passed.filter(r => 
-              norm(r.ID).toLowerCase().includes(searchQuery.toLowerCase())
-            );
-          } else {
-            passed = passed.filter(r => 
-              norm(r.NAME).toLowerCase().includes(searchQuery.toLowerCase())
-            );
-          }
+        if (generalSearch) {
+          const q = generalSearch.toLowerCase();
+          passed = passed.filter(r =>
+            norm(r.ID).toLowerCase().includes(q) ||
+            norm(r.NAME).toLowerCase().includes(q) ||
+            norm(r.STANDARD).toLowerCase().includes(q)
+          );
+        }
+        if (filterEmpId) {
+          passed = passed.filter(r => norm(r.ID) === filterEmpId);
+        }
+        if (filterEmpName) {
+          passed = passed.filter(r => norm(r.NAME) === filterEmpName);
         }
         
         const normalizeCombinedBaseType = (value) => {
@@ -3224,7 +3238,7 @@ const TestingModule = () => {
           .map((r, index) => ({ r, index, at: toSortableTimestamp(r?.DATE) }))
           .sort((a, b) => b.at - a.at || a.index - b.index)
           .map(entry => entry.r);
-      }, [searchType, searchQuery, isPass, norm, standards, results]);
+      }, [generalSearch, filterEmpId, filterEmpName, isPass, norm, standards, results]);
 
       const totalCertificatePages = Math.ceil(filteredResults.length / certificateItemsPerPage);
       const paginatedCertificateResults = filteredResults.slice(
@@ -3237,7 +3251,7 @@ const TestingModule = () => {
 
       useEffect(() => {
         setCertificateCurrentPage(1);
-      }, [searchType, searchQuery]);
+      }, [generalSearch, filterEmpId, filterEmpName]);
 
       useEffect(() => {
         if (totalCertificatePages > 0 && certificateCurrentPage > totalCertificatePages) {
@@ -3281,42 +3295,12 @@ const TestingModule = () => {
               alignItems: 'center',
               flexWrap: 'wrap'
             }}>
-            <div style={{ minWidth: isMobile ? '100%' : '180px' }}>
-              <StyledSelect
-                value={searchType}
-                onChange={setSearchType}
-                options={[]}
-                extraOptions={[{ value: 'id', label: 'Employee ID' }, { value: 'name', label: 'Employee Name' }]}
-                style={{
-                  width: '100%',
-                  padding: '10px 15px',
-                  border: `1px solid ${theme.border.default}`,
-                  borderRadius: '16px',
-                  fontSize: '0.95em',
-                  boxSizing: 'border-box',
-                  outline: 'none',
-                  backgroundColor: theme.bg.input,
-                  color: theme.text.primary,
-                  cursor: 'pointer'
-                }}
-              />
-            </div>
-            <div style={{ flex: '1', minWidth: isMobile ? '100%' : '250px' }}>
+            <div style={{ flex: '1', minWidth: isMobile ? '100%' : '220px' }}>
               <input
                 type="text"
-                placeholder={`Search by ${searchType === 'id' ? 'Employee ID' : 'Employee Name'}...`}
-                value={searchQuery}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (searchType === 'id') {
-                    // Only allow numbers for Employee ID
-                    if (value === '' || /^[0-9]+$/.test(value)) {
-                      setSearchQuery(value);
-                    }
-                  } else {
-                    setSearchQuery(value);
-                  }
-                }}
+                placeholder="Search ID, name or standard…"
+                value={generalSearch}
+                onChange={(e) => setGeneralSearch(e.target.value)}
                 style={{
                   width: '100%',
                   padding: '10px 15px',
@@ -3330,43 +3314,57 @@ const TestingModule = () => {
                 }}
               />
             </div>
-            <button
+            <div style={{ minWidth: isMobile ? '100%' : '180px' }}>
+              <SearchableSelect
+                value={filterEmpId}
+                onChange={setFilterEmpId}
+                options={empIdOptions}
+                emptyOptionLabel="All Employee IDs"
+                placeholder="Type to search ID…"
+                style={{
+                  width: '100%',
+                  padding: '10px 15px',
+                  border: `1px solid ${theme.border.default}`,
+                  borderRadius: '16px',
+                  fontSize: '0.95em',
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                  backgroundColor: theme.bg.input,
+                  color: theme.text.primary,
+                  cursor: 'text'
+                }}
+              />
+            </div>
+            <div style={{ minWidth: isMobile ? '100%' : '200px' }}>
+              <SearchableSelect
+                value={filterEmpName}
+                onChange={setFilterEmpName}
+                options={empNameOptions}
+                emptyOptionLabel="All Employee Names"
+                placeholder="Type to search name…"
+                style={{
+                  width: '100%',
+                  padding: '10px 15px',
+                  border: `1px solid ${theme.border.default}`,
+                  borderRadius: '16px',
+                  fontSize: '0.95em',
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                  backgroundColor: theme.bg.input,
+                  color: theme.text.primary,
+                  cursor: 'text'
+                }}
+              />
+            </div>
+            <ClearFilterButton
+              visible={Boolean(generalSearch || filterEmpId || filterEmpName)}
               onClick={() => {
-                setSearchQuery('');
+                setGeneralSearch('');
+                setFilterEmpId('');
+                setFilterEmpName('');
                 setCertificateCurrentPage(1);
               }}
-              disabled={!searchQuery}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '12px 24px',
-                backgroundColor: colors.inputBg,
-                color: colors.textMuted,
-                border: `2px solid ${colors.inputBorder}`,
-                borderRadius: '28px',
-                cursor: searchQuery ? 'pointer' : 'not-allowed',
-                fontSize: '0.95em',
-                fontWeight: '500',
-                opacity: searchQuery ? 1 : 0.5,
-                transition: 'all 0.2s ease'
-              }}
-              onMouseOver={(e) => {
-                if (searchQuery) e.currentTarget.classList.add('grad-hover-outline');
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.classList.remove('grad-hover-outline');
-              }}
-            >
-              <svg className="grad-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6l-1 14H6L5 6"></path>
-                <path d="M10 11v6"></path>
-                <path d="M14 11v6"></path>
-                <path d="M9 6V4h6v2"></path>
-              </svg>
-              <span className="grad-label">Clear Filter</span>
-            </button>
+            />
             </div>
           </article>
 
@@ -3376,7 +3374,7 @@ const TestingModule = () => {
               <div style={{ padding: '40px', textAlign: 'center' }}>
                 <AlertCircle size={48} color="#95a5a6" style={{ marginBottom: '15px' }} />
                 <p style={{ color: '#7f8c8d', fontSize: '1.1em' }}>
-                  {searchQuery ? 'No matching candidates found' : 'No passed candidates available'}
+                  {(generalSearch || filterEmpId || filterEmpName) ? 'No matching candidates found' : 'No passed candidates available'}
                 </p>
               </div>
             ) : (
@@ -3384,6 +3382,7 @@ const TestingModule = () => {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #ececf0' }}>
+                      <th style={{ padding: '18px 20px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>S.No</th>
                       <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Employee ID</th>
                       <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Name</th>
                       <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Standard</th>
@@ -3397,6 +3396,9 @@ const TestingModule = () => {
                     {paginatedCertificateResults.map((result, index) => {
                       const rowKey = getCertificateRowKey(result);
                       const rowRenderKey = `${rowKey}|${index}`;
+                      // Newest row leads the list, so it should carry the
+                      // highest number — counting down to 1 at the oldest.
+                      const serialNo = filteredResults.length - ((certificateCurrentPage - 1) * certificateItemsPerPage + index);
                       const selectedCertType = certTypes[rowKey] || 'New';
                       const previousCertNo = previousCertNumbers[rowKey] || '';
 
@@ -3408,12 +3410,13 @@ const TestingModule = () => {
                           backgroundColor: isDarkMode ? colors.tableRowBg : 'transparent'
                         }}
                       >
+                        <td style={{ padding: '16px 20px', color: colors.textMuted, textAlign: 'center' }}>{serialNo}</td>
                         <td style={{ padding: '16px 20px', color: colors.text, fontWeight: '500' }}>{norm(result.ID)}</td>
                         <td style={{ padding: '16px 20px', color: colors.text }}>{norm(result.NAME)}</td>
                         <td style={{ padding: '16px 20px', color: colors.text }}>{norm(result.STANDARD)}</td>
                         <td style={{ padding: '16px 20px', textAlign: 'center' }}>
-                          <span style={{ 
-                            backgroundColor: '#e8f5e9', 
+                          <span style={{
+                            backgroundColor: '#e8f5e9',
                             color: '#27ae60', 
                             padding: '4px 12px', 
                             borderRadius: '8px',
@@ -3897,6 +3900,28 @@ const TestingModule = () => {
               )}
             </div>
             <div className="lms-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {adminActiveTab === 'auditlog' && (
+                <>
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={() => auditExportRef.current?.exportPdf()}
+                    disabled={Boolean(auditExporting)}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <Download size={14} /> {auditExporting === 'pdf' ? 'Exporting…' : 'Export PDF'}
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={() => auditExportRef.current?.exportExcel()}
+                    disabled={Boolean(auditExporting)}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <Download size={14} /> {auditExporting === 'excel' ? 'Exporting…' : 'Export Excel'}
+                  </button>
+                </>
+              )}
               {!(adminActiveTab === 'dashboard' || adminActiveTab === 'certificates' || adminActiveTab === 'auditlog') && (
                 <button
                   style={{
@@ -4599,42 +4624,10 @@ const TestingModule = () => {
                         >
                           <Download size={16} style={{ color: 'inherit' }} /> Export to CSV
                         </button>
-                        <button 
+                        <ClearFilterButton
+                          visible={Boolean(filterEmpId || filterEmpName || filterStatus !== 'All' || filterStandard !== 'All' || filterScoreRange !== 'All' || filterDateFrom || filterDateTo)}
                           onClick={clearFilters}
-                          disabled={!filterEmpId && !filterEmpName && filterStatus === 'All' && filterStandard === 'All' && filterScoreRange === 'All' && !filterDateFrom && !filterDateTo}
-                          style={{ 
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            padding: '12px 24px',
-                            backgroundColor: colors.inputBg,
-                            color: colors.textMuted,
-                            border: `2px solid ${colors.inputBorder}`,
-                            borderRadius: '28px',
-                            cursor: (filterEmpId || filterEmpName || filterStatus !== 'All' || filterStandard !== 'All' || filterScoreRange !== 'All' || filterDateFrom || filterDateTo) ? 'pointer' : 'not-allowed',
-                            fontSize: '0.95em',
-                            fontWeight: '500',
-                            transition: 'all 0.2s ease',
-                            opacity: (filterEmpId || filterEmpName || filterStatus !== 'All' || filterStandard !== 'All' || filterScoreRange !== 'All' || filterDateFrom || filterDateTo) ? 1 : 0.5
-                          }}
-                          onMouseOver={e => {
-                            if (filterEmpId || filterEmpName || filterStatus !== 'All' || filterStandard !== 'All' || filterScoreRange !== 'All' || filterDateFrom || filterDateTo) {
-                              e.currentTarget.classList.add('grad-hover-outline');
-                            }
-                          }}
-                          onMouseOut={e => {
-                            e.currentTarget.classList.remove('grad-hover-outline');
-                          }}
-                        >
-                          <svg className="grad-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                            <polyline points="3 6 5 6 21 6"></polyline>
-                            <path d="M19 6l-1 14H6L5 6"></path>
-                            <path d="M10 11v6"></path>
-                            <path d="M14 11v6"></path>
-                            <path d="M9 6V4h6v2"></path>
-                          </svg>
-                          <span className="grad-label">Clear Filter</span>
-                        </button>
+                        />
                       </div>
                     </div>
                   </div>
@@ -5796,10 +5789,13 @@ const TestingModule = () => {
             {/* Audit Log Tab */}
             {adminActiveTab === 'auditlog' && (
               <AuditLogView
+                ref={auditExportRef}
                 module="testing"
                 actions={['create', 'update', 'delete']}
                 padded={false}
                 showHeader={false}
+                hideOwnExportButtons
+                onExportingChange={setAuditExporting}
               />
             )}
           </section>
@@ -5819,6 +5815,9 @@ const TestingModule = () => {
     const isDarkMode = isDarkModeRef.current;
     const isMobile = isMobileRef.current;
     const colors = colorsRef.current;
+    // Local — this page isn't nested inside AdminPageInner (unlike
+    // Certificates/Standards), so it doesn't inherit that component's `norm`.
+    const norm = useCallback((v) => (v ?? '').toString().trim(), []);
     const [showModal, setShowModal] = useState(false);
     const [editMode, setEditMode] = useState(false);
     const [currentResult, setCurrentResult] = useState(null);
@@ -5834,8 +5833,13 @@ const TestingModule = () => {
       passingCriteria: '75'
     });
     const [loading, setLoading] = useState(false);
-    const [searchType, setSearchType] = useState('id'); // 'id' or 'name'
-    const [searchQuery, setSearchQuery] = useState('');
+    // A free-text box searches everything at once; the two dropdowns are
+    // for narrowing to one specific person once you know their ID/name.
+    const [generalSearch, setGeneralSearch] = useState('');
+    const [filterEmpId, setFilterEmpId] = useState('');
+    const [filterEmpName, setFilterEmpName] = useState('');
+    const empIdOptions = useMemo(() => [...new Set(results.map(r => norm(r.ID)).filter(Boolean))].sort(), [results]);
+    const empNameOptions = useMemo(() => [...new Set(results.map(r => norm(r.NAME)).filter(Boolean))].sort(), [results]);
     const [attachmentFile, setAttachmentFile] = useState(null);
     const attachmentInputRef = useRef(null);
     const [practicalActiveTable, setPracticalActiveTable] = useState('results');
@@ -6039,23 +6043,55 @@ const TestingModule = () => {
     }, [standards, normalizePracticalBaseType, isPracticalRequiredFlag]);
 
     const practicalResults = useMemo(() => {
-      const allPracticalResults = results.filter(
+      let allPracticalResults = results.filter(
         (r) => r.STANDARD && r.STANDARD.includes('(Practical)')
       );
 
-      if (!searchQuery) return allPracticalResults;
-
-      const query = searchQuery.toLowerCase();
-      if (searchType === 'id') {
-        return allPracticalResults.filter((result) =>
-          String(result.ID || '').toLowerCase().includes(query)
+      if (generalSearch) {
+        const q = generalSearch.toLowerCase();
+        allPracticalResults = allPracticalResults.filter((result) =>
+          String(result.ID || '').toLowerCase().includes(q) ||
+          String(result.NAME || '').toLowerCase().includes(q) ||
+          String(result.STANDARD || '').toLowerCase().includes(q)
         );
       }
+      if (filterEmpId) {
+        allPracticalResults = allPracticalResults.filter((result) => norm(result.ID) === filterEmpId);
+      }
+      if (filterEmpName) {
+        allPracticalResults = allPracticalResults.filter((result) => norm(result.NAME) === filterEmpName);
+      }
 
-      return allPracticalResults.filter((result) =>
-        String(result.NAME || '').toLowerCase().includes(query)
-      );
-    }, [results, searchQuery, searchType]);
+      // Latest first — the most recently recorded practical result leads,
+      // same-day rows settled by row_id (the order they were recorded in).
+      const toSortableTimestamp = (value) => {
+        const raw = norm(value);
+        if (!raw) return Number.NEGATIVE_INFINITY;
+        const dateOnly = raw.split(' ')[0];
+        let parsedDate = null;
+        if (dateOnly.includes('/')) {
+          const parts = dateOnly.split('/');
+          if (parts.length === 3) parsedDate = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+        } else if (dateOnly.includes('-')) {
+          const parts = dateOnly.split('-');
+          if (parts.length === 3) {
+            parsedDate = parts[0].length === 4
+              ? new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
+              : new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+          }
+        }
+        if (!parsedDate || Number.isNaN(parsedDate.getTime())) {
+          const fallback = new Date(raw);
+          return Number.isNaN(fallback.getTime()) ? Number.NEGATIVE_INFINITY : fallback.getTime();
+        }
+        return parsedDate.getTime();
+      };
+
+      return allPracticalResults
+        .map((r, index) => ({ r, index, at: toSortableTimestamp(r?.DATE) }))
+        .sort((a, b) => b.at - a.at || (Number(b.r?.row_id) || 0) - (Number(a.r?.row_id) || 0) || a.index - b.index)
+        .map(entry => entry.r);
+    }, [results, generalSearch, filterEmpId, filterEmpName, norm]);
 
     const eligibleEmployees = useMemo(() => {
       const grouped = {};
@@ -6189,7 +6225,7 @@ const TestingModule = () => {
 
     useEffect(() => {
       setPracticalCurrentPage(1);
-    }, [searchQuery, searchType]);
+    }, [generalSearch, filterEmpId, filterEmpName]);
 
     useEffect(() => {
       setEligibleCurrentPage(1);
@@ -6422,47 +6458,18 @@ const TestingModule = () => {
             alignItems: 'center',
             flexWrap: 'wrap'
           }}>
-            <div style={{ minWidth: isMobile ? '100%' : '180px' }}>
-              <StyledSelect
-                value={searchType}
-                onChange={setSearchType}
-                options={[]}
-                extraOptions={[{ value: 'id', label: 'Employee ID' }, { value: 'name', label: 'Employee Name' }]}
-                style={{
-                  width: '100%',
-                  padding: '10px 15px',
-                  border: `2px solid ${colors.inputBorder}`,
-                  borderRadius: '16px',
-                    fontSize: '0.95em',
-                  boxSizing: 'border-box',
-                  outline: 'none',
-                  backgroundColor: colors.inputBg,
-                  color: colors.text,
-                  cursor: 'pointer'
-                }}
-              />
-            </div>
-            <div style={{ flex: '1', minWidth: isMobile ? '100%' : '250px' }}>
+            <div style={{ flex: '1', minWidth: isMobile ? '100%' : '220px' }}>
               <input
                 type="text"
-                placeholder={`Search by ${searchType === 'id' ? 'Employee ID' : 'Employee Name'}...`}
-                value={searchQuery}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (searchType === 'id') {
-                    if (value === '' || /^[0-9]+$/.test(value)) {
-                      setSearchQuery(value);
-                    }
-                  } else {
-                    setSearchQuery(value);
-                  }
-                }}
+                placeholder="Search ID, name or standard…"
+                value={generalSearch}
+                onChange={(e) => setGeneralSearch(e.target.value)}
                 style={{
                   width: '100%',
                   padding: '10px 15px',
                   border: `2px solid ${colors.inputBorder}`,
                   borderRadius: '16px',
-                    fontSize: '0.95em',
+                  fontSize: '0.95em',
                   boxSizing: 'border-box',
                   outline: 'none',
                   backgroundColor: colors.inputBg,
@@ -6470,40 +6477,52 @@ const TestingModule = () => {
                 }}
               />
             </div>
-            <button
-              onClick={() => setSearchQuery('')}
-              disabled={!searchQuery}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '12px 24px',
-                backgroundColor: colors.inputBg,
-                color: colors.textMuted,
-                border: `2px solid ${colors.inputBorder}`,
-                borderRadius: '28px',
-                cursor: searchQuery ? 'pointer' : 'not-allowed',
-                fontSize: '0.95em',
-                fontWeight: '500',
-                transition: 'all 0.2s ease',
-                opacity: searchQuery ? 1 : 0.5
-              }}
-              onMouseOver={(e) => {
-                if (searchQuery) e.currentTarget.classList.add('grad-hover-outline');
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.classList.remove('grad-hover-outline');
-              }}
-            >
-              <svg className="grad-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6l-1 14H6L5 6"></path>
-                <path d="M10 11v6"></path>
-                <path d="M14 11v6"></path>
-                <path d="M9 6V4h6v2"></path>
-              </svg>
-              <span className="grad-label">Clear Filter</span>
-            </button>
+            <div style={{ minWidth: isMobile ? '100%' : '180px' }}>
+              <SearchableSelect
+                value={filterEmpId}
+                onChange={setFilterEmpId}
+                options={empIdOptions}
+                emptyOptionLabel="All Employee IDs"
+                placeholder="Type to search ID…"
+                style={{
+                  width: '100%',
+                  padding: '10px 15px',
+                  border: `2px solid ${colors.inputBorder}`,
+                  borderRadius: '16px',
+                  fontSize: '0.95em',
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                  backgroundColor: colors.inputBg,
+                  color: colors.text,
+                  cursor: 'text'
+                }}
+              />
+            </div>
+            <div style={{ minWidth: isMobile ? '100%' : '200px' }}>
+              <SearchableSelect
+                value={filterEmpName}
+                onChange={setFilterEmpName}
+                options={empNameOptions}
+                emptyOptionLabel="All Employee Names"
+                placeholder="Type to search name…"
+                style={{
+                  width: '100%',
+                  padding: '10px 15px',
+                  border: `2px solid ${colors.inputBorder}`,
+                  borderRadius: '16px',
+                  fontSize: '0.95em',
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                  backgroundColor: colors.inputBg,
+                  color: colors.text,
+                  cursor: 'text'
+                }}
+              />
+            </div>
+            <ClearFilterButton
+              visible={Boolean(generalSearch || filterEmpId || filterEmpName)}
+              onClick={() => { setGeneralSearch(''); setFilterEmpId(''); setFilterEmpName(''); }}
+            />
           </div>
         </article>
 
@@ -6659,6 +6678,7 @@ const TestingModule = () => {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #ececf0' }}>
+                  <th style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>S.No</th>
                   <th style={{ padding: '16px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Employee ID</th>
                   <th style={{ padding: '16px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Name</th>
                   <th style={{ padding: '16px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Standard</th>
@@ -6671,6 +6691,9 @@ const TestingModule = () => {
               <tbody>
                 {paginatedPracticalResults.map((result, index) => {
                   const hasAttachment = String(result.HAS_PRACTICAL_ATTACHMENT) === '1' || result.HAS_PRACTICAL_ATTACHMENT === 1;
+                  // Newest row leads the list, so it should carry the
+                  // highest number — counting down to 1 at the oldest.
+                  const serialNo = practicalResults.length - ((practicalCurrentPage - 1) * practicalItemsPerPage + index);
 
                   return (
                     <tr key={index} style={{
@@ -6678,6 +6701,7 @@ const TestingModule = () => {
                       transition: 'background-color 0.2s',
                       backgroundColor: isDarkMode ? colors.tableRowBg : 'transparent'
                     }}>
+                      <td style={{ padding: '16px 20px', color: colors.textMuted, textAlign: 'center' }}>{serialNo}</td>
                       <td style={{ padding: '16px 20px', color: colors.text }}>{result.ID}</td>
                       <td style={{ padding: '16px 20px', color: colors.text }}>{result.NAME}</td>
                       <td style={{ padding: '16px 20px', color: colors.text }}>{result.STANDARD}</td>
@@ -6791,7 +6815,7 @@ const TestingModule = () => {
                 })}
                 {practicalResults.length === 0 && (
                   <tr>
-                    <td colSpan="7" style={{ padding: '40px', textAlign: 'center', color: colors.textMuted }}>
+                    <td colSpan="8" style={{ padding: '40px', textAlign: 'center', color: colors.textMuted }}>
                       No practical results found. Click "Add Practical Result" to add one.
                     </td>
                   </tr>
@@ -7564,43 +7588,15 @@ const TestingModule = () => {
                 }}
               />
             </div>
-            <button
-              onClick={() => {
-                setSearchQuery('');
-                setEmployeeCurrentPage(1);
-              }}
-              disabled={!searchQuery}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '12px 24px',
-                backgroundColor: colors.inputBg,
-                color: colors.textMuted,
-                border: `2px solid ${colors.inputBorder}`,
-                borderRadius: '28px',
-                cursor: searchQuery ? 'pointer' : 'not-allowed',
-                fontSize: '0.95em',
-                fontWeight: '500',
-                opacity: searchQuery ? 1 : 0.5,
-                transition: 'all 0.2s ease'
-              }}
-              onMouseOver={(e) => {
-                if (searchQuery) e.currentTarget.classList.add('grad-hover-outline');
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.classList.remove('grad-hover-outline');
-              }}
-            >
-              <svg className="grad-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6l-1 14H6L5 6"></path>
-                <path d="M10 11v6"></path>
-                <path d="M14 11v6"></path>
-                <path d="M9 6V4h6v2"></path>
-              </svg>
-              <span className="grad-label">Clear Filter</span>
-            </button>
+            {searchQuery && (
+              <ClearFilterButton
+                visible
+                onClick={() => {
+                  setSearchQuery('');
+                  setEmployeeCurrentPage(1);
+                }}
+              />
+            )}
             </div>
           </div>
 

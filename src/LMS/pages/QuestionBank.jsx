@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Upload, Loader2 } from 'lucide-react'
 import { API_ENDPOINTS } from '../../config/api'
 import SearchableSelect from '../../components/SearchableSelect'
+import ClearFilterButton from '../../components/ClearFilterButton'
 import { showToast } from '../../components/Toast'
 
 const formSelectStyle = {
@@ -432,7 +433,7 @@ function QuestionBank({ defaultTab = 'add' }) {
               </div>
             </header>
 
-            <div className="filter-section">
+            <div className="filter-section" style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
               <label>
                 <span>Filter by Standard</span>
                 <SearchableSelect
@@ -449,6 +450,7 @@ function QuestionBank({ defaultTab = 'add' }) {
                   style={formSelectStyle}
                 />
               </label>
+              <ClearFilterButton visible={Boolean(filterStandard)} onClick={() => setFilterStandard('')} />
             </div>
 
             {loading ? (
