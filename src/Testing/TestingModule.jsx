@@ -2861,7 +2861,6 @@ const TestingModule = () => {
         const [certExtras, setCertExtras] = useState({}); // key: stable certificate row id, value: { near_vision, color_vision, training_hours, education, photo }
         const [certModal, setCertModal] = useState(null); // { rowKey, result, selectedCertType, previousCertNo } while the Vision/Photo modal is open
         const [certGenerating, setCertGenerating] = useState(false);
-        const certPhotoInputRef = useRef(null);
         const certificateItemsPerPage = 100;
 
         const handleGenerateCertificateSubmit = async () => {
@@ -3474,12 +3473,6 @@ const TestingModule = () => {
                               }}
                               style={{
                                 padding: '8px 12px',
-                                // Fixed so the dropdown panel — which opens at
-                                // the trigger's own width — is always big
-                                // enough for "Re-Certification", the longer of
-                                // the two options, even while "New" (the
-                                // shorter one) is what's currently selected.
-                                minWidth: '160px',
                                 border: '2px solid #d7263d',
                                 borderRadius: '8px',
                                 fontSize: '14px',
@@ -3675,47 +3668,7 @@ const TestingModule = () => {
                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: colors.text, fontSize: '0.95em' }}>
                     Passport-Size Photo (optional)
                   </label>
-                  {/* A native <input type="file"> makes its whole box clickable,
-                      not just the "Choose File" button — the empty space next
-                      to it opens the picker too, which reads as the container
-                      itself being a button. This hides the native input and
-                      wires a real button to it instead, so only that button is
-                      clickable / shows the pointer cursor — same pattern and
-                      style as the Add Result modal's attachment picker. */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      onClick={() => certPhotoInputRef.current?.click()}
-                      onMouseEnter={e => {
-                        e.currentTarget.classList.add('grad-hover-outline');
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(192, 57, 43, 0.4)';
-                      }}
-                      onMouseLeave={e => {
-                        e.currentTarget.classList.remove('grad-hover-outline');
-                        e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow = 'none';
-                      }}
-                      style={{
-                        padding: '10px 16px',
-                        background: 'linear-gradient(120deg, #b91c3c, #d7263d)',
-                        color: '#fff',
-                        border: '2px solid transparent',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        fontSize: '13px',
-                        fontWeight: '600',
-                        transition: 'all 0.2s ease'
-                      }}
-                    >
-                      <span className="grad-label">Choose File</span>
-                    </button>
-                    <span style={{ fontSize: '12px', color: colors.textMuted }}>
-                      {(certExtras[certModal.rowKey] || {}).photo?.name || 'No file chosen'}
-                    </span>
-                  </div>
                   <input
-                    ref={certPhotoInputRef}
                     type="file"
                     accept="image/*"
                     onChange={(e) => {
@@ -3725,7 +3678,15 @@ const TestingModule = () => {
                         [certModal.rowKey]: { ...(prev[certModal.rowKey] || {}), photo: file }
                       }));
                     }}
-                    style={{ display: 'none' }}
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      border: `2px solid ${colors.inputBorder}`,
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      backgroundColor: theme.bg.input,
+                      color: colors.text
+                    }}
                   />
                 </div>
 
@@ -3735,25 +3696,17 @@ const TestingModule = () => {
                     onClick={() => setCertModal(null)}
                     disabled={certGenerating}
                     style={{
-                      padding: '12px 30px',
-                      backgroundColor: theme.bg.card,
-                      color: theme.text.secondary,
-                      border: `2px solid ${theme.border.default}`,
+                      padding: '10px 20px',
+                      backgroundColor: 'transparent',
+                      color: colors.text,
+                      border: `2px solid ${colors.border}`,
                       borderRadius: '28px',
                       cursor: certGenerating ? 'not-allowed' : 'pointer',
-                      fontSize: '15px',
-                      fontWeight: '600',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onMouseOver={e => {
-                      if (certGenerating) return;
-                      e.currentTarget.classList.add('grad-hover-outline');
-                    }}
-                    onMouseOut={e => {
-                      e.currentTarget.classList.remove('grad-hover-outline');
+                      fontSize: '14px',
+                      fontWeight: '600'
                     }}
                   >
-                    <span className="grad-label">Cancel</span>
+                    Cancel
                   </button>
                   <button
                     type="button"
@@ -3768,22 +3721,7 @@ const TestingModule = () => {
                       cursor: certGenerating ? 'not-allowed' : 'pointer',
                       fontSize: '14px',
                       fontWeight: '600',
-                      opacity: certGenerating ? 0.7 : 1,
-                      transition: 'all 0.2s ease',
-                      boxShadow: '0 3px 10px rgba(215, 38, 61, 0.3)'
-                    }}
-                    onMouseOver={e => {
-                      if (certGenerating) return;
-                      e.currentTarget.style.backgroundColor = '#ffffff';
-                      e.currentTarget.style.color = '#d7263d';
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = '0 5px 15px rgba(215, 38, 61, 0.4)';
-                    }}
-                    onMouseOut={e => {
-                      e.currentTarget.style.backgroundColor = '#d7263d';
-                      e.currentTarget.style.color = 'white';
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = '0 3px 10px rgba(215, 38, 61, 0.3)';
+                      opacity: certGenerating ? 0.7 : 1
                     }}
                   >
                     {certGenerating ? 'Generating...' : 'Generate Certificate'}
