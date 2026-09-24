@@ -3,6 +3,7 @@ import { Edit2, Trash2, BookOpen, X } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { API_BASE_URL as HOST_API_BASE_URL } from '../../config/api';
 import PaginationBar from '../../components/PaginationBar';
+import ClearFilterButton from '../../components/ClearFilterButton';
 import { getActorId, getActorName } from '../../utils/actorIdentity';
 import '../PTIS_App.css';
 
@@ -465,49 +466,13 @@ const StandardsAdminPage = ({ onBack, showToast, onSaved }) => {
                 }}
               />
             </div>
-            <button
+            <ClearFilterButton
+              visible={Boolean(searchQuery)}
               onClick={() => {
                 setSearchQuery('');
                 setStandardsCurrentPage(1);
               }}
-              disabled={!searchQuery}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '12px 24px',
-                backgroundColor: colors.inputBg,
-                color: colors.textMuted,
-                border: `2px solid ${colors.inputBorder}`,
-                borderRadius: '28px',
-                cursor: searchQuery ? 'pointer' : 'not-allowed',
-                fontSize: '0.95em',
-                fontWeight: '500',
-                opacity: searchQuery ? 1 : 0.5,
-                transition: 'all 0.2s ease'
-              }}
-              onMouseOver={(e) => {
-                if (searchQuery) {
-                  e.currentTarget.style.borderColor = '#c0392b';
-                  e.currentTarget.style.color = '#c0392b';
-                  e.currentTarget.style.backgroundColor = colors.cardBg;
-                }
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.borderColor = colors.inputBorder;
-                e.currentTarget.style.color = colors.textMuted;
-                e.currentTarget.style.backgroundColor = colors.inputBg;
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6l-1 14H6L5 6"></path>
-                <path d="M10 11v6"></path>
-                <path d="M14 11v6"></path>
-                <path d="M9 6V4h6v2"></path>
-              </svg>
-              Clear Filter
-            </button>
+            />
           </div>
         </article>
 
@@ -517,6 +482,7 @@ const StandardsAdminPage = ({ onBack, showToast, onSaved }) => {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #ececf0' }}>
+                  <th style={{ padding: '18px 20px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>S.No</th>
                   <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Standard Name</th>
                   <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Short Name</th>
                   <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Total Questions</th>
@@ -530,17 +496,18 @@ const StandardsAdminPage = ({ onBack, showToast, onSaved }) => {
               <tbody>
                 {filteredStandards.length === 0 ? (
                   <tr>
-                    <td colSpan="8" style={{ padding: '60px 20px', textAlign: 'center', color: colors.textMuted, fontSize: '1.1em' }}>
+                    <td colSpan="9" style={{ padding: '60px 20px', textAlign: 'center', color: colors.textMuted, fontSize: '1.1em' }}>
                       {searchQuery ? 'No matching standards found' : 'No standards found. Click "Add New Standard" to create one.'}
                     </td>
                   </tr>
                 ) : (
                   paginatedStandards.map((standard, index) => {
                     const info = getInfoForStandard(standard.Standard_List);
+                    const serialNo = (standardsCurrentPage - 1) * standardsItemsPerPage + index + 1;
                     return (
-                      <tr 
-                        key={index} 
-                        style={{ 
+                      <tr
+                        key={index}
+                        style={{
                           borderBottom: `1px solid ${colors.border}`,
                           transition: 'background-color 0.2s ease',
                           backgroundColor: isDarkMode ? colors.tableRowBg : colors.cardBg
@@ -548,6 +515,7 @@ const StandardsAdminPage = ({ onBack, showToast, onSaved }) => {
                         onMouseOver={e => e.currentTarget.style.backgroundColor = colors.rowHover}
                         onMouseOut={e => e.currentTarget.style.backgroundColor = isDarkMode ? colors.tableRowBg : colors.cardBg}
                       >
+                        <td style={{ padding: '16px 20px', color: colors.textMuted, textAlign: 'center' }}>{serialNo}</td>
                         <td style={{ padding: '16px 20px', color: colors.text, fontWeight: '500' }}>{standard.Standard_List}</td>
                         <td style={{ padding: '16px 20px', color: colors.text }}>{standard.Short_Name}</td>
                         <td style={{ padding: '16px 20px', color: colors.text }}>

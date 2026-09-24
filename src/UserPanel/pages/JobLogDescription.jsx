@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useSearchParams } from 'react-router-dom'
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api'
 import PaginationBar from '../../components/PaginationBar'
+import ClearFilterButton from '../../components/ClearFilterButton'
 import StyledSelect from '../../components/StyledSelect'
 import StyledDatePicker from '../../components/StyledDatePicker'
 import InfoTooltip from '../../components/InfoTooltip'
@@ -1763,28 +1764,10 @@ function JobLogDescription() {
             onChange={setDateTo} />
         </div>
         {/* Clear */}
-        <button
-          type="button"
-          style={{
-            background: 'transparent', border: T.clearBtnBorder,
-            color: T.clearBtnColor, padding: '12px 18px', borderRadius: 16,
-            fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap',
-            transition: 'all 0.2s ease',
-          }}
+        <ClearFilterButton
+          visible={hasActiveFilters}
           onClick={() => { setSearchTerm(''); setStatusFilter('all'); setSourceFilter('all'); setDateFrom(''); setDateTo(''); setSortBy('entryDesc') }}
-          onMouseEnter={e => {
-            e.currentTarget.style.borderColor = '#d7263d'
-            e.currentTarget.style.color = '#d7263d'
-            e.currentTarget.style.transform = 'translateY(-2px)'
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.borderColor = T.clearBtnBorder.split(' ').pop()
-            e.currentTarget.style.color = T.clearBtnColor
-            e.currentTarget.style.transform = 'translateY(0)'
-          }}
-        >
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><X size={14} /> Clear Filters</span>
-        </button>
+        />
       </div>
 
       {/* ══ TABLE SHELL ════════════════════════════════════════ */}

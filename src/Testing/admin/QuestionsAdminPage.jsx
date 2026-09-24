@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import { useTheme } from '../contexts/ThemeContext';
 import { API_BASE_URL as HOST_API_BASE_URL } from '../../config/api';
 import PaginationBar from '../../components/PaginationBar';
+import ClearFilterButton from '../../components/ClearFilterButton';
 import StyledSelect from '../../components/StyledSelect';
 import SearchableSelect from '../../components/SearchableSelect';
 import { getActorId, getActorName } from '../../utils/actorIdentity';
@@ -805,51 +806,10 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
             )}
 
             {/* Clear Filter */}
-            <button
+            <ClearFilterButton
+              visible={Boolean(filterStandard || searchQuery)}
               onClick={() => { setFilterStandard(''); setSearchQuery(''); }}
-              disabled={!filterStandard && !searchQuery}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '10px 20px',
-                backgroundColor: colors.inputBg,
-                color: colors.textMuted,
-                border: `2px solid ${colors.inputBorder}`,
-                borderRadius: '22px',
-                cursor: (filterStandard || searchQuery) ? 'pointer' : 'not-allowed',
-                fontSize: '14px',
-                fontWeight: '600',
-                transition: 'all 0.3s ease',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
-                opacity: (filterStandard || searchQuery) ? 1 : 0.5,
-                position: 'relative',
-                overflow: 'hidden'
-              }}
-              onMouseOver={e => {
-                if (filterStandard || searchQuery) {
-                  e.currentTarget.style.borderColor = '#c0392b';
-                  e.currentTarget.style.color = '#c0392b';
-                  e.currentTarget.style.backgroundColor = colors.cardBg;
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                }
-              }}
-              onMouseOut={e => {
-                e.currentTarget.style.borderColor = colors.inputBorder;
-                e.currentTarget.style.color = colors.textMuted;
-                e.currentTarget.style.backgroundColor = colors.inputBg;
-                e.currentTarget.style.transform = 'translateY(0)';
-              }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6l-1 14H6L5 6"></path>
-                <path d="M10 11v6"></path>
-                <path d="M14 11v6"></path>
-                <path d="M9 6V4h6v2"></path>
-              </svg>
-              Clear Filter
-            </button>
+            />
           </div>
         </div>
       </article>
