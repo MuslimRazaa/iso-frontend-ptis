@@ -1038,6 +1038,17 @@ function JobLogDescription() {
     setSearchParams(prev => { const next = new URLSearchParams(prev); next.delete('add'); return next }, { replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, searchParams, canAccessAnyJlr])
+
+  // Arriving from the header's global search (?q=<term>) — land already
+  // filtered to that entry instead of dropping the user on the unfiltered
+  // register and making them retype what they just searched.
+  useEffect(() => {
+    const q = searchParams.get('q')
+    if (!q) return
+    setSearchTerm(q)
+    setSearchParams(prev => { const next = new URLSearchParams(prev); next.delete('q'); return next }, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
   const sourceOptions = useMemo(() => [...new Set(entries.map(e => e.source).filter(Boolean))], [entries])
 
   const filteredEntries = useMemo(() => {

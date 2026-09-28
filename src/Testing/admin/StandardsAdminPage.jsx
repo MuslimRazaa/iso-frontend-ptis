@@ -190,7 +190,7 @@ const StandardsAdminPage = ({ onBack, showToast, onSaved }) => {
     try {
       const actorId = getActorId();
       const actorName = getActorName();
-      await fetch(`${API_BASE_URL}/api/standards/legacy/${encodeURIComponent(standardName)}?actorId=${encodeURIComponent(actorId)}&actorName=${encodeURIComponent(actorName)}`, {
+      await fetch(`${API_BASE_URL}/api/standards/legacy?name=${encodeURIComponent(standardName)}&actorId=${encodeURIComponent(actorId)}&actorName=${encodeURIComponent(actorName)}`, {
         method: 'DELETE'
       });
 
@@ -317,7 +317,7 @@ const StandardsAdminPage = ({ onBack, showToast, onSaved }) => {
       savePracticalRequiredFlag(targetStandard, formData.Practical_Required);
 
       if (editMode) {
-        await fetch(`${API_BASE_URL}/api/standards/legacy/${encodeURIComponent(currentStandard)}`, {
+        await fetch(`${API_BASE_URL}/api/standards/legacy?name=${encodeURIComponent(currentStandard)}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
