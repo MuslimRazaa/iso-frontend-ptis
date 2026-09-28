@@ -30,6 +30,12 @@ function TaskAllocation() {
   const [activeTab, setActiveTab] = useState(
     searchParams.get('tab') === 'requests' ? 'requests' : 'allocations') // 'allocations' | 'requests'
   const [courseRequests, setCourseRequests] = useState([])
+  // The request currently being rejected — its reason is composed in a modal
+  // rather than a native browser prompt, which can't be styled and reads as
+  // out of place next to the rest of the app.
+  const [rejectModalRequest, setRejectModalRequest] = useState(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [rejectSubmitting, setRejectSubmitting] = useState(false)
   const [tasksPage, setTasksPage] = useState(1)
   const [requestsPage, setRequestsPage] = useState(1)
   const [taskQuery, setTaskQuery] = useState('')
@@ -168,6 +174,46 @@ function TaskAllocation() {
         console.error('Error assigning course:', error)
         showToast('Failed to assign course. Please try again.', 'error')
       }
+    }
+  }
+
+  const openRejectModal = (request) => {
+    setRejectModalRequest(request)
+    setRejectReason('')
+  }
+
+  const closeRejectModal = () => {
+    if (rejectSubmitting) return
+    setRejectModalRequest(null)
+    setRejectReason('')
+  }
+
+  const confirmRejectRequest = async () => {
+    const request = rejectModalRequest
+    if (!request) return
+
+    setRejectSubmitting(true)
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/course-requests/${request.id}/reject`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: rejectReason.trim() }),
+      })
+
+      if (response.ok) {
+        await fetchCourseRequests()
+        showToast(`Course request from ${request.employee_name} rejected.`, 'success')
+        setRejectModalRequest(null)
+        setRejectReason('')
+      } else {
+        const data = await response.json().catch(() => ({}))
+        showToast(data.error || 'Failed to reject request', 'error')
+      }
+    } catch (error) {
+      console.error('Error rejecting request:', error)
+      showToast('Failed to reject request.', 'error')
+    } finally {
+      setRejectSubmitting(false)
     }
   }
 
@@ -598,6 +644,13 @@ function TaskAllocation() {
                             >
                               Approve & Assign
                             </button>
+                            <button
+                              className="ghost-btn"
+                              style={{ fontSize: '12px', padding: '6px 14px' }}
+                              onClick={() => openRejectModal(req)}
+                            >
+                              Reject
+                            </button>
                           </div>
                         )}
                       </td>
@@ -704,6 +757,56 @@ function TaskAllocation() {
                 </button>
                 <button type="submit" className="primary-btn">
                   Assign Course
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {rejectModalRequest && (
+        <div className="modal-overlay" onClick={closeRejectModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+            <div className="modal-header">
+              <h2>Reject Course Request</h2>
+              <button className="close-modal-btn" onClick={closeRejectModal}>
+                ✕
+              </button>
+            </div>
+
+            <form
+              className="modal-form"
+              onSubmit={(e) => {
+                e.preventDefault()
+                confirmRejectRequest()
+              }}
+            >
+              <div className="info-box" style={{ marginBottom: 4 }}>
+                <p>
+                  <Info size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                  Rejecting <strong>"{rejectModalRequest.course_title}"</strong> for{' '}
+                  <strong>{rejectModalRequest.employee_name}</strong>. They'll be notified.
+                </p>
+              </div>
+
+              <label>
+                <span>Reason (optional)</span>
+                <textarea
+                  rows={4}
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="Let them know why — e.g. already covered in another course, seat limit reached…"
+                  style={{ ...formSelectStyle, cursor: 'text', resize: 'vertical', fontFamily: 'inherit' }}
+                  autoFocus
+                />
+              </label>
+
+              <div className="modal-actions">
+                <button type="button" className="ghost-btn" onClick={closeRejectModal} disabled={rejectSubmitting}>
+                  Cancel
+                </button>
+                <button type="submit" className="primary-btn" disabled={rejectSubmitting}>
+                  {rejectSubmitting ? 'Rejecting…' : 'Reject Request'}
                 </button>
               </div>
             </form>

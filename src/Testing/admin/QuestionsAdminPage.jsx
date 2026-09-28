@@ -423,7 +423,11 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
-        body: JSON.stringify({ questions: excelData })
+        body: JSON.stringify({
+          questions: excelData,
+          actorId: getActorId(),
+          actorName: getActorName()
+        })
       });
 
       console.log('Response Status:', response.status);
