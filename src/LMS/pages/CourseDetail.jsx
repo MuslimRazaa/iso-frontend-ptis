@@ -161,9 +161,12 @@ function CourseDetail() {
         // Check task allocation for this user + course
         const tasksRes = await fetch(API_ENDPOINTS.TASK_ALLOCATIONS)
         const allTasks = await tasksRes.json()
+        // Matched by email, not name — see MyCourses.jsx for why: a stale or
+        // differently-cased localStorage userFullName silently fails this
+        // match and kicks a genuinely-enrolled user out of their own course.
         const myTask = allTasks.find(
           (t) =>
-            t.employee_name?.toLowerCase().trim() === userFullName.toLowerCase().trim() &&
+            t.employee_email?.toLowerCase().trim() === userEmail.toLowerCase().trim() &&
             t.course_title?.toLowerCase() === course.title?.toLowerCase()
         )
 
@@ -613,7 +616,7 @@ function CourseDetail() {
         <div className="course-sidebar">
           <div className="sidebar-card">
             {course.thumbnail ? (
-              <img src={course.thumbnail} alt={course.title} className="sidebar-thumbnail" />
+              <img src={course.thumbnail} alt={course.title} className="sidebar-thumbnail" loading="lazy" />
             ) : (
               <div className="sidebar-thumbnail" style={{ background: 'linear-gradient(135deg, rgba(255,93,93,0.2), rgba(255,93,93,0.05))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.5)', height: '200px' }}>
                 No Image

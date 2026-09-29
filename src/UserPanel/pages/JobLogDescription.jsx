@@ -2599,7 +2599,7 @@ function JobLogDescription() {
 
       {/* Export to CSV / Excel — pick month & year, exports from all entries */}
       {showExport && (
-        <div className="modal-overlay" style={{ zIndex: 2100 }} onMouseDown={e => { if (e.target === e.currentTarget) setShowExport(false) }}>
+        <div className="modal-overlay" style={{ zIndex: 2100 }}>
           <div className="modal-content" style={{ maxWidth: 500 }}>
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -2666,8 +2666,7 @@ function JobLogDescription() {
       {/* ══ DELETE-ALL GUARDED FLOW ═══════════════════════════════
           confirm → admin password → confirm → 5s undo countdown → delete */}
       {deleteStep && (
-        <div className="modal-overlay" style={{ zIndex: 2200 }}
-          onMouseDown={e => { if (e.target === e.currentTarget && deleteStep !== 'countdown') closeDelete() }}>
+        <div className="modal-overlay" style={{ zIndex: 2200 }}>
           <div className="modal-content" style={{ maxWidth: 460 }}>
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

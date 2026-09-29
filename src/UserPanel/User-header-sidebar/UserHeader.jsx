@@ -87,7 +87,7 @@ const UserHeader = () => {
       navigate(notification.data.url);
       setShowNotifications(false);
     } else if (notification.data?.type === 'task_assigned') {
-      navigate('/user/task-allocations');
+      navigate('/user/learning-management-system/my-courses');
       setShowNotifications(false);
     }
   };
@@ -132,7 +132,7 @@ const UserHeader = () => {
     const timer = setTimeout(async () => {
       try {
         const q = query.toLowerCase();
-        const [mine, pending, tasks, jobLog] = await Promise.all([
+        const [mine, pending, tasks, jobLog, allCourses] = await Promise.all([
           canSeeIsoForms
             ? fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}?employeeId=${myEmployeeId}&email=${encodeURIComponent(userEmail)}`)
                 .then(r => r.ok ? r.json() : { data: [] }).catch(() => ({ data: [] }))
@@ -146,6 +146,7 @@ const UserHeader = () => {
           canSeeJobLog
             ? fetch(API_ENDPOINTS.JOB_LOG).then(r => r.ok ? r.json() : { data: [] }).catch(() => ({ data: [] }))
             : { data: [] },
+          fetch(API_ENDPOINTS.COURSES).then(r => r.ok ? r.json() : []).catch(() => []),
         ]);
         if (cancelled) return;
 
@@ -166,7 +167,8 @@ const UserHeader = () => {
             path: `/user/iso-forms/entries/${e.id}`,
           }));
 
-        const courseResults = (Array.isArray(tasks) ? tasks : [])
+        const taskList = Array.isArray(tasks) ? tasks : [];
+        const courseResults = taskList
           .filter(t => (t.course_title || '').toLowerCase().includes(q))
           .map(t => ({
             type: 'Course',
@@ -175,6 +177,22 @@ const UserHeader = () => {
             title: t.course_title,
             subtitle: `Status: ${t.status || 'Assigned'}`,
             path: `/user/learning-management-system/course/${t.course_id}`,
+          }));
+
+        // Courses that exist in the catalog but aren't assigned to this person
+        // yet — these show up on My Courses as "Request Access", not a task,
+        // so they were previously invisible to this search entirely.
+        const assignedTitles = new Set(taskList.map(t => (t.course_title || '').toLowerCase()));
+        const availableCourseResults = (Array.isArray(allCourses) ? allCourses : [])
+          .filter(c => !assignedTitles.has((c.course_title || '').toLowerCase()))
+          .filter(c => (c.course_title || '').toLowerCase().includes(q))
+          .map(c => ({
+            type: 'Available',
+            icon: '➕',
+            id: `available-${c.id}`,
+            title: c.course_title,
+            subtitle: 'Not assigned — request access',
+            path: `/user/learning-management-system/my-courses?q=${encodeURIComponent(query)}`,
           }));
 
         const jobLogRows = jobLog.data || jobLog || [];
@@ -190,7 +208,7 @@ const UserHeader = () => {
             path: `/user/job-log/entries?q=${encodeURIComponent(query)}`,
           }));
 
-        setSearchResults([...formResults, ...courseResults, ...jobLogResults]);
+        setSearchResults([...formResults, ...courseResults, ...availableCourseResults, ...jobLogResults]);
       } finally {
         if (!cancelled) setSearchLoading(false);
       }

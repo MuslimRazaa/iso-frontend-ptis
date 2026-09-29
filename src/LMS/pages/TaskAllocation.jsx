@@ -268,7 +268,7 @@ function TaskAllocation() {
 
     setApproveSubmitting(true)
     try {
-      const response = await fetch(API_ENDPOINTS.TASK_ALLOCATIONS, {
+      const assign = () => fetch(API_ENDPOINTS.TASK_ALLOCATIONS, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -277,6 +277,28 @@ function TaskAllocation() {
           deadline: approveDeadline,
         }),
       })
+
+      let response = await assign()
+      let data = response.ok ? null : await response.json().catch(() => ({}))
+      const alreadyAssigned = !response.ok && /already assigned/i.test(data?.error || '')
+
+      // A person can only re-request a course from My Courses once they've
+      // FULLY COMPLETED it (an active/incomplete course never shows a Request
+      // button there) — so hitting the DB's duplicate check here always means
+      // a leftover completed assignment, not a still-active one. Marking the
+      // request "approved" without actually resetting it (what the previous
+      // version of this did) left the course genuinely unassigned: no fresh
+      // task, no notification, nothing — while the request still said
+      // "approved", which is exactly backwards. Clear the stale completed row
+      // and really reassign it, the same reset `handleReassign` already does.
+      if (alreadyAssigned) {
+        const staleTask = tasks.find(t => Number(t.employee_id) === Number(emp.id) && Number(t.course_id) === Number(course.id))
+        if (staleTask) {
+          await fetch(`${API_ENDPOINTS.TASK_ALLOCATIONS}/${staleTask.id}`, { method: 'DELETE' })
+          response = await assign()
+          data = response.ok ? null : await response.json().catch(() => ({}))
+        }
+      }
 
       if (response.ok) {
         // Mark request as approved in backend if endpoint exists
@@ -293,8 +315,7 @@ function TaskAllocation() {
         setApproveModalRequest(null)
         setApproveDeadline('')
       } else {
-        const data = await response.json()
-        showToast(data.error || 'Failed to approve request', 'error')
+        showToast(data?.error || 'Failed to approve request', 'error')
       }
     } catch (error) {
       console.error('Error approving request:', error)
@@ -709,13 +730,7 @@ function TaskAllocation() {
 
       {/* Assign Course Modal */}
       {showModal && (
-        <div
-          className="modal-overlay"
-          onClick={() => {
-            setShowModal(false)
-            setFormData({ employee_id: '', course_id: '', deadline: '' })
-          }}
-        >
+        <div className="modal-overlay">
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Assign Course to Employee</h2>
@@ -801,7 +816,7 @@ function TaskAllocation() {
       )}
 
       {rejectModalRequest && (
-        <div className="modal-overlay" onClick={closeRejectModal}>
+        <div className="modal-overlay">
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
             <div className="modal-header">
               <h2>Reject Course Request</h2>
@@ -851,7 +866,7 @@ function TaskAllocation() {
       )}
 
       {approveModalRequest && (
-        <div className="modal-overlay" onClick={closeApproveModal}>
+        <div className="modal-overlay">
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
             <div className="modal-header">
               <h2>Approve & Assign Course</h2>

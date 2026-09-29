@@ -336,7 +336,7 @@ function AddEmployee() {
 
       {/* Department Management Modal */}
       {showDeptModal && (
-        <div className="modal-overlay" onClick={() => setShowDeptModal(false)}>
+        <div className="modal-overlay">
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
             <div className="modal-header">
               <h2>Manage Departments</h2>
@@ -428,7 +428,7 @@ function AddEmployee() {
 
       {/* Location Management Modal */}
       {showLocModal && (
-        <div className="modal-overlay" onClick={() => setShowLocModal(false)}>
+        <div className="modal-overlay">
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
             <div className="modal-header">
               <h2>Manage Locations</h2>

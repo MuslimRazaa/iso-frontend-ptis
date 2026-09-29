@@ -366,6 +366,10 @@ const TestingModule = () => {
   // avoids client-side races/duplicates). The marker is scoped to this assignment
   // so a re-assignment (new created_at) is a clean slate.
   const courseTestMarkerKey = `ptis_active_test_${lmsCourseId}_${lmsStandardId}_${lmsAssignedSinceMs}`;
+  // Holds the question set + answers-so-far under the same scope as the
+  // marker above, so a reload mid-test can be graded on what was actually
+  // answered instead of My Courses defaulting the whole attempt to zero.
+  const courseTestDataKey = `ptis_active_test_data_${lmsCourseId}_${lmsStandardId}_${lmsAssignedSinceMs}`;
   const readCourseMarker = () => {
     try { return localStorage.getItem(courseTestMarkerKey); } catch { return null; }
   };
@@ -373,7 +377,10 @@ const TestingModule = () => {
     try { localStorage.setItem(courseTestMarkerKey, JSON.stringify({ startedAt: Date.now() })); } catch { /* ignore */ }
   };
   const clearCourseMarker = () => {
-    try { localStorage.removeItem(courseTestMarkerKey); } catch { /* ignore */ }
+    try {
+      localStorage.removeItem(courseTestMarkerKey);
+      localStorage.removeItem(courseTestDataKey);
+    } catch { /* ignore */ }
   };
   const goToCourses = () => { window.location.replace('/user/learning-management-system/my-courses'); };
 
@@ -789,6 +796,20 @@ const TestingModule = () => {
     // Arm the integrity marker: from now on, leaving/refreshing = auto-fail.
     if (fromCourse && lmsCourseId && lmsStandardId) armCourseTest();
   };
+
+  // Mirrors the question set + answers-so-far to localStorage on every
+  // answer, so a reload mid-test still leaves something to grade instead of
+  // the attempt silently defaulting to a flat zero. Grading itself (and
+  // deciding this data is stale vs. still-in-progress) happens later, in My
+  // Courses' abandoned-test reconciliation — this effect only keeps the data
+  // available for that to read.
+  useEffect(() => {
+    if (!fromCourse || !lmsCourseId || !lmsStandardId || !testStarted || !originalQuestions.length) return;
+    try {
+      localStorage.setItem(courseTestDataKey, JSON.stringify({ questions: originalQuestions, answers }));
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answers, originalQuestions, testStarted, fromCourse, lmsCourseId, lmsStandardId]);
 
   const handleAnswerSelect = (answer) => {
     setSelectedAnswer(answer);
@@ -4906,6 +4927,7 @@ const TestingModule = () => {
                         <tbody>
                           {paginatedResults.map((result, index) => {
                             const hasAnswerSheet = String(result.HAS_ANSWER_SHEET) === '1' || result.HAS_ANSWER_SHEET === 1;
+                            const isInterrupted = String(result.IS_INTERRUPTED) === '1' || result.IS_INTERRUPTED === 1;
 
                             const handleDeleteResult = async () => {
                               if (!window.confirm(`Are you sure you want to delete this test result for ${result.NAME}?`)) return;
@@ -4926,11 +4948,15 @@ const TestingModule = () => {
                             };
 
                             const handleDownloadPDF = async () => {
-                              if (!hasAnswerSheet) {
-                                showToast('Detailed answer sheet is not available for this result.', 'info');
+                              // Fetches for a real answer sheet OR an interrupted-session
+                              // explanation — both are genuine PDFs the backend generates.
+                              // A manually entered row with neither is blocked below instead
+                              // of downloading an empty, confusing "No Detailed Answers
+                              // Available" filler PDF for something that was never a test.
+                              if (!hasAnswerSheet && !isInterrupted) {
+                                showToast('No answer sheet to download — this result was entered manually.', 'info');
                                 return;
                               }
-
                               const url = `${API_BASE_URL}/api/test-results/legacy/${encodeURIComponent(result.ID)}/${encodeURIComponent(result.STANDARD)}/${encodeURIComponent(result.DATE)}/pdf`;
                               try {
                                 const response = await fetch(url);
@@ -4994,11 +5020,14 @@ const TestingModule = () => {
                               }
                             };
 
-                            const downloadEnabled = hasAttachment || hasAnswerSheet;
+                            // Enabled for a real answer sheet, an interrupted-session
+                            // explanation, or an attachment — not for a manually entered
+                            // row with none of those, which has no PDF to offer at all.
+                            const downloadEnabled = hasAttachment || hasAnswerSheet || isInterrupted;
                             const handleDownload = hasAttachment ? handleDownloadAttachment : handleDownloadPDF;
                             const downloadTitle = hasAttachment
                               ? (isPracticalResult ? 'Download Practical Attachment' : 'Download Attachment')
-                              : (hasAnswerSheet ? 'Download Test Sheet PDF' : 'No attachment or answer sheet available');
+                              : (downloadEnabled ? 'Download Test Sheet PDF' : 'No attachment or answer sheet available');
 
                             return (
                               <tr key={`${result.ID}-${result.STANDARD}-${result.DATE}-${index}`} style={{ 

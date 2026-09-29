@@ -1,61 +1,68 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, Suspense, lazy } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import Login from './mainScreens/Login'
 import VideoLoader from './components/VideoLoader'
 import { ToastHost } from './components/Toast'
+import { initModalScrollLock } from './utils/modalScrollLock'
 import './assets/style.css'
 
 // ============================================
 // ADMIN MODULES IMPORTS
 // ============================================
-import MainDashboard from './dashboards/MainDashboard'
+// Route-level code splitting: every page below used to be a static import, so
+// visiting the Login page downloaded the same bundle as every admin module,
+// PDF/Excel export libs included (~4.2MB). Lazy-loading means a route's code
+// (and its dependencies) is only fetched when that route is actually visited.
+const MainDashboard = lazy(() => import('./dashboards/MainDashboard'))
 
 // Admin - Learning Management System
-import LearningManagementSystem from './LMS/LearningManagementSystem'
-import LmsHome from './LMS/pages/LmsHome'
-import AddCourse from './LMS/pages/AddCourse'
-import AllCourses from './LMS/pages/AllCourses'
-import TaskAllocation from './LMS/pages/TaskAllocation'
-import CourseCategories from './LMS/pages/CourseCategories'
-import CourseTracking from './LMS/pages/CourseTracking'
-import CourseDetail from './LMS/pages/CourseDetail'
-import AddEmployee from './LMS/pages/AddEmployee'
-import AllEmployees from './LMS/pages/AllEmployees'
-import SetStandards from './LMS/pages/SetStandards'
-import QuestionBank from './LMS/pages/QuestionBank'
-import Certificates from './LMS/pages/Certificates'
+const LearningManagementSystem = lazy(() => import('./LMS/LearningManagementSystem'))
+const LmsHome = lazy(() => import('./LMS/pages/LmsHome'))
+const AddCourse = lazy(() => import('./LMS/pages/AddCourse'))
+const AllCourses = lazy(() => import('./LMS/pages/AllCourses'))
+const TaskAllocation = lazy(() => import('./LMS/pages/TaskAllocation'))
+const CourseCategories = lazy(() => import('./LMS/pages/CourseCategories'))
+const CourseTracking = lazy(() => import('./LMS/pages/CourseTracking'))
+const CourseDetail = lazy(() => import('./LMS/pages/CourseDetail'))
+const AddEmployee = lazy(() => import('./LMS/pages/AddEmployee'))
+const AllEmployees = lazy(() => import('./LMS/pages/AllEmployees'))
+const SetStandards = lazy(() => import('./LMS/pages/SetStandards'))
+const QuestionBank = lazy(() => import('./LMS/pages/QuestionBank'))
+const Certificates = lazy(() => import('./LMS/pages/Certificates'))
 
 
 // Admin - PTIS Portal
-import PtisPortal from './Portal/PtisPortal'
-import PortalDashboard from './Portal/pages/PortalDashboard'
-import AddAdmin from './Portal/pages/AddAdmin'
-import AddClient from './Portal/pages/AddClient'
-import InsertRecord from './Portal/pages/InsertRecord'
-import AllRecords from './Portal/pages/AllRecords'
-import UnprocessedRecords from './Portal/pages/UnprocessedRecords'
+const PtisPortal = lazy(() => import('./Portal/PtisPortal'))
+const PortalDashboard = lazy(() => import('./Portal/pages/PortalDashboard'))
+const AddAdmin = lazy(() => import('./Portal/pages/AddAdmin'))
+const AddClient = lazy(() => import('./Portal/pages/AddClient'))
+const InsertRecord = lazy(() => import('./Portal/pages/InsertRecord'))
+const AllRecords = lazy(() => import('./Portal/pages/AllRecords'))
+const UnprocessedRecords = lazy(() => import('./Portal/pages/UnprocessedRecords'))
 
 // Admin - Employee Management (standalone, moved out of LMS)
-import EmployeesLayout from './Employees/EmployeesLayout'
+const EmployeesLayout = lazy(() => import('./Employees/EmployeesLayout'))
 
 // Admin - Job Log Description (standalone module)
-import JLRLayout from './JLR/JLRLayout'
-import JLRHome from './JLR/pages/JLRHome'
-import JLRBackups from './JLR/pages/JLRBackups'
-import JLRAuditLog from './JLR/pages/JLRAuditLog'
+const JLRLayout = lazy(() => import('./JLR/JLRLayout'))
+const JLRHome = lazy(() => import('./JLR/pages/JLRHome'))
+const JLRBackups = lazy(() => import('./JLR/pages/JLRBackups'))
+const JLRAuditLog = lazy(() => import('./JLR/pages/JLRAuditLog'))
 
 // Admin - ISO Forms (standalone module, dynamic form builder)
-import ISOFormsLayout from './ISOForms/ISOFormsLayout'
-import ISOFormsHome from './ISOForms/pages/ISOFormsHome'
-import TemplatesList from './ISOForms/admin/TemplatesList'
-import TemplateBuilder from './ISOForms/admin/TemplateBuilder'
-import ISOFormsAuditLog from './ISOForms/admin/AuditLog'
-import FormFiller from './ISOForms/pages/FormFiller'
-import FormEntriesList from './ISOForms/pages/FormEntriesList'
-import FormDetail from './ISOForms/pages/FormDetail'
+const ISOFormsLayout = lazy(() => import('./ISOForms/ISOFormsLayout'))
+const ISOFormsHome = lazy(() => import('./ISOForms/pages/ISOFormsHome'))
+const TemplatesList = lazy(() => import('./ISOForms/admin/TemplatesList'))
+const TemplateBuilder = lazy(() => import('./ISOForms/admin/TemplateBuilder'))
+const ISOFormsAuditLog = lazy(() => import('./ISOForms/admin/AuditLog'))
+const FormFiller = lazy(() => import('./ISOForms/pages/FormFiller'))
+const FormEntriesList = lazy(() => import('./ISOForms/pages/FormEntriesList'))
+const FormDetail = lazy(() => import('./ISOForms/pages/FormDetail'))
 
-// Testing Module (standalone, integrated from ptis-lms)
-import TestingModule from './Testing/TestingModule'
+// Testing Module (standalone, integrated from ptis-lms) — ThemeProvider is a
+// named export (React.lazy only wraps default exports) and is a lightweight
+// context, so it stays a normal import; the heavy module itself is lazy.
+const TestingModule = lazy(() => import('./Testing/TestingModule'))
 import { ThemeProvider as TestingThemeProvider } from './Testing/contexts/ThemeContext'
 
 // Wraps the testing module in its own ThemeProvider so it can mount as a route.
@@ -68,19 +75,31 @@ const TestingModulePage = () => (
 // ============================================
 // USER MODULES IMPORTS
 // ============================================
-import UserPanel from './UserPanel/UserPanel'
-import UserDashboard from './UserPanel/pages/UserDashboard'
-import MyCourses from './UserPanel/pages/MyCourses'
-import UserCertificates from './UserPanel/pages/UserCertificates'
-import JobLogDescription from './UserPanel/pages/JobLogDescription'
-import CourseHistory from './UserPanel/pages/CourseHistory'
-import AllLmsCourses from './UserPanel/pages/AllLmsCourses'
-import TaskAllocations from './UserPanel/pages/TaskAllocations'
-import CourseDetailUser from './UserPanel/pages/CourseDetailUser'
+const UserPanel = lazy(() => import('./UserPanel/UserPanel'))
+const UserDashboard = lazy(() => import('./UserPanel/pages/UserDashboard'))
+const MyCourses = lazy(() => import('./UserPanel/pages/MyCourses'))
+const UserCertificates = lazy(() => import('./UserPanel/pages/UserCertificates'))
+const JobLogDescription = lazy(() => import('./UserPanel/pages/JobLogDescription'))
+const CourseHistory = lazy(() => import('./UserPanel/pages/CourseHistory'))
+const AllLmsCourses = lazy(() => import('./UserPanel/pages/AllLmsCourses'))
+const TaskAllocations = lazy(() => import('./UserPanel/pages/TaskAllocations'))
+const CourseDetailUser = lazy(() => import('./UserPanel/pages/CourseDetailUser'))
 
 // User LMS standalone layout
-import UserLmsLayout from './UserLMS/UserLmsLayout'
-import UserLmsHome from './UserLMS/UserLmsHome'
+const UserLmsLayout = lazy(() => import('./UserLMS/UserLmsLayout'))
+const UserLmsHome = lazy(() => import('./UserLMS/UserLmsHome'))
+
+// Shown while a lazy route's chunk is fetched — brief on a warm cache, so it
+// stays minimal rather than a full branded loader (VideoLoader is reserved
+// for the one-time app entry).
+const RouteFallback = () => (
+  <div style={{
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    minHeight: '60vh', color: '#94a3b8', fontSize: 14,
+  }}>
+    Loading…
+  </div>
+)
 
 function App() {
   const [showLoader, setShowLoader] = useState(true)
@@ -92,6 +111,10 @@ function App() {
       setShowLoader(false)
       setHasSeenLoader(true)
     }
+  }, [])
+
+  useEffect(() => {
+    initModalScrollLock()
   }, [])
 
   const handleLoadingComplete = () => {
@@ -107,6 +130,7 @@ function App() {
         <VideoLoader onLoadingComplete={handleLoadingComplete} />
       ) : (
         <Router>
+          <Suspense fallback={<RouteFallback />}>
           <Routes>
             {/* ============================================ */}
             {/* PUBLIC ROUTES                               */}
@@ -246,6 +270,7 @@ function App() {
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </Suspense>
         </Router>
       )}
     </>

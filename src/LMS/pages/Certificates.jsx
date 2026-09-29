@@ -253,7 +253,7 @@ function Certificates() {
             {certificates.map((cert) => (
               <article key={cert.id} className="certificate-card">
                 <div className="cert-thumbnail">
-                  <img src={cert.thumbnail} alt={cert.testName} />
+                  <img src={cert.thumbnail} alt={cert.testName} loading="lazy" />
                 </div>
                 <div className="cert-info">
                   <p className="eyebrow">{cert.employeeId}</p>

@@ -538,7 +538,7 @@ function MainDashboard() {
         </section>
 
         {showCustomize && (
-          <div className="modal-overlay" onClick={() => setShowCustomize(false)}>
+          <div className="modal-overlay">
             <div className="modal-content" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
                 <h2>Customize Grid</h2>
