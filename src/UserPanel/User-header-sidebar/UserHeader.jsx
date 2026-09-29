@@ -514,8 +514,8 @@ const UserHeader = () => {
                 boxShadow: '0 8px 32px rgba(102, 126, 234, 0.3)',
                 color: 'white'
               }}>
-                <div style={{ 
-                  padding: '16px', 
+                <div style={{
+                  padding: '16px',
                   borderBottom: '1px solid rgba(255, 255, 255, 0.15)',
                   background: 'rgba(255, 255, 255, 0.1)',
                   backdropFilter: 'blur(10px)'
@@ -523,109 +523,14 @@ const UserHeader = () => {
                   <div style={{ fontWeight: '600', marginBottom: '4px', color: 'white' }}>{userName}</div>
                   <div style={{ fontSize: '12px', opacity: 0.85, color: 'rgba(255, 255, 255, 0.9)' }}>{userEmail}</div>
                 </div>
-                
-                <button 
-                  type="button" 
-                  onClick={() => navigate('/user/dashboard')}
-                  style={{
-                    width: '100%',
-                    padding: '12px 16px',
-                    textAlign: 'left',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    fontSize: '14px',
-                    color: 'white',
-                    transition: 'background 0.2s'
-                  }}
-                  onMouseEnter={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.15)'}
-                  onMouseLeave={(e) => e.target.style.background = 'none'}
-                >
-                  <span>📊</span> Dashboard
-                </button>
-                
-                <button 
-                  type="button" 
-                  onClick={() => navigate('/user/my-courses')}
-                  style={{
-                    width: '100%',
-                    padding: '12px 16px',
-                    textAlign: 'left',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    fontSize: '14px',
-                    color: 'white',
-                    transition: 'background 0.2s'
-                  }}
-                  onMouseEnter={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.15)'}
-                  onMouseLeave={(e) => e.target.style.background = 'none'}
-                >
-                  <span>📚</span> My Courses
-                </button>
-                
-                <button 
+
+                <button
                   type="button"
-                  style={{
-                    width: '100%',
-                    padding: '12px 16px',
-                    textAlign: 'left',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    fontSize: '14px',
-                    color: 'white',
-                    transition: 'background 0.2s'
-                  }}
-                  onMouseEnter={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.15)'}
-                  onMouseLeave={(e) => e.target.style.background = 'none'}
-                >
-                  <span>👤</span> My Profile
-                </button>
-                
-                <button 
-                  type="button"
-                  style={{
-                    width: '100%',
-                    padding: '12px 16px',
-                    textAlign: 'left',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    fontSize: '14px',
-                    color: 'white',
-                    transition: 'background 0.2s'
-                  }}
-                  onMouseEnter={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.15)'}
-                  onMouseLeave={(e) => e.target.style.background = 'none'}
-                >
-                  <span>⚙️</span> Settings
-                </button>
-                
-                <div style={{ 
-                  height: '1px', 
-                  background: 'rgba(255, 255, 255, 0.15)', 
-                  margin: '8px 0' 
-                }} />
-                
-                <button 
-                  type="button" 
                   onClick={handleLogout}
                   style={{
                     width: '100%',
-                    padding: '12px 16px',
+                    padding: '14px 16px',
+                    marginTop: '8px',
                     textAlign: 'left',
                     background: 'none',
                     border: 'none',

@@ -1,6 +1,5 @@
 ﻿import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Edit2, Trash2, Upload, FileSpreadsheet, Download, X } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import { useTheme } from '../contexts/ThemeContext';
 import { API_BASE_URL as HOST_API_BASE_URL } from '../../config/api';
 import PaginationBar from '../../components/PaginationBar';
@@ -370,8 +369,11 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
     setExcelFile(file);
     const reader = new FileReader();
     
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
+        // Loaded on demand — only someone actually uploading a file pays
+        // for xlsx, instead of it being bundled into every page load.
+        const XLSX = await import('xlsx');
         const data = new Uint8Array(event.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
@@ -472,7 +474,8 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
     }
   };
 
-  const downloadSampleExcel = () => {
+  const downloadSampleExcel = async () => {
+    const XLSX = await import('xlsx');
     const sampleData = [
       {
         Question: 'Another Name For A Self-Emulsifying Penetrant Process Is:',

@@ -47,6 +47,7 @@ import ClearFilterButton from '../components/ClearFilterButton';
 import AuditLogView from '../components/AuditLogView';
 import StyledSelect from '../components/StyledSelect';
 import SearchableSelect from '../components/SearchableSelect';
+import MultiSelect from '../components/MultiSelect';
 import StyledDatePicker from '../components/StyledDatePicker';
 
 // HomePage Component - Moved outside to prevent re-creation
@@ -2053,6 +2054,8 @@ const TestingModule = () => {
     const norm = useCallback((v) => (v ?? '').toString().trim(), []);
     const normLower = useCallback((v) => norm(v).toLowerCase(), [norm]);
     const isPass = useCallback((status) => normLower(status) === 'pass', [normLower]);
+    // Splits a MultiSelect's comma-joined value back into its picks.
+    const toMultiList = useCallback((v) => (v || '').split(',').map(s => s.trim()).filter(Boolean), []);
     const toPctNumber = useCallback((p) => {
       const n = parseFloat((p ?? '').toString().replace('%', ''));
       return Number.isFinite(n) ? n : 0;
@@ -2085,16 +2088,6 @@ const TestingModule = () => {
       return Array.from(idToName.entries()).sort((a, b) => Number(a[0]) - Number(b[0]));
     }, [results]);
 
-    const employeeIdToName = useMemo(() => new Map(employeePairs), [employeePairs]);
-
-    const employeeNameToId = useMemo(() => {
-      const m = new Map();
-      employeePairs.forEach(([id, name]) => {
-        if (name && !m.has(name)) m.set(name, id);
-      });
-      return m;
-    }, [employeePairs]);
-
     const employeeIdOptions = useMemo(() => employeePairs.map(([id]) => id), [employeePairs]);
     const employeeNameOptions = useMemo(() => {
       const s = new Set(employeePairs.map(([, name]) => name).filter(Boolean));
@@ -2107,11 +2100,15 @@ const TestingModule = () => {
       return ['All', ...Array.from(set).sort((a, b) => a.localeCompare(b))];
     }, [results]);
 
-    // Filter state
+    // Filter state — empId/empName/standard are comma-separated multi-value
+    // strings (same convention as JLR's Inspector/Team MultiSelect): '' means
+    // no filter, one name is just that name with no comma, several names are
+    // comma-joined. Lets one Export cover several standards/employees at
+    // once instead of one download per pick.
     const [filterEmpId, setFilterEmpId] = useState('');
     const [filterEmpName, setFilterEmpName] = useState('');
     const [filterStatus, setFilterStatus] = useState('All');
-    const [filterStandard, setFilterStandard] = useState('All');
+    const [filterStandard, setFilterStandard] = useState('');
     // Set by clicking a bar of the score histogram, and from the filter row.
     const [filterScoreRange, setFilterScoreRange] = useState('All');
     const [filterDateFrom, setFilterDateFrom] = useState('');
@@ -2157,7 +2154,11 @@ const TestingModule = () => {
         const sameCell = active.standard === changes.standard
           && (!changes.status || active.status === changes.status)
           && (!changes.empId || String(active.empId) === String(changes.empId));
-        setFilterStandard(sameCell ? 'All' : changes.standard);
+        // A chart click always drills into exactly one standard, replacing
+        // whatever was picked in the multi-select above — building up a
+        // multi-pick is what that dropdown is for, a bar click is "show me
+        // just this one".
+        setFilterStandard(sameCell ? '' : changes.standard);
         touched = true;
       }
       if (changes.scoreRange) {
@@ -2523,26 +2524,11 @@ const TestingModule = () => {
       setShowAddResultModal(true);
     }, [resetResultAttachment]);
 
-    // Interconnected handlers: ID <-> Name (based on results only)
-    const onChangeEmpId = (val) => {
-      setFilterEmpId(val);
-      if (!val) { setFilterEmpName(''); return; }
-      const name = employeeIdToName.get(String(val)) || '';
-      setFilterEmpName(name);
-    };
-
-    const onChangeEmpName = (val) => {
-      setFilterEmpName(val);
-      if (!val) { setFilterEmpId(''); return; }
-      const id = employeeNameToId.get(val) || '';
-      setFilterEmpId(id);
-    };
-
     const clearFilters = () => {
       setFilterEmpId('');
       setFilterEmpName('');
       setFilterStatus('All');
-      setFilterStandard('All');
+      setFilterStandard('');
       setFilterScoreRange('All');
       setFilterDateFrom('');
       setFilterDateTo('');
@@ -2711,12 +2697,15 @@ const TestingModule = () => {
 
     // Apply filters
     const filteredResults = useMemo(() => {
+      const empIds = toMultiList(filterEmpId).map(v => v.toLowerCase());
+      const empNames = toMultiList(filterEmpName).map(v => normLower(v));
+      const standardsPicked = toMultiList(filterStandard).map(v => norm(v));
       const matching = results.filter(r => {
-        const matchId = filterEmpId ? String(r.ID) === String(filterEmpId) : true;
-        const matchName = filterEmpName ? normLower(r.NAME) === normLower(filterEmpName) : true;
-        const matchEmployee = filterEmpId ? matchId : (filterEmpName ? matchName : true);
+        const matchId = empIds.length ? empIds.includes(String(r.ID).toLowerCase()) : true;
+        const matchName = empNames.length ? empNames.includes(normLower(r.NAME)) : true;
+        const matchEmployee = empIds.length ? matchId : (empNames.length ? matchName : true);
         const matchStatus = filterStatus === 'All' ? true : normLower(r.STATUS) === normLower(filterStatus);
-        const matchStd = filterStandard === 'All' ? true : norm(r.STANDARD) === norm(filterStandard);
+        const matchStd = standardsPicked.length ? standardsPicked.includes(norm(r.STANDARD)) : true;
         const matchScore = filterScoreRange === 'All' ? true : inScoreRange(toPctNumber(r.PERCENTAGE), filterScoreRange);
         const dateKey = toResultDateKey(r.DATE);
         const matchFrom = filterDateFrom ? (dateKey && dateKey >= filterDateFrom) : true;
@@ -2733,7 +2722,7 @@ const TestingModule = () => {
         .map((r, index) => ({ r, index, key: toResultDateKey(r.DATE), at: Number(r.row_id) || 0 }))
         .sort((a, b) => (b.key || '').localeCompare(a.key || '') || b.at - a.at || a.index - b.index)
         .map(entry => entry.r);
-    }, [results, filterEmpId, filterEmpName, filterStatus, filterStandard, filterScoreRange, filterDateFrom, filterDateTo, norm, normLower, toResultDateKey, inScoreRange, toPctNumber]);
+    }, [results, filterEmpId, filterEmpName, filterStatus, filterStandard, filterScoreRange, filterDateFrom, filterDateTo, norm, normLower, toMultiList, toResultDateKey, inScoreRange, toPctNumber]);
 
     // What the charts are drawn from.
     //
@@ -2742,15 +2731,19 @@ const TestingModule = () => {
     // already been applied to left a single bar and nothing to compare it with.
     // Employee and date still apply — those narrow what you are looking at,
     // rather than picking a part of it out.
-    const chartResults = useMemo(() => results.filter(r => {
-      const matchId = filterEmpId ? String(r.ID) === String(filterEmpId) : true;
-      const matchName = filterEmpName ? normLower(r.NAME) === normLower(filterEmpName) : true;
-      const matchEmployee = filterEmpId ? matchId : (filterEmpName ? matchName : true);
-      const dateKey = toResultDateKey(r.DATE);
-      const matchFrom = filterDateFrom ? (dateKey && dateKey >= filterDateFrom) : true;
-      const matchTo = filterDateTo ? (dateKey && dateKey <= filterDateTo) : true;
-      return matchEmployee && matchFrom && matchTo;
-    }), [results, filterEmpId, filterEmpName, filterDateFrom, filterDateTo, normLower, toResultDateKey]);
+    const chartResults = useMemo(() => {
+      const empIds = toMultiList(filterEmpId).map(v => v.toLowerCase());
+      const empNames = toMultiList(filterEmpName).map(v => normLower(v));
+      return results.filter(r => {
+        const matchId = empIds.length ? empIds.includes(String(r.ID).toLowerCase()) : true;
+        const matchName = empNames.length ? empNames.includes(normLower(r.NAME)) : true;
+        const matchEmployee = empIds.length ? matchId : (empNames.length ? matchName : true);
+        const dateKey = toResultDateKey(r.DATE);
+        const matchFrom = filterDateFrom ? (dateKey && dateKey >= filterDateFrom) : true;
+        const matchTo = filterDateTo ? (dateKey && dateKey <= filterDateTo) : true;
+        return matchEmployee && matchFrom && matchTo;
+      });
+    }, [results, filterEmpId, filterEmpName, filterDateFrom, filterDateTo, normLower, toMultiList, toResultDateKey]);
 
     const paginatedResults = useMemo(() => {
       const startIndex = (resultsCurrentPage - 1) * resultsItemsPerPage;
@@ -4007,7 +4000,8 @@ const TestingModule = () => {
               // Results tab uses — a click here always jumps there, so the two
               // never need their own separate notion of "selected".
               const statusPicked = filterStatus !== 'All';
-              const standardPicked = filterStandard !== 'All';
+              const standardsPickedList = toMultiList(filterStandard);
+              const standardPicked = standardsPickedList.length > 0;
               const scorePicked = filterScoreRange !== 'All';
               const dimStyle = (selected) => ({
                 transition: 'filter 0.25s ease, opacity 0.25s ease',
@@ -4025,7 +4019,7 @@ const TestingModule = () => {
               // score band actually shrinks the pie and the standard bars
               // instead of only dimming them.
               const rowMatchesOthers = (r, exclude) => {
-                if (!exclude.standard && standardPicked && norm(r.STANDARD) !== filterStandard) return false;
+                if (!exclude.standard && standardPicked && !standardsPickedList.includes(norm(r.STANDARD))) return false;
                 if (!exclude.status && statusPicked && !matchesStatus(r, filterStatus)) return false;
                 if (!exclude.score && scorePicked && scoreRangeOf(toPctNumber(r.PERCENTAGE)) !== filterScoreRange) return false;
                 return true;
@@ -4062,11 +4056,11 @@ const TestingModule = () => {
                 if (statusPicked) return filterStatus === status;
                 if (!standardPicked && !scorePicked) return true;
                 return chartData.some(r => matchesStatus(r, status)
-                  && (!standardPicked || norm(r.STANDARD) === filterStandard)
+                  && (!standardPicked || standardsPickedList.includes(norm(r.STANDARD)))
                   && (!scorePicked || scoreRangeOf(toPctNumber(r.PERCENTAGE)) === filterScoreRange));
               };
               const standardBarSelected = (standard, status) => {
-                if (standardPicked && filterStandard !== standard) return false;
+                if (standardPicked && !standardsPickedList.includes(standard)) return false;
                 if (statusPicked && filterStatus !== status) return false;
                 return !scorePicked || chartData.some(r => norm(r.STANDARD) === standard && matchesStatus(r, status)
                   && scoreRangeOf(toPctNumber(r.PERCENTAGE)) === filterScoreRange);
@@ -4075,7 +4069,7 @@ const TestingModule = () => {
                 if (scorePicked) return filterScoreRange === range;
                 if (!standardPicked && !statusPicked) return true;
                 return chartData.some(r => scoreRangeOf(toPctNumber(r.PERCENTAGE)) === range
-                  && (!standardPicked || norm(r.STANDARD) === filterStandard)
+                  && (!standardPicked || standardsPickedList.includes(norm(r.STANDARD)))
                   && (!statusPicked || matchesStatus(r, filterStatus)));
               };
 
@@ -4329,26 +4323,12 @@ const TestingModule = () => {
                           }}></span>
                           Employee ID
                         </label>
-                        <SearchableSelect
+                        <MultiSelect
                           value={filterEmpId}
-                          onChange={onChangeEmpId}
+                          onChange={setFilterEmpId}
                           options={employeeIdOptions}
-                          emptyOptionLabel="All Employees"
-                          placeholder="Type to search…"
-                          style={{
-                            width: '100%',
-                            padding: '12px 15px',
-                            fontSize: '14px',
-                            border: `2px solid ${theme.border.default}`,
-                            borderRadius: '16px',
-                            backgroundColor: theme.bg.input,
-                            color: theme.text.primary,
-                            fontWeight: '500',
-                            cursor: 'text',
-                            transition: 'all 0.2s ease',
-                            outline: 'none',
-                            boxSizing: 'border-box'
-                          }}
+                          placeholder="All Employees"
+                          searchPlaceholder="Search employee ID…"
                         />
                       </div>
                       <div>
@@ -4369,26 +4349,12 @@ const TestingModule = () => {
                           }}></span>
                           Employee Name
                         </label>
-                        <SearchableSelect
+                        <MultiSelect
                           value={filterEmpName}
-                          onChange={onChangeEmpName}
+                          onChange={setFilterEmpName}
                           options={employeeNameOptions}
-                          emptyOptionLabel="All Names"
-                          placeholder="Type to search…"
-                          style={{
-                            width: '100%',
-                            padding: '12px 15px',
-                            fontSize: '14px',
-                            border: `2px solid ${theme.border.default}`,
-                            borderRadius: '16px',
-                            backgroundColor: theme.bg.input,
-                            color: theme.text.primary,
-                            fontWeight: '500',
-                            cursor: 'text',
-                            transition: 'all 0.2s ease',
-                            outline: 'none',
-                            boxSizing: 'border-box'
-                          }}
+                          placeholder="All Names"
+                          searchPlaceholder="Search employee name…"
                         />
                       </div>
                       <div>
@@ -4446,27 +4412,12 @@ const TestingModule = () => {
                           }}></span>
                           Standard
                         </label>
-                        <SearchableSelect
+                        <MultiSelect
                           value={filterStandard}
                           onChange={setFilterStandard}
                           options={standardOptions.filter(s => s !== 'All')}
-                          emptyOptionLabel="All Standards"
-                          emptyOptionValue="All"
-                          placeholder="Type to search…"
-                          style={{
-                            width: '100%',
-                            padding: '12px 15px',
-                            fontSize: '14px',
-                            border: `2px solid ${theme.border.default}`,
-                            borderRadius: '16px',
-                            backgroundColor: theme.bg.input,
-                            color: theme.text.primary,
-                            fontWeight: '500',
-                            cursor: 'text',
-                            transition: 'all 0.2s ease',
-                            outline: 'none',
-                            boxSizing: 'border-box'
-                          }}
+                          placeholder="All Standards"
+                          searchPlaceholder="Search standard…"
                         />
                       </div>
                       <div>
@@ -4646,7 +4597,7 @@ const TestingModule = () => {
                           <Download size={16} style={{ color: 'inherit' }} /> Export to CSV
                         </button>
                         <ClearFilterButton
-                          visible={Boolean(filterEmpId || filterEmpName || filterStatus !== 'All' || filterStandard !== 'All' || filterScoreRange !== 'All' || filterDateFrom || filterDateTo)}
+                          visible={Boolean(filterEmpId || filterEmpName || filterStatus !== 'All' || filterStandard || filterScoreRange !== 'All' || filterDateFrom || filterDateTo)}
                           onClick={clearFilters}
                         />
                       </div>
@@ -4662,7 +4613,9 @@ const TestingModule = () => {
                   // With something selected, everything else goes grey, so the
                   // chart shows what the table below is now listing.
                   const statusPicked = filterStatus !== 'All';
-                  const standardPicked = filterStandard !== 'All';
+                  const standardsPickedList = toMultiList(filterStandard);
+                  const standardPicked = standardsPickedList.length > 0;
+                  const empIdsPickedList = toMultiList(filterEmpId).map(v => v.toLowerCase());
                   const scorePicked = filterScoreRange !== 'All';
                   // Grey and faded, and eased so the change reads as the chart
                   // responding rather than as a redraw.
@@ -4674,12 +4627,12 @@ const TestingModule = () => {
                     if (statusPicked) return filterStatus === status;
                     if (!standardPicked && !scorePicked) return true;
                     return rfData.some(r => (status === 'Pass' ? isPass(r.STATUS) : !isPass(r.STATUS))
-                      && (!standardPicked || norm(r.STANDARD) === filterStandard)
+                      && (!standardPicked || standardsPickedList.includes(norm(r.STANDARD)))
                       && (!scorePicked || scoreRangeOf(toPctNumber(r.PERCENTAGE)) === filterScoreRange));
                   };
                   const trendDotSelected = (point) =>
-                    (!filterEmpId || String(filterEmpId) === String(point.empId)) &&
-                    (!standardPicked || filterStandard === point.standard);
+                    (empIdsPickedList.length === 0 || empIdsPickedList.includes(String(point.empId).toLowerCase())) &&
+                    (!standardPicked || standardsPickedList.includes(point.standard));
                   const renderTrendDot = (props) => {
                     const { cx, cy, index, payload } = props;
                     if (!Number.isFinite(cx) || !Number.isFinite(cy)) return null;
@@ -4699,7 +4652,7 @@ const TestingModule = () => {
                   };
                   const matchesStatus = (r, status) => (status === 'Pass' ? isPass(r.STATUS) : !isPass(r.STATUS));
                   const standardBarSelected = (standard, status) => {
-                    if (standardPicked && filterStandard !== standard) return false;
+                    if (standardPicked && !standardsPickedList.includes(standard)) return false;
                     if (statusPicked && filterStatus !== status) return false;
                     return !scorePicked || rfData.some(r => norm(r.STANDARD) === standard && matchesStatus(r, status)
                       && scoreRangeOf(toPctNumber(r.PERCENTAGE)) === filterScoreRange);
@@ -4708,7 +4661,7 @@ const TestingModule = () => {
                     if (scorePicked) return filterScoreRange === range;
                     if (!standardPicked && !statusPicked) return true;
                     return rfData.some(r => scoreRangeOf(toPctNumber(r.PERCENTAGE)) === range
-                      && (!standardPicked || norm(r.STANDARD) === filterStandard)
+                      && (!standardPicked || standardsPickedList.includes(norm(r.STANDARD)))
                       && (!statusPicked || matchesStatus(r, filterStatus)));
                   };
                   const ttStyle = { background: '#fff', border: '1px solid #ececf0', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.08)', fontSize: 13 };
@@ -4720,7 +4673,7 @@ const TestingModule = () => {
                   // choosing a score band actually shrinks the pie and the
                   // standard bars instead of only dimming them.
                   const rowMatchesOthers = (r, exclude) => {
-                    if (!exclude.standard && standardPicked && norm(r.STANDARD) !== filterStandard) return false;
+                    if (!exclude.standard && standardPicked && !standardsPickedList.includes(norm(r.STANDARD))) return false;
                     if (!exclude.status && statusPicked && !matchesStatus(r, filterStatus)) return false;
                     if (!exclude.score && scorePicked && scoreRangeOf(toPctNumber(r.PERCENTAGE)) !== filterScoreRange) return false;
                     return true;

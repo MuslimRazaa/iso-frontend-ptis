@@ -117,6 +117,22 @@ function App() {
     initModalScrollLock()
   }, [])
 
+  // The service worker (public/firebase-messaging-sw.js) handles a push
+  // notification click by focusing this tab and posting the notification's
+  // destination here — it can't call the app's own router directly. A full
+  // navigation is fine for this: it's a rare, externally-triggered jump, not
+  // an in-app click that should stay client-side.
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    const onMessage = (event) => {
+      if (event.data?.type === 'notification-click' && event.data?.url) {
+        window.location.assign(event.data.url)
+      }
+    }
+    navigator.serviceWorker.addEventListener('message', onMessage)
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage)
+  }, [])
+
   const handleLoadingComplete = () => {
     setShowLoader(false)
     setHasSeenLoader(true)

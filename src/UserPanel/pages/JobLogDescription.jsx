@@ -4,6 +4,7 @@ import { API_ENDPOINTS, API_BASE_URL } from '../../config/api'
 import PaginationBar from '../../components/PaginationBar'
 import ClearFilterButton from '../../components/ClearFilterButton'
 import StyledSelect from '../../components/StyledSelect'
+import MultiSelect from '../../components/MultiSelect'
 import StyledDatePicker from '../../components/StyledDatePicker'
 import InfoTooltip from '../../components/InfoTooltip'
 import { showToast } from '../../components/Toast'
@@ -467,126 +468,6 @@ function ModalSection({ Icon, title, hint }) {
           marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: '#9a9aaa',
           letterSpacing: '0.04em'
         }}>{hint}</span>
-      )}
-    </div>
-  )
-}
-
-/* Searchable multi-select (select2-style) — value is a comma-separated string */
-function MultiSelect({ value, onChange, options, placeholder = 'Select…', disabled, onAdd }) {
-  const [open, setOpen] = useState(false)
-  const [query, setQuery] = useState('')
-  const ref = useRef(null)
-
-  const selected = (value || '').split(',').map(s => s.trim()).filter(Boolean)
-
-  useEffect(() => {
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
-  const commit = (arr) => onChange(arr.join(', '))
-  const toggle = (name) =>
-    commit(selected.includes(name) ? selected.filter(s => s !== name) : [...selected, name])
-  const remove = (name) => commit(selected.filter(s => s !== name))
-
-  const q = query.trim()
-  const canAdd = !!onAdd && q.length > 0 && !options.some(o => o.toLowerCase() === q.toLowerCase())
-  const doAdd = async () => {
-    const added = (onAdd && await onAdd(q)) || q
-    if (added && !selected.includes(added)) commit([...selected, added])
-    setQuery('')
-  }
-
-  const filtered = options.filter(
-    o => o.toLowerCase().includes(query.toLowerCase()) || selected.includes(o)
-  )
-
-  return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      <div
-        onClick={() => { if (!disabled) setOpen(o => !o) }}
-        style={{
-          minHeight: 42, width: '100%', boxSizing: 'border-box',
-          display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6,
-          padding: selected.length ? '6px 36px 6px 8px' : '0 36px 0 12px',
-          border: '1px solid #e0e0e6', borderRadius: 8,
-          background: disabled ? '#f4f4f7' : '#ffffff',
-          color: disabled ? '#aaa' : '#1f1f27',
-          cursor: disabled ? 'not-allowed' : 'pointer',
-          position: 'relative', fontSize: 14,
-        }}
-      >
-        {selected.length === 0 && (
-          <span style={{ color: '#9a9aaa' }}>{placeholder}</span>
-        )}
-        {selected.map(name => (
-          <span key={name} style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            background: '#fdf2f3', color: '#d7263d', border: '1px solid #ffd1d8',
-            borderRadius: 6, padding: '3px 8px', fontSize: 12.5, fontWeight: 600,
-          }}>
-            {name}
-            {!disabled && (
-              <span
-                onClick={(e) => { e.stopPropagation(); remove(name) }}
-                style={{ cursor: 'pointer', fontWeight: 700, lineHeight: 1 }}
-              >×</span>
-            )}
-          </span>
-        ))}
-        <span style={{
-          position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
-          color: '#9a9aaa', fontSize: 11, pointerEvents: 'none',
-        }}>▼</span>
-      </div>
-
-      {open && !disabled && (
-        <div style={{
-          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50,
-          background: '#fff', border: '1px solid #e0e0e6', borderRadius: 8,
-          boxShadow: '0 8px 24px rgba(0,0,0,0.12)', maxHeight: 240, overflowY: 'auto',
-        }}>
-          <div style={{ padding: 8, borderBottom: '1px solid #efeff2', position: 'sticky', top: 0, background: '#fff' }}>
-            <input
-              autoFocus
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search inspector…"
-              style={{
-                width: '100%', boxSizing: 'border-box', padding: '8px 10px',
-                border: '1px solid #e0e0e6', borderRadius: 6, fontSize: 13, outline: 'none',
-              }}
-            />
-          </div>
-          {canAdd && (
-            <div onClick={doAdd}
-              style={{ padding: '9px 14px', cursor: 'pointer', fontSize: 13.5, color: '#d7263d', fontWeight: 600, borderBottom: '1px solid #efeff2' }}>
-              + Add “{q}”
-            </div>
-          )}
-          {filtered.length === 0 && !canAdd && (
-            <div style={{ padding: '12px 14px', color: '#9a9aaa', fontSize: 13 }}>No matches</div>
-          )}
-          {filtered.map(name => {
-            const isSel = selected.includes(name)
-            return (
-              <div key={name} onClick={() => toggle(name)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '9px 14px', cursor: 'pointer', fontSize: 13.5,
-                  background: isSel ? '#fdf2f3' : '#fff', color: '#1f1f27',
-                }}
-                onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = '#f7f7f9' }}
-                onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = '#fff' }}
-              >
-                <input type="checkbox" readOnly checked={isSel} style={{ accentColor: '#d7263d' }} />
-                {name}
-              </div>
-            )
-          })}
-        </div>
       )}
     </div>
   )
@@ -2123,6 +2004,7 @@ function JobLogDescription() {
                         value={modalState.inspectorName}
                         options={inspectorOptions}
                         placeholder="Select inspector(s)…"
+                        searchPlaceholder="Search inspector…"
                         disabled={!canEdit('operations')}
                         onChange={val => handleModalChange('inspectorName', val)} />
                     </div>
@@ -2139,6 +2021,7 @@ function JobLogDescription() {
                         value={modalState.inspectorTeam}
                         options={teamOptions}
                         placeholder="Select team members…"
+                        searchPlaceholder="Search inspector…"
                         disabled={!canEdit('operations')}
                         onChange={val => handleModalChange('inspectorTeam', val)} />
                     </div>
@@ -2449,6 +2332,7 @@ function JobLogDescription() {
                           value={changeOldValue}
                           options={currentRosterFor(changeField)}
                           placeholder="Select who is being replaced…"
+                          searchPlaceholder="Search inspector…"
                           onChange={setChangeOldValue} />
                       </div>
                     </div>
@@ -2461,6 +2345,7 @@ function JobLogDescription() {
                         value={changeNewValue}
                         options={changeField === 'team' ? teamOptions : inspectorOptions}
                         placeholder="Select one or more…"
+                        searchPlaceholder="Search inspector…"
                         onChange={setChangeNewValue} />
                     </div>
                   </div>

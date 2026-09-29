@@ -338,7 +338,7 @@ const MyCourses = () => {
   // Start Test — only once the course has been started. Opens a clean test
   // chooser (no course content): single standard = 1 test, multiple = pick one.
   const openTest = async (course) => {
-    if (!course.isStarted || !course.courseId || (course.localProgress || 0) < 50) return;
+    if (!course.isStarted || !course.courseId || (course.localProgress || 0) < 100) return;
     setTestModal({ show: true, course });
     setTestList([]);
     setTestLoading(true);
@@ -517,10 +517,13 @@ const MyCourses = () => {
             const label = statusLabel(course);
             const clr = statusColor(course);
             const started = course.isStarted;
-            // Matches the backend's course-progress/test-unlock rule: opening
-            // the course isn't enough on its own, they need real progress
-            // into it before the test unlocks.
-            const testUnlocked = started && course.localProgress >= 50;
+            // Matches the backend's course-progress/test-unlock rule: the
+            // course must be fully finished, not just started, before the
+            // test unlocks. Content stays revisitable afterward (see
+            // `locked` below, which only ties to the TEST having begun, not
+            // to progress) so a learner can review it again before
+            // attempting the test without losing that 100%.
+            const testUnlocked = started && course.localProgress >= 100;
             return (
               <div key={course.id} style={{
                 background: C.surface, border: `1px solid ${C.border}`, borderRadius: 18, overflow: 'hidden',
@@ -576,7 +579,7 @@ const MyCourses = () => {
                   >
                     {course.locked ? <><Icon name="lock" size={15} /> Locked</> : started ? <><Icon name="play" size={14} /> Continue</> : <><Icon name="play" size={14} /> Start Course</>}
                   </button>
-                  <button onClick={() => openTest(course)} disabled={!testUnlocked} title={testUnlocked ? 'Take the test' : started ? `Reach 50% progress to unlock (currently ${course.localProgress}%)` : 'Start the course first'} style={{
+                  <button onClick={() => openTest(course)} disabled={!testUnlocked} title={testUnlocked ? 'Take the test' : started ? `Finish the course to unlock the test (currently ${course.localProgress}%)` : 'Start the course first'} style={{
                     flex: 1, padding: '10px', borderRadius: 9, cursor: testUnlocked ? 'pointer' : 'not-allowed',
                     border: `1px solid ${testUnlocked ? C.brand : C.border}`,
                     background: testUnlocked ? C.brandTint : C.bg,
