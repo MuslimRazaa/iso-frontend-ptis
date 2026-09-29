@@ -36,6 +36,12 @@ function TaskAllocation() {
   const [rejectModalRequest, setRejectModalRequest] = useState(null)
   const [rejectReason, setRejectReason] = useState('')
   const [rejectSubmitting, setRejectSubmitting] = useState(false)
+  // The request currently being approved — the deadline used to be silently
+  // hardcoded to +30 days with no way to change it; this modal lets the admin
+  // actually set it before the course is assigned.
+  const [approveModalRequest, setApproveModalRequest] = useState(null)
+  const [approveDeadline, setApproveDeadline] = useState('')
+  const [approveSubmitting, setApproveSubmitting] = useState(false)
   const [tasksPage, setTasksPage] = useState(1)
   const [requestsPage, setRequestsPage] = useState(1)
   const [taskQuery, setTaskQuery] = useState('')
@@ -217,7 +223,7 @@ function TaskAllocation() {
     }
   }
 
-  const handleApproveRequest = async (request) => {
+  const openApproveModal = (request) => {
     const emp = employees.find(
       (e) => e.full_name?.toLowerCase() === request.employee_name?.toLowerCase()
     )
@@ -231,10 +237,36 @@ function TaskAllocation() {
       return
     }
 
-    const deadline = new Date()
-    deadline.setDate(deadline.getDate() + 30)
-    const deadlineStr = deadline.toISOString().split('T')[0]
+    const defaultDeadline = new Date()
+    defaultDeadline.setDate(defaultDeadline.getDate() + 30)
+    setApproveDeadline(defaultDeadline.toISOString().split('T')[0])
+    setApproveModalRequest(request)
+  }
 
+  const closeApproveModal = () => {
+    if (approveSubmitting) return
+    setApproveModalRequest(null)
+    setApproveDeadline('')
+  }
+
+  const confirmApproveRequest = async () => {
+    const request = approveModalRequest
+    if (!request || !approveDeadline) return
+
+    const emp = employees.find(
+      (e) => e.full_name?.toLowerCase() === request.employee_name?.toLowerCase()
+    )
+    const course = courses.find(
+      (c) => c.course_title?.toLowerCase() === request.course_title?.toLowerCase()
+    )
+    if (!emp || !course) {
+      showToast('Could not find matching employee or course. Please assign manually.', 'error')
+      setApproveModalRequest(null)
+      setShowModal(true)
+      return
+    }
+
+    setApproveSubmitting(true)
     try {
       const response = await fetch(API_ENDPOINTS.TASK_ALLOCATIONS, {
         method: 'POST',
@@ -242,7 +274,7 @@ function TaskAllocation() {
         body: JSON.stringify({
           employee_id: emp.id,
           course_id: course.id,
-          deadline: deadlineStr,
+          deadline: approveDeadline,
         }),
       })
 
@@ -258,6 +290,8 @@ function TaskAllocation() {
         await fetchAllData()
         await fetchCourseRequests()
         showToast(`Course "${request.course_title}" assigned to ${request.employee_name}!`, 'success')
+        setApproveModalRequest(null)
+        setApproveDeadline('')
       } else {
         const data = await response.json()
         showToast(data.error || 'Failed to approve request', 'error')
@@ -265,6 +299,8 @@ function TaskAllocation() {
     } catch (error) {
       console.error('Error approving request:', error)
       showToast('Failed to approve. Please assign manually.', 'error')
+    } finally {
+      setApproveSubmitting(false)
     }
   }
 
@@ -640,7 +676,7 @@ function TaskAllocation() {
                             <button
                               className="primary-btn"
                               style={{ fontSize: '12px', padding: '6px 14px' }}
-                              onClick={() => handleApproveRequest(req)}
+                              onClick={() => openApproveModal(req)}
                             >
                               Approve & Assign
                             </button>
@@ -807,6 +843,54 @@ function TaskAllocation() {
                 </button>
                 <button type="submit" className="primary-btn" disabled={rejectSubmitting}>
                   {rejectSubmitting ? 'Rejecting…' : 'Reject Request'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {approveModalRequest && (
+        <div className="modal-overlay" onClick={closeApproveModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+            <div className="modal-header">
+              <h2>Approve & Assign Course</h2>
+              <button className="close-modal-btn" onClick={closeApproveModal}>
+                ✕
+              </button>
+            </div>
+
+            <form
+              className="modal-form"
+              onSubmit={(e) => {
+                e.preventDefault()
+                confirmApproveRequest()
+              }}
+            >
+              <div className="info-box" style={{ marginBottom: 4 }}>
+                <p>
+                  <Info size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                  Approving <strong>"{approveModalRequest.course_title}"</strong> for{' '}
+                  <strong>{approveModalRequest.employee_name}</strong>. Set the deadline before it's assigned.
+                </p>
+              </div>
+
+              <label>
+                <span>Deadline *</span>
+                <StyledDatePicker
+                  value={approveDeadline}
+                  onChange={setApproveDeadline}
+                  min={new Date().toISOString().split('T')[0]}
+                  style={formSelectStyle}
+                />
+              </label>
+
+              <div className="modal-actions">
+                <button type="button" className="ghost-btn" onClick={closeApproveModal} disabled={approveSubmitting}>
+                  Cancel
+                </button>
+                <button type="submit" className="primary-btn" disabled={approveSubmitting || !approveDeadline}>
+                  {approveSubmitting ? 'Assigning…' : 'Approve & Assign'}
                 </button>
               </div>
             </form>
