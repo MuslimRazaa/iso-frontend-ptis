@@ -56,7 +56,15 @@ function StyledDatePicker({ value, onChange, min, max, placeholder = 'Select dat
     // viewport for any trigger sitting near the right edge (the date filters
     // at the end of a filter row) — pull it left just enough to stay on screen.
     const left = Math.min(r.left, window.innerWidth - margin - panelWidth)
-    return { top: r.bottom + 4, left: Math.max(margin, left), width: panelWidth }
+    // A trigger near the bottom of the viewport (e.g. a deadline field inside
+    // a modal) would otherwise open the calendar straight off the bottom edge
+    // with no way to scroll to the rest of it — flip it above the trigger
+    // instead once there isn't roughly enough room below for the full grid.
+    const estimatedPanelHeight = panelRef.current?.offsetHeight || 330
+    const spaceBelow = window.innerHeight - r.bottom
+    const openUpward = spaceBelow < estimatedPanelHeight + 8 && r.top > estimatedPanelHeight
+    const top = openUpward ? Math.max(margin, r.top - estimatedPanelHeight - 4) : r.bottom + 4
+    return { top, left: Math.max(margin, left), width: panelWidth }
   }, [])
 
   const updateRect = useCallback(() => {

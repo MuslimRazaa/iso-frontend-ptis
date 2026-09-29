@@ -359,7 +359,7 @@ function AllCourses() {
                 <tr key={row.id}>
                   <td>
                     <div className="course-cell">
-                      <img src={row.thumbnail} alt={row.title} className="course-thumb" />
+                      <img src={row.thumbnail} alt={row.title} className="course-thumb" loading="lazy" />
                       <div className="course-info">
                         <strong>{row.title}</strong>
                         <span>{row.description}</span>
@@ -404,7 +404,7 @@ function AllCourses() {
       )}
 
       {showModal && (
-        <div className="modal-overlay" onClick={cancelEdit}>
+        <div className="modal-overlay">
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Edit Course</h2>

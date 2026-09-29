@@ -43,9 +43,12 @@ function UserLmsHome() {
         const progressList = progressRes?.ok ? ((await progressRes.json()).data || []) : []
         const results = resultsRes?.ok ? ((await resultsRes.json()).data || []) : []
 
+        // Matched by email, not name — see MyCourses.jsx for why: a stale or
+        // differently-cased localStorage userFullName silently drops a course
+        // that's genuinely assigned.
         const myTasks = (Array.isArray(allTasks) ? allTasks : []).filter(t =>
-          t.employee_name && userFullName &&
-          t.employee_name.toLowerCase().trim() === userFullName.toLowerCase().trim()
+          t.employee_email && userEmail &&
+          t.employee_email.toLowerCase().trim() === userEmail.toLowerCase().trim()
         )
 
         const titleById = {}

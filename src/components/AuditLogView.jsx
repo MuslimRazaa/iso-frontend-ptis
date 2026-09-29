@@ -4,6 +4,7 @@ import { Search, Calendar, Download } from 'lucide-react'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import * as XLSX from 'xlsx'
+import { loadPtisLogoDataUrl, drawPdfLetterhead, drawPdfWatermark } from '../utils/pdfBranding'
 import { API_ENDPOINTS } from '../config/api'
 import { showToast } from './Toast'
 import ClearFilterButton from './ClearFilterButton'
@@ -170,16 +171,31 @@ const AuditLogView = forwardRef(function AuditLogView(
   const handleExportPdf = async () => {
     setExporting('pdf')
     try {
-      const allRows = await fetchAllFilteredRows()
+      const [allRows, logoDataUrl] = await Promise.all([fetchAllFilteredRows(), loadPtisLogoDataUrl()])
       const doc = new jsPDF({ orientation: 'landscape' })
-      doc.setFontSize(14)
-      doc.text(title || 'Audit Log', 14, 16)
+      const generatedAt = new Date().toLocaleString()
+      // Reserve the same top margin on every page (autoTable applies one
+      // margin.top uniformly) and redraw the letterhead in willDrawPage,
+      // which fires before that page's rows render so the table starts
+      // below it. The watermark can't go there too: autoTable paints an
+      // OPAQUE background on every cell, so anything drawn before the table
+      // is completely hidden underneath it — only the header/margin area
+      // was ever visible. Drawing it in didDrawPage instead, after the
+      // table's content for that page, layers it on top (still faint enough
+      // to read as a background) so it actually shows through the rows.
+      const marginTop = subtitle ? 48 : 42
       autoTable(doc, {
-        startY: 22,
+        margin: { top: marginTop },
         head: [['When', 'Action', 'What', 'Who', 'Details']],
         body: exportRowsToTable(allRows),
         styles: { fontSize: 8 },
         headStyles: { fillColor: [20, 20, 28] },
+        willDrawPage: () => {
+          drawPdfLetterhead(doc, { logoDataUrl, title: title || 'Audit Log', subtitle: subtitle || undefined, generatedAt })
+        },
+        didDrawPage: () => {
+          drawPdfWatermark(doc, logoDataUrl)
+        },
       })
       doc.save(`${module}-audit-log.pdf`)
       showToast(`Exported ${allRows.length} record${allRows.length === 1 ? '' : 's'} to PDF.`, 'success')

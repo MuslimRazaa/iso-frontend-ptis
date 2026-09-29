@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api';
 import { computeCourseTests } from '../utils/courseTests';
 import { Icon, C } from '../../UserLMS/lmsUI';
@@ -8,6 +8,18 @@ const BASE = '/user/learning-management-system';
 
 // course_thumbnail is stored as "/uploads/…"; build a clean URL (no double slash).
 const thumbUrl = (path) => path ? `${API_BASE_URL}/${String(path).replace(/^\/+/, '')}` : null;
+
+// Same DATE format Testing & Certification's own submissions use (DD-MM-YYYY
+// HH:MM:SS AM/PM, Asia/Karachi) — keeps an auto-recorded fail visually
+// consistent with real ones in that table instead of a raw ISO string.
+const pakistanDateTime = () => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Karachi', day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
+  }).formatToParts(new Date());
+  const map = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${map.day}-${map.month}-${map.year} ${map.hour}:${map.minute}:${map.second} ${(map.dayPeriod || '').toUpperCase()}`;
+};
 
 // Has the user started (armed) a test for this course's CURRENT assignment? The
 // Testing module drops a marker `ptis_active_test_<courseId>_<standardId>_<sinceMs>`
@@ -38,6 +50,7 @@ const MyCourses = () => {
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [toast, setToast] = useState('');
   // Test-chooser modal: opens a clean test list for a course (no course content).
   const [testModal, setTestModal] = useState({ show: false, course: null });
@@ -47,6 +60,16 @@ const MyCourses = () => {
 
   const userFullName = localStorage.getItem('userFullName') || '';
   const userEmail = localStorage.getItem('userEmail') || '';
+
+  // Arriving from the header's global search (?q=<term>) — land already
+  // filtered instead of dropping the user on the unfiltered course list.
+  useEffect(() => {
+    const q = searchParams.get('q');
+    if (!q) return;
+    setSearch(q);
+    setSearchParams(prev => { const next = new URLSearchParams(prev); next.delete('q'); return next }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   useEffect(() => {
     loadPendingRequests();
@@ -72,6 +95,26 @@ const MyCourses = () => {
         if (k && k.startsWith('ptis_active_test_')) keys.push(k);
       }
     } catch { return; }
+    if (keys.length === 0) return;
+
+    // The abandoned-test fail also needs to show up in Testing &
+    // Certification (a separate table from the LMS `test_results` this
+    // function already writes to) — otherwise a reload-abandoned test is
+    // silently invisible there, with no record and no answer sheet at all,
+    // even though the employee's course correctly shows it as failed.
+    // Standards are fetched once here (not already loaded on this page) to
+    // resolve the standard's name/pass-criteria for that record.
+    let standardsById = {};
+    try {
+      const stdRes = await fetch(API_ENDPOINTS.STANDARDS);
+      if (stdRes.ok) {
+        const stds = await stdRes.json();
+        (Array.isArray(stds) ? stds : []).forEach(s => { standardsById[s.id] = s; });
+      }
+    } catch { /* legacy record becomes best-effort below */ }
+
+    const legacyEmployeeId = localStorage.getItem('userEmployeeId') || '';
+
     for (const key of keys) {
       const parts = key.slice('ptis_active_test_'.length).split('_');
       if (parts.length < 3) { localStorage.removeItem(key); continue; }
@@ -85,20 +128,82 @@ const MyCourses = () => {
         (!sinceMs || (r.submitted_at && new Date(r.submitted_at).getTime() >= sinceMs))
       );
       if (has) { localStorage.removeItem(key); continue; }
+
+      // The Testing module mirrors the question set + answers-so-far to a
+      // sibling key on every answer (see its courseTestDataKey effect) — read
+      // it back so an abandoned test is graded on what was actually
+      // attempted instead of defaulting the whole thing to zero. Unanswered
+      // questions still count as wrong, same as a normal completed test:
+      // this is a real interrupted grade, not partial credit for only what
+      // was reached.
+      const dataKey = `ptis_active_test_data_${courseId}_${standardId}_${sinceMs}`;
+      let partial = null;
+      try { partial = JSON.parse(localStorage.getItem(dataKey) || 'null'); } catch { /* treat as no data */ }
+      const partialQuestions = Array.isArray(partial?.questions) ? partial.questions : [];
+      const partialAnswers = (partial && typeof partial.answers === 'object' && partial.answers) || {};
+      const hasRecoverableData = partialQuestions.length > 0;
+
+      const std = standardsById[standardId];
+      const passingPct = Number(std?.passing_criteria) || 75;
+
+      let total_questions = 0, correct_answers = 0, score_percentage = 0, passed = false;
+      let legacyAnswers = { __interrupted: true };
+      let legacyQuestions = [];
+
+      if (hasRecoverableData) {
+        total_questions = partialQuestions.length;
+        correct_answers = partialQuestions.filter(q => partialAnswers[q.NO] === q.Answer).length;
+        score_percentage = Math.round((correct_answers / total_questions) * 10000) / 100;
+        passed = score_percentage >= passingPct;
+        legacyAnswers = partialAnswers;
+        legacyQuestions = partialQuestions;
+      }
+
       try {
         await fetch(`${API_BASE_URL}/api/test-results/submit`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             user_email: userEmail, course_id: courseId, standard_id: standardId,
-            total_questions: 0, correct_answers: 0, score_percentage: 0,
-            passed: false, test_duration_seconds: 0, answers_data: {},
+            total_questions, correct_answers, score_percentage,
+            passed, test_duration_seconds: 0, answers_data: legacyAnswers,
           }),
         });
-        results.push({ course_id: courseId, standard_id: standardId, passed: 0, score_percentage: 0, submitted_at: new Date().toISOString() });
+
+        // Mirror into Testing & Certification too, same as a normal test
+        // completion does — with the actual recovered answer sheet when
+        // there is one, so this attempt is auditable there exactly like a
+        // completed test, not just visible as an unexplained fail.
+        if (legacyEmployeeId) {
+          try {
+            await fetch(`${API_BASE_URL}/api/test-results/legacy`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ID: legacyEmployeeId,
+                NAME: userFullName,
+                TOTAL_QUESTION: total_questions,
+                CORRECT_ANSWER: correct_answers,
+                WRONG_ANSWER: total_questions - correct_answers,
+                PERCENTAGE: `${score_percentage.toFixed(2)}%`,
+                PASSING_CRITERIA: `${passingPct}%`,
+                STATUS: passed ? 'Pass' : 'Fail',
+                STANDARD: std?.standard_name || `Standard #${standardId}`,
+                DATE: pakistanDateTime(),
+                answers: legacyAnswers,
+                questions: legacyQuestions,
+              }),
+            });
+          } catch {
+            /* LMS side already recorded the fail; legacy mirror best-effort only */
+          }
+        }
+
+        results.push({ course_id: courseId, standard_id: standardId, passed: passed ? 1 : 0, score_percentage, submitted_at: new Date().toISOString() });
         localStorage.removeItem(key);
+        localStorage.removeItem(dataKey);
       } catch {
-        /* leave the marker so we retry on the next load */
+        /* leave the marker (and data) so we retry on the next load */
       }
     }
   };
@@ -119,9 +224,16 @@ const MyCourses = () => {
       // Record any abandoned test attempts as fails before deciding what's done.
       await reconcileAbandonedTests(testResults);
 
+      // Matched by email, not name: employee_name is free text that drifts out
+      // of sync with a stale/differently-cased localStorage userFullName (the
+      // same class of bug already found in the JLR audit log's actor name),
+      // silently hiding a genuinely-assigned course — which then also makes
+      // it look "not assigned" here while the backend still refuses to
+      // re-assign it as a duplicate. Email is the one identity that's always
+      // exact.
       const myTasks = allTasks.filter(t =>
-        t.employee_name && userFullName &&
-        t.employee_name.toLowerCase().trim() === userFullName.toLowerCase().trim()
+        t.employee_email && userEmail &&
+        t.employee_email.toLowerCase().trim() === userEmail.toLowerCase().trim()
       );
 
       // A pending request is "fulfilled" once a task exists for that course — clear
@@ -226,7 +338,7 @@ const MyCourses = () => {
   // Start Test — only once the course has been started. Opens a clean test
   // chooser (no course content): single standard = 1 test, multiple = pick one.
   const openTest = async (course) => {
-    if (!course.isStarted || !course.courseId) return;
+    if (!course.isStarted || !course.courseId || (course.localProgress || 0) < 50) return;
     setTestModal({ show: true, course });
     setTestList([]);
     setTestLoading(true);
@@ -405,6 +517,10 @@ const MyCourses = () => {
             const label = statusLabel(course);
             const clr = statusColor(course);
             const started = course.isStarted;
+            // Matches the backend's course-progress/test-unlock rule: opening
+            // the course isn't enough on its own, they need real progress
+            // into it before the test unlocks.
+            const testUnlocked = started && course.localProgress >= 50;
             return (
               <div key={course.id} style={{
                 background: C.surface, border: `1px solid ${C.border}`, borderRadius: 18, overflow: 'hidden',
@@ -416,7 +532,7 @@ const MyCourses = () => {
                 {/* Big centered banner image */}
                 <div style={{ position: 'relative', height: 168, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                   {course.thumbnail
-                    ? <img src={course.thumbnail} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onError={e => { e.currentTarget.style.display = 'none'; }} />
+                    ? <img src={course.thumbnail} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onError={e => { e.currentTarget.style.display = 'none'; }} />
                     : <span style={{ color: C.muted }}><Icon name="bookOpen" size={52} /></span>}
                   <span style={{ position: 'absolute', top: 12, right: 12, fontSize: 11, fontWeight: 700, padding: '5px 12px', borderRadius: 999, background: C.surface, color: clr, border: `1px solid ${clr}55`, boxShadow: '0 2px 8px rgba(15,23,42,0.10)' }}>{label}</span>
                 </div>
@@ -460,17 +576,17 @@ const MyCourses = () => {
                   >
                     {course.locked ? <><Icon name="lock" size={15} /> Locked</> : started ? <><Icon name="play" size={14} /> Continue</> : <><Icon name="play" size={14} /> Start Course</>}
                   </button>
-                  <button onClick={() => openTest(course)} disabled={!started} title={started ? 'Take the test' : 'Start the course first'} style={{
-                    flex: 1, padding: '10px', borderRadius: 9, cursor: started ? 'pointer' : 'not-allowed',
-                    border: `1px solid ${started ? C.brand : C.border}`,
-                    background: started ? C.brandTint : C.bg,
-                    color: started ? C.brand : C.muted, fontSize: 13, fontWeight: 700, transition: 'all 0.18s',
+                  <button onClick={() => openTest(course)} disabled={!testUnlocked} title={testUnlocked ? 'Take the test' : started ? `Reach 50% progress to unlock (currently ${course.localProgress}%)` : 'Start the course first'} style={{
+                    flex: 1, padding: '10px', borderRadius: 9, cursor: testUnlocked ? 'pointer' : 'not-allowed',
+                    border: `1px solid ${testUnlocked ? C.brand : C.border}`,
+                    background: testUnlocked ? C.brandTint : C.bg,
+                    color: testUnlocked ? C.brand : C.muted, fontSize: 13, fontWeight: 700, transition: 'all 0.18s',
                     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                   }}
-                    onMouseEnter={e => { if (started) e.currentTarget.style.background = '#fde4e4'; }}
-                    onMouseLeave={e => { if (started) e.currentTarget.style.background = C.brandTint; }}
+                    onMouseEnter={e => { if (testUnlocked) e.currentTarget.style.background = '#fde4e4'; }}
+                    onMouseLeave={e => { if (testUnlocked) e.currentTarget.style.background = C.brandTint; }}
                   >
-                    {started ? <><Icon name="test" size={15} /> Start Test</> : <><Icon name="lock" size={15} /> Test</>}
+                    {testUnlocked ? <><Icon name="test" size={15} /> Start Test</> : <><Icon name="lock" size={15} /> Test</>}
                   </button>
                 </div>
                 </div>
@@ -513,7 +629,7 @@ const MyCourses = () => {
                 {/* Big centered banner image */}
                 <div style={{ position: 'relative', height: 168, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                   {course.course_thumbnail
-                    ? <img src={thumbUrl(course.course_thumbnail)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onError={e => { e.currentTarget.style.display = 'none'; }} />
+                    ? <img src={thumbUrl(course.course_thumbnail)} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onError={e => { e.currentTarget.style.display = 'none'; }} />
                     : <span style={{ color: C.muted }}><Icon name="bookOpen" size={52} /></span>}
                   {pending && <span style={{ position: 'absolute', top: 12, right: 12, fontSize: 11, fontWeight: 700, padding: '5px 12px', borderRadius: 999, background: C.surface, color: C.overdue, border: `1px solid ${C.overdue}55`, boxShadow: '0 2px 8px rgba(15,23,42,0.10)' }}>Requested</span>}
                 </div>
@@ -550,7 +666,7 @@ const MyCourses = () => {
 
       {/* ── Test chooser modal ──────────────────────────────── */}
       {testModal.show && (
-        <div className="modal-overlay" onClick={() => setTestModal({ show: false, course: null })}>
+        <div className="modal-overlay">
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 520 }}>
             <div className="modal-header">
               <div>

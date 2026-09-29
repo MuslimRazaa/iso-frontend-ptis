@@ -1533,7 +1533,7 @@ const CourseDetailUser = () => {
         <div className="course-sidebar">
           <div className="sidebar-card">
             {course.thumbnail ? (
-              <img src={course.thumbnail} alt={course.title} className="sidebar-thumbnail" />
+              <img src={course.thumbnail} alt={course.title} className="sidebar-thumbnail" loading="lazy" />
             ) : (
               <div className="sidebar-thumbnail" style={{ background: 'linear-gradient(135deg, rgba(230, 57, 70, 0.2), rgba(230, 57, 70, 0.05))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255, 255, 255, 0.5)', height: '200px' }}>
                 No Image
