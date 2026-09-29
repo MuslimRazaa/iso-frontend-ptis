@@ -1,0 +1,1 @@
+function e(){return localStorage.getItem("userType")==="admin"?"":localStorage.getItem("userEmployeeId")||localStorage.getItem("userEmail")||""}function t(){return localStorage.getItem("userType")==="admin"?"Admin":localStorage.getItem("userFullName")||localStorage.getItem("userEmail")||"Admin"}export{t as a,e as g};
