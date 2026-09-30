@@ -1675,6 +1675,16 @@ body {
   gap: 24px;
 }
 
+.form-template-card {
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-template-card:hover {
+  border-color: #d7263d;
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(215, 38, 61, 0.12);
+}
+
 .panel {
   background: #fff;
   border-radius: 32px;

@@ -4,6 +4,7 @@ import Login from './mainScreens/Login'
 import VideoLoader from './components/VideoLoader'
 import { ToastHost } from './components/Toast'
 import { initModalScrollLock } from './utils/modalScrollLock'
+import RequireAuth from './components/RequireAuth'
 import './assets/style.css'
 
 // ============================================
@@ -198,7 +199,7 @@ function App() {
             {/* User — Testing Module (same module, host auth decides role).
                 When opened from a course (from=course) it also records to the
                 LMS test_results and returns to the LMS afterwards. */}
-            <Route path="/user/testing" element={<TestingModulePage />} />
+            <Route path="/user/testing" element={<RequireAuth><TestingModulePage /></RequireAuth>} />
 
             {/* Admin — Job Log Description (standalone module) */}
             <Route path="/job-log/*" element={<JLRLayout />}>
@@ -209,7 +210,7 @@ function App() {
             </Route>
 
             {/* User — Job Log Description (same standalone layout, role-based fields) */}
-            <Route path="/user/job-log/*" element={<JLRLayout />}>
+            <Route path="/user/job-log/*" element={<RequireAuth><JLRLayout /></RequireAuth>}>
               <Route index element={<JLRHome />} />
               <Route path="entries" element={<JobLogDescription />} />
             </Route>
@@ -228,8 +229,11 @@ function App() {
               <Route path="audit-log" element={<ISOFormsAuditLog />} />
             </Route>
 
-            {/* User — ISO Forms (same standalone layout, role-based fields) */}
-            <Route path="/user/iso-forms/*" element={<ISOFormsLayout />}>
+            {/* User — ISO Forms (same standalone layout, role-based fields).
+                Guarded: this is exactly where the "pending your approval" /
+                "was approved" email links point, so a logged-out click here
+                is the normal case to handle well, not an edge case. */}
+            <Route path="/user/iso-forms/*" element={<RequireAuth><ISOFormsLayout /></RequireAuth>}>
               <Route index element={<ISOFormsHome />} />
               <Route path="templates" element={<TemplatesList />} />
               <Route path="templates/new" element={<TemplateBuilder />} />
@@ -242,8 +246,9 @@ function App() {
               <Route path="audit-log" element={<ISOFormsAuditLog />} />
             </Route>
 
-            {/* User — LMS (user-specific layout, no admin pages) */}
-            <Route path="/user/learning-management-system/*" element={<UserLmsLayout />}>
+            {/* User — LMS (user-specific layout, no admin pages). Guarded for
+                the same reason: the course-assignment email links here. */}
+            <Route path="/user/learning-management-system/*" element={<RequireAuth><UserLmsLayout /></RequireAuth>}>
               <Route index                      element={<UserLmsHome />} />
               {/* My Tasks & Browse merged into the single My Courses page */}
               <Route path="my-tasks"            element={<Navigate to="/user/learning-management-system/my-courses" replace />} />
@@ -257,7 +262,7 @@ function App() {
             {/* ============================================ */}
             {/* USER ROUTES                                 */}
             {/* ============================================ */}
-            <Route path="/user/*" element={<UserPanel />}>
+            <Route path="/user/*" element={<RequireAuth><UserPanel /></RequireAuth>}>
               <Route index element={<Navigate to="/user/dashboard" replace />} />
               <Route path="dashboard"       element={<UserDashboard />} />
               {/* Old short URLs → redirect to user LMS */}

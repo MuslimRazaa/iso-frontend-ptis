@@ -328,7 +328,7 @@ function FormFiller() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
             {templates.map(t => (
               <Link key={t.id} to={`${base}/new/${t.id}`} style={{ textDecoration: 'none' }}>
-                <div className="panel" style={{ padding: 20, cursor: 'pointer', height: '100%' }}>
+                <div className="panel form-template-card" style={{ padding: 20, cursor: 'pointer', height: '100%' }}>
                   <div style={{ fontWeight: 700, color: '#14141c', marginBottom: 6 }}>{t.name}</div>
                   <div style={{ fontSize: 13, color: '#7a7a8c' }}>{t.description || 'No description'}</div>
                 </div>
