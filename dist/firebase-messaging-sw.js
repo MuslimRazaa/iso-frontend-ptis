@@ -43,16 +43,36 @@ messaging.onBackgroundMessage((payload) => {
   self.registration.showNotification(notificationTitle, notificationOptions);
 });
 
-// Handle notification click
+// Handle notification click — previously this only reacted to the "View
+// Task" action button, so clicking the notification's body (the normal way
+// anyone clicks a notification) did nothing at all. It also always opened
+// the same hardcoded /user/task-allocations, a route that was never actually
+// wired into the app's router — ignoring the real destination the backend
+// already attaches per-notification (payload.data.url, e.g. My Courses for
+// a course assignment, a specific form for an ISO Forms approval, etc.).
 self.addEventListener('notificationclick', (event) => {
   console.log('[firebase-messaging-sw.js] Notification click received.');
 
   event.notification.close();
 
-  if (event.action === 'view') {
-    // Open the task allocations page
-    event.waitUntil(
-      clients.openWindow('/user/task-allocations')
-    );
-  }
+  // "close" is the only action that should NOT navigate anywhere.
+  if (event.action === 'close') return;
+
+  const targetPath = event.notification.data?.url || '/user/dashboard';
+  const targetUrl = new URL(targetPath, self.location.origin).href;
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // Reuse an already-open tab instead of always spawning a new one —
+      // focus it and hand it the destination to navigate to itself (a
+      // service worker can't call the app's own router directly).
+      for (const client of clientList) {
+        if ('focus' in client) {
+          client.postMessage({ type: 'notification-click', url: targetPath });
+          return client.focus();
+        }
+      }
+      return clients.openWindow(targetUrl);
+    })
+  );
 });

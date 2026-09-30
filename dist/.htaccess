@@ -5,6 +5,32 @@ Options -MultiViews
 # (breaks the PDF.js worker used by ISO Forms' "Import from PDF").
 AddType text/javascript .mjs
 
+# Compress text-based assets in transit — none of this was enabled before,
+# so every JS/CSS/HTML response was sent over the wire uncompressed
+# regardless of how small the build itself was.
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript
+  AddOutputFilterByType DEFLATE application/javascript application/x-javascript application/json
+  AddOutputFilterByType DEFLATE application/xml application/rss+xml application/atom+xml
+  AddOutputFilterByType DEFLATE image/svg+xml font/ttf font/otf application/font-woff application/font-woff2 font/woff font/woff2
+</IfModule>
+
+# Cache hashed build assets (index-<hash>.js, index-<hash>.css, …) for a
+# year — every rebuild ships a new hash, so there's no staleness risk, and a
+# returning visitor stops re-downloading assets that haven't actually
+# changed. index.html itself is excluded and kept always-revalidated: it's
+# the one file that names the CURRENT hashed assets, so caching it would
+# leave a returning visitor's page pointing at yesterday's deleted files
+# after a new deploy.
+<IfModule mod_headers.c>
+  <FilesMatch "\.(js|mjs|css|woff2?|ttf|otf|png|jpe?g|gif|svg|mp4|webm)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+  <FilesMatch "\.html$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+</IfModule>
+
 RewriteEngine On
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule ^ index.html [QSA,L]

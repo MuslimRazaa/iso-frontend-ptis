@@ -1,11 +1,14 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, Suspense, lazy } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { API_ENDPOINTS } from '../../config/api'
 import { showToast } from '../../components/Toast'
 import { getActorId, getActorName } from '../../utils/actorIdentity'
 import { getOfflineTemplate, addOfflineTemplate, updateOfflineTemplate } from '../utils/offlineStore'
-import PdfImportModal from '../components/PdfImportModal'
-import FieldPositionEditor from './FieldPositionEditor'
+// Both pull in pdfjs-dist (~500KB) to render/parse PDF pages — lazy-loaded
+// since they're only opened from a click (Import PDF / position fields), not
+// needed just to view or fill out the rest of the template builder form.
+const PdfImportModal = lazy(() => import('../components/PdfImportModal'))
+const FieldPositionEditor = lazy(() => import('./FieldPositionEditor'))
 import { isPlaced } from '../utils/pdfCoords'
 import { FIELD_TYPES, blankField, hasOptions, blankApprovalRole, ownerOptionsFor } from '../utils/fieldTypes'
 import StyledSelect from '../../components/StyledSelect'
@@ -443,32 +446,36 @@ function TemplateBuilder() {
       </div>
 
       {showImport && (
-        <PdfImportModal
-          onImport={handlePdfImport}
-          onClose={() => setShowImport(false)}
-        />
+        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, color: '#fff', fontSize: 14 }}>Loading…</div>}>
+          <PdfImportModal
+            onImport={handlePdfImport}
+            onClose={() => setShowImport(false)}
+          />
+        </Suspense>
       )}
 
       {showPositions && originalPdfBase64 && (
-        <FieldPositionEditor
-          pdfBase64={originalPdfBase64}
-          fields={fields.filter(f => f.label.trim())}
-          approvalRoles={approvalRoles}
-          onClose={() => setShowPositions(false)}
-          onSave={(updated) => {
-            setFields(prev => {
-              // The editor holds every field it was given: what came back is
-              // the whole list, in the order it was left in there — including
-              // fields added and minus any deleted. Rebuilding from `prev`
-              // instead kept this page's order, so reordering fields in the
-              // editor quietly did nothing.
-              const sentToEditor = new Set(prev.filter(f => f.label.trim()).map(f => f.id))
-              const neverSent = prev.filter(f => !sentToEditor.has(f.id))
-              return [...updated, ...neverSent]
-            })
-            setShowPositions(false)
-          }}
-        />
+        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, color: '#fff', fontSize: 14 }}>Loading…</div>}>
+          <FieldPositionEditor
+            pdfBase64={originalPdfBase64}
+            fields={fields.filter(f => f.label.trim())}
+            approvalRoles={approvalRoles}
+            onClose={() => setShowPositions(false)}
+            onSave={(updated) => {
+              setFields(prev => {
+                // The editor holds every field it was given: what came back is
+                // the whole list, in the order it was left in there — including
+                // fields added and minus any deleted. Rebuilding from `prev`
+                // instead kept this page's order, so reordering fields in the
+                // editor quietly did nothing.
+                const sentToEditor = new Set(prev.filter(f => f.label.trim()).map(f => f.id))
+                const neverSent = prev.filter(f => !sentToEditor.has(f.id))
+                return [...updated, ...neverSent]
+              })
+              setShowPositions(false)
+            }}
+          />
+        </Suspense>
       )}
     </div>
   )

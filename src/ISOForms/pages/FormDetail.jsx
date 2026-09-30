@@ -483,19 +483,61 @@ function FormDetail() {
             {attachments.map((att, i) => {
               const path = att.file_path || att.path
               const href = att.data_url || (path ? `${API_BASE_URL}${path}` : null)
+              const name = att.file_name || att.name || `Attachment ${i + 1}`
               return href ? (
-                <a
+                <div
                   key={i}
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none',
+                    display: 'flex', alignItems: 'center', gap: 10,
                     padding: '10px 14px', border: '1px solid #ececf0', borderRadius: 10, fontSize: 14, color: '#14141c',
                   }}
                 >
-                  📎 {att.file_name || att.name || `Attachment ${i + 1}`}
-                </a>
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📎 {name}</span>
+                  {/* View opens it in a new tab (works for PDFs/images the browser
+                      can render inline); Download always saves the file locally —
+                      a plain <a> without the download attribute won't force a save
+                      for a cross-origin file (the API is a different host from the
+                      frontend on the live site), so this fetches it as a blob and
+                      triggers the save itself instead, the same pattern already
+                      used for practical-result attachments elsewhere in the app. */}
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      flexShrink: 0, textDecoration: 'none', fontSize: 13, fontWeight: 600,
+                      color: '#14141c', padding: '6px 12px', borderRadius: 999, border: '1px solid #dcdce3',
+                    }}
+                  >
+                    View
+                  </a>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch(href)
+                        if (!res.ok) throw new Error('Download failed')
+                        const blob = await res.blob()
+                        const blobUrl = URL.createObjectURL(blob)
+                        const link = document.createElement('a')
+                        link.href = blobUrl
+                        link.download = name
+                        document.body.appendChild(link)
+                        link.click()
+                        document.body.removeChild(link)
+                        URL.revokeObjectURL(blobUrl)
+                      } catch {
+                        showToast('Could not download the attachment.', 'error')
+                      }
+                    }}
+                    style={{
+                      flexShrink: 0, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                      color: '#fff', padding: '6px 12px', borderRadius: 999, border: 'none', background: '#d7263d',
+                    }}
+                  >
+                    Download
+                  </button>
+                </div>
               ) : (
                 <div
                   key={i}
@@ -505,7 +547,7 @@ function FormDetail() {
                     padding: '10px 14px', border: '1px dashed #ececf0', borderRadius: 10, fontSize: 14, color: '#9a9aaa',
                   }}
                 >
-                  📎 {att.file_name || att.name || `Attachment ${i + 1}`} <span style={{ fontSize: 12 }}>(preview unavailable)</span>
+                  📎 {name} <span style={{ fontSize: 12 }}>(preview unavailable)</span>
                 </div>
               )
             })}

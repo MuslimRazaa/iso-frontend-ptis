@@ -1,9 +1,6 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Search, Calendar, Download } from 'lucide-react'
-import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
-import * as XLSX from 'xlsx'
 import { loadPtisLogoDataUrl, drawPdfLetterhead, drawPdfWatermark } from '../utils/pdfBranding'
 import { API_ENDPOINTS } from '../config/api'
 import { showToast } from './Toast'
@@ -171,7 +168,15 @@ const AuditLogView = forwardRef(function AuditLogView(
   const handleExportPdf = async () => {
     setExporting('pdf')
     try {
-      const [allRows, logoDataUrl] = await Promise.all([fetchAllFilteredRows(), loadPtisLogoDataUrl()])
+      // jsPDF + autotable (~230KB) only ever get used if someone actually
+      // clicks Export — loading them here instead of at module import time
+      // keeps every page that embeds this table (JLR, ISO Forms, Testing)
+      // from paying that weight just to view the log.
+      const [{ default: jsPDF }, { default: autoTable }, [allRows, logoDataUrl]] = await Promise.all([
+        import('jspdf'),
+        import('jspdf-autotable'),
+        Promise.all([fetchAllFilteredRows(), loadPtisLogoDataUrl()]),
+      ])
       const doc = new jsPDF({ orientation: 'landscape' })
       const generatedAt = new Date().toLocaleString()
       // Reserve the same top margin on every page (autoTable applies one
@@ -209,7 +214,7 @@ const AuditLogView = forwardRef(function AuditLogView(
   const handleExportExcel = async () => {
     setExporting('excel')
     try {
-      const allRows = await fetchAllFilteredRows()
+      const [XLSX, allRows] = await Promise.all([import('xlsx'), fetchAllFilteredRows()])
       const sheetRows = allRows.map(row => ({
         When: row.created_at ? new Date(row.created_at).toLocaleString() : '—',
         Action: row.action || '',

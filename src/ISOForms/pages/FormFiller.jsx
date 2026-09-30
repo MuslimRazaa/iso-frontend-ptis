@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useLocation } from 'react-router-dom'
-import { API_ENDPOINTS } from '../../config/api'
+import API_BASE_URL, { API_ENDPOINTS } from '../../config/api'
 import DynamicField from '../components/DynamicField'
 import { isFieldEmpty } from '../utils/fieldHelpers'
 import { SEED_TEMPLATES, SEED_VERSION, SEED_EMPLOYEES } from '../seedTemplates'
@@ -421,20 +421,59 @@ function FormFiller() {
               <label style={{ fontWeight: 600, fontSize: 14 }}>Attachments</label>
               <button type="button" className="ghost-btn small" onClick={addAttachment}>+ Add Attachment</button>
             </div>
-            {storedAttachments.map((file, index) => (
-              <div key={`stored-${index}`} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-                <span style={{ flex: 1, minWidth: 0, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  📎 {file.file_name || file.file_path}
-                </span>
-                <button
-                  type="button"
-                  className="ghost-btn small"
-                  onClick={() => setStoredAttachments(prev => prev.filter((_, i) => i !== index))}
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
+            {storedAttachments.map((file, index) => {
+              const name = file.file_name || file.file_path
+              const href = file.data_url || (file.file_path ? `${API_BASE_URL}${file.file_path}` : null)
+              return (
+                <div key={`stored-${index}`} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    📎 {name}
+                  </span>
+                  {href && (
+                    <>
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ flexShrink: 0, textDecoration: 'none', fontSize: 13, fontWeight: 600, color: '#14141c', padding: '6px 12px', borderRadius: 999, border: '1px solid #dcdce3' }}
+                      >
+                        View
+                      </a>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const res = await fetch(href)
+                            if (!res.ok) throw new Error('Download failed')
+                            const blob = await res.blob()
+                            const blobUrl = URL.createObjectURL(blob)
+                            const link = document.createElement('a')
+                            link.href = blobUrl
+                            link.download = name
+                            document.body.appendChild(link)
+                            link.click()
+                            document.body.removeChild(link)
+                            URL.revokeObjectURL(blobUrl)
+                          } catch {
+                            showToast('Could not download the attachment.', 'error')
+                          }
+                        }}
+                        style={{ flexShrink: 0, fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#fff', padding: '6px 12px', borderRadius: 999, border: 'none', background: '#d7263d' }}
+                      >
+                        Download
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    className="ghost-btn small"
+                    onClick={() => setStoredAttachments(prev => prev.filter((_, i) => i !== index))}
+                  >
+                    Remove
+                  </button>
+                </div>
+              )
+            })}
             {attachments.length === 0 && storedAttachments.length === 0 ? (
               <p style={{ margin: 0, fontSize: 13, color: '#7a7a8c' }}>No attachments added yet.</p>
             ) : attachments.map((file, index) => (
