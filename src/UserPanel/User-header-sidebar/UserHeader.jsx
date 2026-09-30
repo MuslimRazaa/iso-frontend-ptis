@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import ptisLogo from '/ptisLogo.png';
 import { API_BASE_URL, API_ENDPOINTS } from '../../config/api';
 import { getCurrentEmployeeId } from '../../ISOForms/utils/currentEmployee';
+import { showToast } from '../../components/Toast';
 
 const UserHeader = () => {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -62,6 +63,43 @@ const UserHeader = () => {
       await fetch(`${API_BASE_URL}/api/notifications/${userEmail}/read-all`, { method: 'PUT' });
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
+    }
+  };
+
+  // Removes a single notification. Optimistic (updates the list immediately,
+  // same as markAsRead above) with a rollback if the request actually fails
+  // — a delete that silently didn't happen server-side would resurface the
+  // "deleted" notification on the next reload, which is worse than a brief
+  // flash back if the request errors.
+  const deleteNotification = async (e, notificationId) => {
+    e.stopPropagation();
+    const previous = notifications;
+    setNotifications(prev => prev.filter(n => n.id !== notificationId));
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/notifications/single/${notificationId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Delete failed');
+      showToast('Notification deleted.', 'success');
+    } catch (error) {
+      console.error('Error deleting notification:', error);
+      setNotifications(previous);
+      showToast('Could not delete that notification.', 'error');
+    }
+  };
+
+  const deleteAllNotifications = async () => {
+    if (notifications.length === 0) return;
+    const count = notifications.length;
+    if (!window.confirm(`Delete all ${count} notification${count === 1 ? '' : 's'}? This can't be undone.`)) return;
+    const previous = notifications;
+    setNotifications([]);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/notifications/${userEmail}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Delete failed');
+      showToast(`${count} notification${count === 1 ? '' : 's'} deleted.`, 'success');
+    } catch (error) {
+      console.error('Error deleting all notifications:', error);
+      setNotifications(previous);
+      showToast('Could not clear notifications.', 'error');
     }
   };
 
@@ -267,7 +305,11 @@ const UserHeader = () => {
                   setSearchQuery(e.target.value);
                   setShowSearchResults(true);
                 }}
-                onFocus={() => setShowSearchResults(true)}
+                onFocus={() => {
+                  setShowSearchResults(true);
+                  setShowNotifications(false);
+                  setShowProfileMenu(false);
+                }}
                 className="search-cluster-input"
                 style={{
                   background: 'transparent',
@@ -358,6 +400,7 @@ const UserHeader = () => {
               onClick={() => {
                 setShowNotifications(!showNotifications);
                 setShowProfileMenu(false);
+                setShowSearchResults(false);
               }}
               style={{
                 position: 'relative',
@@ -434,6 +477,7 @@ const UserHeader = () => {
                     notifications.map(notif => (
                       <div
                         key={notif.id}
+                        className="notif-row"
                         onClick={() => handleNotificationClick(notif)}
                         style={{
                           padding: '12px 16px',
@@ -445,7 +489,7 @@ const UserHeader = () => {
                         onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
                         onMouseLeave={(e) => e.currentTarget.style.background = !notif.read ? 'rgba(255, 93, 93, 0.1)' : 'transparent'}
                       >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', paddingRight: 24 }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <p style={{ fontSize: '13px', fontWeight: 600, margin: '0 0 2px 0' }}>{notif.title}</p>
                             <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', margin: 0 }}>{notif.body}</p>
@@ -455,18 +499,44 @@ const UserHeader = () => {
                             <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#ff5d5d', marginTop: '4px', flexShrink: 0 }} />
                           )}
                         </div>
+                        <button
+                          type="button"
+                          className="notif-delete-btn"
+                          onClick={(e) => deleteNotification(e, notif.id)}
+                          title="Delete notification"
+                          style={{
+                            position: 'absolute', top: 10, right: 10,
+                            width: 20, height: 20, borderRadius: '50%',
+                            background: 'rgba(255,255,255,0.12)', border: 'none',
+                            color: '#fff', fontSize: 13, lineHeight: 1, cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}
+                        >
+                          ✕
+                        </button>
                       </div>
                     ))
                   )}
                 </div>
                 {notifications.length > 0 && (
-                  <div style={{ padding: '10px 16px', borderTop: '1px solid rgba(255,255,255,0.15)', textAlign: 'center' }}>
+                  <div style={{ padding: '10px 16px', borderTop: '1px solid rgba(255,255,255,0.15)', display: 'flex', justifyContent: 'center', gap: '18px' }}>
                     <button
                       type="button"
                       onClick={() => { markAllAsRead(); setShowNotifications(false); }}
-                      style={{ background: 'none', border: 'none', color: '#ff5d5d', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+                      style={{ background: 'none', border: 'none', borderRadius: 999, padding: '4px 10px', color: '#ff5d5d', fontSize: '12px', fontWeight: 600, cursor: 'pointer', transition: 'background 0.15s ease' }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 93, 93, 0.15)'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
                     >
                       Mark all as read
+                    </button>
+                    <button
+                      type="button"
+                      onClick={deleteAllNotifications}
+                      style={{ background: 'none', border: 'none', borderRadius: 999, padding: '4px 10px', color: 'rgba(255,255,255,0.6)', fontSize: '12px', fontWeight: 600, cursor: 'pointer', transition: 'background 0.15s ease, color 0.15s ease' }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; e.currentTarget.style.color = '#fff'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'rgba(255,255,255,0.6)'; }}
+                    >
+                      Delete all
                     </button>
                   </div>
                 )}
@@ -477,7 +547,11 @@ const UserHeader = () => {
           <span className="divider-dot header-divider" style={{ background: 'rgba(255, 255, 255, 0.4)' }} />
           
           <div className="user-menu-wrapper">
-            <button className="user-chip" onClick={() => setShowProfileMenu(!showProfileMenu)} style={{
+            <button className="user-chip" onClick={() => {
+              setShowProfileMenu(!showProfileMenu);
+              setShowNotifications(false);
+              setShowSearchResults(false);
+            }} style={{
               background: 'rgba(255, 255, 255, 0.2)',
               border: '1px solid rgba(255, 255, 255, 0.3)',
               backdropFilter: 'blur(10px)',
@@ -561,6 +635,20 @@ const UserHeader = () => {
       </header>
       
       <style jsx>{`
+        .notif-row {
+          position: relative;
+        }
+        .notif-delete-btn {
+          opacity: 0;
+          transition: opacity 0.15s ease, background 0.15s ease;
+        }
+        .notif-row:hover .notif-delete-btn {
+          opacity: 1;
+        }
+        .notif-delete-btn:hover {
+          background: rgba(255, 93, 93, 0.25) !important;
+        }
+
         .search-cluster-wrapper {
           width: clamp(140px, 22vw, 220px);
           flex-shrink: 1;
