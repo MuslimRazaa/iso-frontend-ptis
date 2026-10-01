@@ -16,6 +16,7 @@ import {
   Loader,
   RefreshCw,
   Download,
+  Upload,
   BookOpen,
   Eye,
   EyeOff,
@@ -2244,6 +2245,129 @@ const TestingModule = () => {
     };
     const [resultFormData, setResultFormData] = useState(createDefaultResultFormData);
 
+    // --- One-off "import old results" tool. A server-backed visibility flag
+    // (not localStorage) so clicking Delete hides it for every admin on every
+    // device, not just this browser — null while unknown, so the buttons
+    // don't flash visible-then-hidden on first paint.
+    const [importToolVisible, setImportToolVisible] = useState(null);
+    const [showImportModal, setShowImportModal] = useState(false);
+    const [importParsedRows, setImportParsedRows] = useState(null);
+    const [importUploading, setImportUploading] = useState(false);
+    const [importSummary, setImportSummary] = useState(null);
+    const [importErrors, setImportErrors] = useState([]);
+    const importFileInputRef = useRef(null);
+
+    useEffect(() => {
+      let cancelled = false;
+      fetch(`${API_BASE_URL}/api/test-results/legacy/import-tool`)
+        .then(r => r.ok ? r.json() : { visible: true })
+        .then(data => { if (!cancelled) setImportToolVisible(data.visible !== false); })
+        .catch(() => { if (!cancelled) setImportToolVisible(true); });
+      return () => { cancelled = true; };
+    }, []);
+
+    const closeImportModal = () => {
+      setShowImportModal(false);
+      setImportParsedRows(null);
+      setImportSummary(null);
+      setImportErrors([]);
+      if (importFileInputRef.current) importFileInputRef.current.value = '';
+    };
+
+    const handleImportFileChange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const XLSX = await import('xlsx');
+          const data = new Uint8Array(event.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+          if (jsonData.length === 0) {
+            showSiteToast('That file has no rows.', 'error');
+            if (importFileInputRef.current) importFileInputRef.current.value = '';
+            return;
+          }
+
+          const requiredColumns = ['ID', 'NAME', 'STANDARD', 'DATE'];
+          const columns = Object.keys(jsonData[0]);
+          const missingColumns = requiredColumns.filter(col => !columns.includes(col));
+          if (missingColumns.length > 0) {
+            showSiteToast(`Missing columns: ${missingColumns.join(', ')}. Required: ID, NAME, STANDARD, DATE (plus optional TOTAL_QUESTION, CORRECT_ANSWER, WRONG_ANSWER, PERCENTAGE, PASSING_CRITERIA, STATUS).`, 'error');
+            if (importFileInputRef.current) importFileInputRef.current.value = '';
+            return;
+          }
+
+          setImportParsedRows(jsonData);
+          setImportSummary(null);
+          setImportErrors([]);
+          setShowImportModal(true);
+        } catch (err) {
+          console.error('Error parsing import file:', err);
+          showSiteToast('Could not read that file. Please check the format.', 'error');
+          if (importFileInputRef.current) importFileInputRef.current.value = '';
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    };
+
+    const handleImportUpload = async () => {
+      if (!importParsedRows || importParsedRows.length === 0) return;
+      setImportUploading(true);
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/test-results/legacy/bulk-import`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ results: importParsedRows }),
+        });
+        if (!response.ok) throw new Error(`Server error: ${response.status}`);
+        const result = await response.json();
+        setImportSummary({ success: result.success || 0, failed: result.failed || 0, total: result.total || importParsedRows.length });
+        setImportErrors(Array.isArray(result.errors) ? result.errors : []);
+        showSiteToast(
+          result.failed > 0 ? `Imported ${result.success} of ${result.total} rows (${result.failed} failed).` : `Imported ${result.success} result(s) successfully.`,
+          result.failed > 0 ? 'info' : 'success'
+        );
+        loadResults(true);
+      } catch (err) {
+        console.error('Error importing results:', err);
+        showSiteToast(`Import failed: ${err.message}`, 'error');
+      } finally {
+        setImportUploading(false);
+      }
+    };
+
+    const handleHideImportTool = async () => {
+      if (!window.confirm('Remove the Import and Delete buttons for every admin? This cannot be undone from here.')) return;
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/test-results/legacy/import-tool`, { method: 'DELETE' });
+        if (!response.ok) throw new Error('Request failed');
+        setImportToolVisible(false);
+        showSiteToast('Import tool removed.', 'success');
+      } catch (err) {
+        console.error('Error hiding import tool:', err);
+        showSiteToast('Could not remove the import tool. Try again.', 'error');
+      }
+    };
+
+    const downloadImportSampleExcel = async () => {
+      const XLSX = await import('xlsx');
+      const sampleData = [
+        {
+          ID: '1739', NAME: 'Jane Doe', STANDARD: 'API RP 7G-2', DATE: '01-06-2024 10:00:00 AM',
+          TOTAL_QUESTION: 50, CORRECT_ANSWER: 42, WRONG_ANSWER: 8, PERCENTAGE: '84%', PASSING_CRITERIA: '75%', STATUS: 'Pass',
+        },
+      ];
+      const worksheet = XLSX.utils.json_to_sheet(sampleData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Results');
+      XLSX.writeFile(workbook, 'Test_Results_Import_Template.xlsx');
+    };
+
     const resultEmployeeIdOptions = useMemo(() => {
       const ids = new Set(employees.map(emp => String(emp.ID || '')).filter(Boolean));
       return Array.from(ids).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
@@ -2708,7 +2832,15 @@ const TestingModule = () => {
         `${toPctNumber(r.PERCENTAGE)}%`,
         norm(r.PASSING_CRITERIA),
         norm(r.STATUS),
-        norm(r.DATE)
+        // Excel's CSV import auto-detects date-looking text and silently
+        // reformats it per the opener's locale — "09-07-2025" (day 09) is
+        // ambiguous as day-first vs month-first and gets reinterpreted,
+        // while "28-10-2025" (day 28, impossible as a month) can't be
+        // misread so it survives untouched. That's why only some dates
+        // looked wrong after export, never all of them. Wrapping the value
+        // in an Excel "text formula" (`="…"`) forces it to render as the
+        // literal string instead of being parsed as a date at all.
+        `="${norm(r.DATE)}"`,
       ]);
       const csv = [headers, ...data].map(row =>
         row.map(cell => {
@@ -3971,6 +4103,34 @@ const TestingModule = () => {
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                   >
                     <Download size={14} /> {auditExporting === 'excel' ? 'Exporting…' : 'Export Excel'}
+                  </button>
+                </>
+              )}
+              {adminActiveTab === 'results' && importToolVisible && (
+                <>
+                  <input
+                    ref={importFileInputRef}
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    onChange={handleImportFileChange}
+                    style={{ display: 'none' }}
+                  />
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={() => importFileInputRef.current?.click()}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <Upload size={14} /> Import
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={handleHideImportTool}
+                    title="Remove the Import and Delete buttons for every admin"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#b42318', borderColor: '#f5c2c0' }}
+                  >
+                    <Trash2 size={14} /> Delete
                   </button>
                 </>
               )}
@@ -5778,6 +5938,117 @@ const TestingModule = () => {
                 )}
 
                 {/* Removed certification type edit modal - now handled at certificate generation time */}
+
+                {showImportModal && (
+                  <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: 'rgba(26, 26, 46, 0.85)', backdropFilter: 'blur(4px)',
+                    display: 'flex', justifyContent: 'center', alignItems: 'center',
+                    zIndex: 1000, padding: '20px',
+                  }}>
+                    <div style={{
+                      backgroundColor: theme.bg.card,
+                      padding: isMobile ? '22px 16px' : '35px',
+                      borderRadius: '28px',
+                      width: '100%',
+                      maxWidth: isMobile ? '100%' : '560px',
+                      maxHeight: '90vh',
+                      overflowY: 'auto',
+                      boxShadow: `0 20px 60px ${isDarkMode ? 'rgba(0,0,0,0.5)' : 'rgba(0, 0, 0, 0.3)'}`,
+                    }}>
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        marginBottom: '20px', borderBottom: '3px solid #d7263d', paddingBottom: '15px',
+                      }}>
+                        <h3 style={{ margin: 0, color: theme.text.primary, fontSize: '1.4em', fontWeight: 600 }}>
+                          Import Old Results
+                        </h3>
+                        <button type="button" onClick={closeImportModal} style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.textMuted }}>
+                          <X size={22} />
+                        </button>
+                      </div>
+
+                      {!importSummary ? (
+                        <>
+                          <p style={{ color: colors.textMuted, fontSize: 14, marginTop: 0 }}>
+                            {importParsedRows?.length || 0} row(s) found in the file. Each row needs at least
+                            {' '}<strong>ID, NAME, STANDARD, DATE</strong> — everything else (score, status, pass
+                            criteria) is optional and defaults sensibly if left out.
+                          </p>
+                          <button
+                            type="button"
+                            className="ghost-btn"
+                            onClick={downloadImportSampleExcel}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 20 }}
+                          >
+                            <Download size={14} /> Download sample template
+                          </button>
+                          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '10px', paddingTop: '20px', borderTop: `2px solid ${theme.border.default}` }}>
+                            <button
+                              type="button"
+                              onClick={closeImportModal}
+                              style={{
+                                padding: '12px 30px', backgroundColor: theme.bg.card, color: theme.text.secondary,
+                                border: `2px solid ${theme.border.default}`, borderRadius: '28px', cursor: 'pointer',
+                                fontSize: '15px', fontWeight: 600,
+                              }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              disabled={importUploading}
+                              onClick={handleImportUpload}
+                              style={{
+                                padding: '12px 30px',
+                                background: importUploading ? '#95a5a6' : 'linear-gradient(120deg, #b91c3c, #d7263d)',
+                                color: 'white', border: 'none', borderRadius: '18px',
+                                cursor: importUploading ? 'not-allowed' : 'pointer', fontSize: '15px', fontWeight: 600,
+                              }}
+                            >
+                              {importUploading ? 'Uploading…' : `Upload ${importParsedRows?.length || 0} Row(s)`}
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div style={{
+                            padding: '14px 16px', borderRadius: 12, marginBottom: 16,
+                            background: importSummary.failed > 0 ? '#fff7e6' : '#eefbf2',
+                            border: `1px solid ${importSummary.failed > 0 ? '#ffe1a8' : '#b7e4c7'}`,
+                            color: importSummary.failed > 0 ? '#92660a' : '#1e7e45', fontSize: 14,
+                          }}>
+                            Imported {importSummary.success} of {importSummary.total} row(s).
+                            {importSummary.failed > 0 ? ` ${importSummary.failed} failed — see below.` : ''}
+                          </div>
+                          {importErrors.length > 0 && (
+                            <div style={{ maxHeight: 220, overflowY: 'auto', marginBottom: 16, border: `1px solid ${theme.border.default}`, borderRadius: 10 }}>
+                              {importErrors.map((e, i) => (
+                                <div key={i} style={{ padding: '8px 12px', fontSize: 13, color: '#b42318', borderBottom: i < importErrors.length - 1 ? `1px solid ${theme.border.default}` : 'none' }}>
+                                  Row {e.row}: {e.error}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '10px', borderTop: `2px solid ${theme.border.default}` }}>
+                            <button
+                              type="button"
+                              onClick={closeImportModal}
+                              style={{
+                                padding: '12px 30px',
+                                background: 'linear-gradient(120deg, #b91c3c, #d7263d)',
+                                color: 'white', border: 'none', borderRadius: '18px',
+                                cursor: 'pointer', fontSize: '15px', fontWeight: 600,
+                              }}
+                            >
+                              Done
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
               </>
             )}
 
