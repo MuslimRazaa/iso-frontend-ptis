@@ -34,6 +34,7 @@ function FormFiller() {
   })()
 
   const [templates, setTemplates] = useState([])
+  const [templateSearch, setTemplateSearch] = useState('')
   const [template, setTemplate] = useState(null)
   const [loadingTemplates, setLoadingTemplates] = useState(!templateId && !entryId)
   const [loadingTemplate, setLoadingTemplate] = useState(Boolean(templateId))
@@ -320,22 +321,50 @@ function FormFiller() {
           </div>
         )}
 
+        {!loadingTemplates && templates.length > 0 && (
+          <div style={{ position: 'relative', maxWidth: 360, marginBottom: 20 }}>
+            <svg viewBox="0 0 20 20" fill="none" style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', width: 16, height: 16, color: '#9a9aaa', pointerEvents: 'none' }}>
+              <circle cx="8.5" cy="8.5" r="5.75" stroke="currentColor" strokeWidth="1.5"/>
+              <path d="M12.5 12.5L16 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+            <input
+              type="text"
+              value={templateSearch}
+              onChange={(e) => setTemplateSearch(e.target.value)}
+              placeholder="Search forms by name, code or description…"
+              style={{
+                width: '100%', boxSizing: 'border-box', padding: '12px 14px 12px 40px',
+                border: '1px solid #e0e0e6', borderRadius: 12, fontSize: 14, outline: 'none',
+                color: '#14141c',
+              }}
+            />
+          </div>
+        )}
+
         {loadingTemplates ? (
           <div style={{ color: '#7a7a8c' }}>Loading…</div>
         ) : templates.length === 0 ? (
           <div style={{ color: '#7a7a8c' }}>No form templates have been created yet.</div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
-            {templates.map(t => (
-              <Link key={t.id} to={`${base}/new/${t.id}`} style={{ textDecoration: 'none' }}>
-                <div className="panel form-template-card" style={{ padding: 20, cursor: 'pointer', height: '100%' }}>
-                  <div style={{ fontWeight: 700, color: '#14141c', marginBottom: 6 }}>{t.name}</div>
-                  <div style={{ fontSize: 13, color: '#7a7a8c' }}>{t.description || 'No description'}</div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
+        ) : (() => {
+          const q = templateSearch.trim().toLowerCase()
+          const filteredTemplates = q
+            ? templates.filter(t => [t.name, t.description, t.form_code].filter(Boolean).join(' ').toLowerCase().includes(q))
+            : templates
+          return filteredTemplates.length === 0 ? (
+            <div style={{ color: '#7a7a8c' }}>No forms match "{templateSearch}".</div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
+              {filteredTemplates.map(t => (
+                <Link key={t.id} to={`${base}/new/${t.id}`} style={{ textDecoration: 'none' }}>
+                  <div className="panel form-template-card" style={{ padding: 20, cursor: 'pointer', height: '100%' }}>
+                    <div style={{ fontWeight: 700, color: '#14141c', marginBottom: 6 }}>{t.name}</div>
+                    <div style={{ fontSize: 13, color: '#7a7a8c' }}>{t.description || 'No description'}</div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )
+        })()}
       </div>
     )
   }

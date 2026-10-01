@@ -2094,6 +2094,21 @@ const TestingModule = () => {
       return Array.from(s).sort((a, b) => a.localeCompare(b));
     }, [employeePairs]);
 
+    // ID -> name and name -> ID, for keeping the two filter pickers in sync.
+    // A name -> ID lookup can only ever hold one ID per name, so two
+    // employees who happen to share a display name resolve to whichever one
+    // was seen first — an unavoidable ambiguity of matching by name at all.
+    const employeeIdToName = useMemo(() => {
+      const m = new Map();
+      employeePairs.forEach(([id, name]) => { if (name) m.set(id, name); });
+      return m;
+    }, [employeePairs]);
+    const employeeNameToId = useMemo(() => {
+      const m = new Map();
+      employeePairs.forEach(([id, name]) => { if (name && !m.has(name)) m.set(name, id); });
+      return m;
+    }, [employeePairs]);
+
     const standardOptions = useMemo(() => {
       const set = new Set();
       results.forEach(r => { if (r.STANDARD) set.add(r.STANDARD); });
@@ -2107,6 +2122,23 @@ const TestingModule = () => {
     // once instead of one download per pick.
     const [filterEmpId, setFilterEmpId] = useState('');
     const [filterEmpName, setFilterEmpName] = useState('');
+
+    // Picking an ID fills in its matching name(s), and picking a name fills
+    // in its matching ID(s), so the two pickers always describe the same set
+    // of employees instead of drifting apart.
+    const handleFilterEmpIdChange = useCallback((val) => {
+      setFilterEmpId(val);
+      const ids = toMultiList(val);
+      const names = [...new Set(ids.map(id => employeeIdToName.get(id)).filter(Boolean))];
+      setFilterEmpName(names.join(', '));
+    }, [toMultiList, employeeIdToName]);
+    const handleFilterEmpNameChange = useCallback((val) => {
+      setFilterEmpName(val);
+      const names = toMultiList(val);
+      const ids = [...new Set(names.map(name => employeeNameToId.get(name)).filter(Boolean))];
+      setFilterEmpId(ids.join(', '));
+    }, [toMultiList, employeeNameToId]);
+
     const [filterStatus, setFilterStatus] = useState('All');
     const [filterStandard, setFilterStandard] = useState('');
     // Set by clicking a bar of the score histogram, and from the filter row.
@@ -2701,9 +2733,15 @@ const TestingModule = () => {
       const empNames = toMultiList(filterEmpName).map(v => normLower(v));
       const standardsPicked = toMultiList(filterStandard).map(v => norm(v));
       const matching = results.filter(r => {
-        const matchId = empIds.length ? empIds.includes(String(r.ID).toLowerCase()) : true;
-        const matchName = empNames.length ? empNames.includes(normLower(r.NAME)) : true;
-        const matchEmployee = empIds.length ? matchId : (empNames.length ? matchName : true);
+        // Picking employees by ID and by name are alternatives, not a
+        // narrowing AND — but with both pickers populated this used to let
+        // the ID picks win outright and silently drop the name picks
+        // entirely, so a result you searched for by name vanished from the
+        // list whenever any ID was also selected. Match either picker (a
+        // picker with nothing selected contributes no match of its own).
+        const matchId = empIds.length ? empIds.includes(String(r.ID).toLowerCase()) : false;
+        const matchName = empNames.length ? empNames.includes(normLower(r.NAME)) : false;
+        const matchEmployee = (empIds.length || empNames.length) ? (matchId || matchName) : true;
         const matchStatus = filterStatus === 'All' ? true : normLower(r.STATUS) === normLower(filterStatus);
         const matchStd = standardsPicked.length ? standardsPicked.includes(norm(r.STANDARD)) : true;
         const matchScore = filterScoreRange === 'All' ? true : inScoreRange(toPctNumber(r.PERCENTAGE), filterScoreRange);
@@ -2735,9 +2773,9 @@ const TestingModule = () => {
       const empIds = toMultiList(filterEmpId).map(v => v.toLowerCase());
       const empNames = toMultiList(filterEmpName).map(v => normLower(v));
       return results.filter(r => {
-        const matchId = empIds.length ? empIds.includes(String(r.ID).toLowerCase()) : true;
-        const matchName = empNames.length ? empNames.includes(normLower(r.NAME)) : true;
-        const matchEmployee = empIds.length ? matchId : (empNames.length ? matchName : true);
+        const matchId = empIds.length ? empIds.includes(String(r.ID).toLowerCase()) : false;
+        const matchName = empNames.length ? empNames.includes(normLower(r.NAME)) : false;
+        const matchEmployee = (empIds.length || empNames.length) ? (matchId || matchName) : true;
         const dateKey = toResultDateKey(r.DATE);
         const matchFrom = filterDateFrom ? (dateKey && dateKey >= filterDateFrom) : true;
         const matchTo = filterDateTo ? (dateKey && dateKey <= filterDateTo) : true;
@@ -4325,7 +4363,7 @@ const TestingModule = () => {
                         </label>
                         <MultiSelect
                           value={filterEmpId}
-                          onChange={setFilterEmpId}
+                          onChange={handleFilterEmpIdChange}
                           options={employeeIdOptions}
                           placeholder="All Employees"
                           searchPlaceholder="Search employee ID…"
@@ -4351,7 +4389,7 @@ const TestingModule = () => {
                         </label>
                         <MultiSelect
                           value={filterEmpName}
-                          onChange={setFilterEmpName}
+                          onChange={handleFilterEmpNameChange}
                           options={employeeNameOptions}
                           placeholder="All Names"
                           searchPlaceholder="Search employee name…"

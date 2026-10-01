@@ -30,9 +30,24 @@ function MultiSelect({ value, onChange, options, placeholder = 'Select…', sear
     const maxPanelHeight = 260
     const spaceBelow = window.innerHeight - r.bottom
     const openUpward = spaceBelow < maxPanelHeight + 8 && r.top > maxPanelHeight
-    const top = openUpward ? Math.max(margin, r.top - maxPanelHeight - 4) : r.bottom + 4
     const left = Math.min(Math.max(margin, r.left), window.innerWidth - margin - r.width)
-    return { top, left, width: r.width, maxHeight: openUpward ? Math.min(maxPanelHeight, r.top - 8) : Math.min(maxPanelHeight, window.innerHeight - top - margin) }
+    // Opening upward anchors the panel's BOTTOM to the trigger's top instead
+    // of giving it a fixed `top` sized for the full maxHeight — a `top`
+    // computed for the tallest possible panel left a gap under a shorter,
+    // search-narrowed one, since the panel's actual height then shrinks from
+    // its bottom edge while `top` stayed put. Anchoring `bottom` lets the
+    // panel grow/shrink from its top edge, so its bottom always sits flush
+    // against the trigger no matter how few options are showing.
+    if (openUpward) {
+      return {
+        openUpward,
+        bottom: window.innerHeight - r.top + 4,
+        left, width: r.width,
+        maxHeight: Math.min(maxPanelHeight, r.top - margin - 4),
+      }
+    }
+    const top = r.bottom + 4
+    return { openUpward, top, left, width: r.width, maxHeight: Math.min(maxPanelHeight, window.innerHeight - top - margin) }
   }, [])
 
   useLayoutEffect(() => {
@@ -54,7 +69,13 @@ function MultiSelect({ value, onChange, options, placeholder = 'Select…', sear
       const r = computeRect()
       if (!r) return
       if (panelRef.current) {
-        panelRef.current.style.top = `${r.top}px`
+        if (r.openUpward) {
+          panelRef.current.style.top = ''
+          panelRef.current.style.bottom = `${r.bottom}px`
+        } else {
+          panelRef.current.style.bottom = ''
+          panelRef.current.style.top = `${r.top}px`
+        }
         panelRef.current.style.left = `${r.left}px`
         panelRef.current.style.width = `${r.width}px`
       }
@@ -131,7 +152,9 @@ function MultiSelect({ value, onChange, options, placeholder = 'Select…', sear
         <div
           ref={panelRef}
           style={{
-            position: 'fixed', top: rect.top, left: rect.left, width: rect.width, zIndex: 10500,
+            position: 'fixed',
+            ...(rect.openUpward ? { bottom: rect.bottom } : { top: rect.top }),
+            left: rect.left, width: rect.width, zIndex: 10500,
             background: '#fff', border: '1px solid #e0e0e6', borderRadius: 8,
             boxShadow: '0 8px 24px rgba(0,0,0,0.12)', maxHeight: rect.maxHeight, overflowY: 'auto',
           }}
