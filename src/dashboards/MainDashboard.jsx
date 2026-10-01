@@ -3,8 +3,17 @@ import { Link, useNavigate } from "react-router-dom";
 import "../assets/style.css";
 import ptisLogo from "/ptisLogo.png";
 import SystemMap from "../components/SystemMap";
+import NotificationBell from "../components/NotificationBell";
+import HeaderSearchBar from "../components/HeaderSearchBar";
 import { API_ENDPOINTS, API_BASE_URL } from "../config/api";
 import { summarise, averageCompletion } from "../LMS/utils/courseProgressState";
+
+// Admin isn't a row in `employees` and has no real inbox of its own — it
+// logs in with a shared password, not an individual account (see
+// Login.jsx) — so notifications meant for admin are keyed on this fixed
+// sentinel address rather than a real mailbox, the same way the rest of
+// this schema has no separate "role" concept to hang them off instead.
+const ADMIN_NOTIFICATION_EMAIL = 'admin@ptis.co';
 
 const dashboardTiles = [
   {
@@ -200,6 +209,7 @@ const formatSyncedAgo = (date) => {
 function MainDashboard() {
   const [showSystemMap, setShowSystemMap] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [closeNotifSignal, setCloseNotifSignal] = useState(0);
   const [courses, setCourses] = useState([]);
   const [quickStats, setQuickStats] = useState(defaultQuickStats);
   const [loadingCourses, setLoadingCourses] = useState(true);
@@ -360,6 +370,58 @@ function MainDashboard() {
       .then(() => setLastSyncedAt(new Date()));
   }, []);
 
+  // Admin-wide search — the employee header's version scopes every query to
+  // one person's own data (their forms, their courses); admin has no "own"
+  // data to scope to and sees everything, so this searches every ISO Forms
+  // entry, course, and Job Log entry in the system instead of a filtered
+  // slice of them.
+  const handleAdminSearch = async (query) => {
+    const q = query.toLowerCase();
+    const [entriesJson, coursesJson, jobLogJson] = await Promise.all([
+      fetch(API_ENDPOINTS.ISO_FORMS_ENTRIES).then(r => r.ok ? r.json() : { data: [] }).catch(() => ({ data: [] })),
+      fetch(API_ENDPOINTS.COURSES).then(r => r.ok ? r.json() : []).catch(() => []),
+      fetch(API_ENDPOINTS.JOB_LOG).then(r => r.ok ? r.json() : { data: [] }).catch(() => ({ data: [] })),
+    ]);
+
+    const entries = Array.isArray(entriesJson?.data) ? entriesJson.data : (Array.isArray(entriesJson) ? entriesJson : []);
+    const formResults = entries
+      .filter(e => (e.template_name || '').toLowerCase().includes(q))
+      .map(e => ({
+        type: 'Form',
+        icon: '📄',
+        id: `form-${e.id}`,
+        title: e.template_name || 'Untitled Form',
+        subtitle: `Status: ${e.status || 'pending'} · ${e.created_by_name || e.created_by || 'Unknown'}`,
+        path: `/iso-forms/entries/${e.id}`,
+      }));
+
+    const courseResults = (Array.isArray(coursesJson) ? coursesJson : [])
+      .filter(c => (c.course_title || '').toLowerCase().includes(q))
+      .map(c => ({
+        type: 'Course',
+        icon: '📚',
+        id: `course-${c.id}`,
+        title: c.course_title,
+        subtitle: c.is_published ? 'Published' : 'Draft',
+        path: `/learning-management-system/course/${c.id}`,
+      }));
+
+    const jobLogRows = Array.isArray(jobLogJson?.data) ? jobLogJson.data : (Array.isArray(jobLogJson) ? jobLogJson : []);
+    const jobLogResults = jobLogRows
+      .filter(j => [j.client, j.work_order, j.reference, j.nature_of_job, j.inspector_name]
+        .filter(Boolean).join(' ').toLowerCase().includes(q))
+      .map(j => ({
+        type: 'Job Log',
+        icon: '🗂️',
+        id: `joblog-${j.id}`,
+        title: j.work_order || j.reference || j.client || `Job Log #${j.s_no ?? j.id}`,
+        subtitle: `${j.client || 'Job Log'}${j.status ? ` · ${j.status}` : ''}`,
+        path: `/job-log/entries?q=${encodeURIComponent(query)}`,
+      }));
+
+    return [...formResults, ...courseResults, ...jobLogResults];
+  };
+
   const handleSystemMapToggle = () => setShowSystemMap((prev) => !prev);
   const handleModuleClick = (moduleId) => {
     const selected = dashboardTiles.find((tile) => tile.id === moduleId);
@@ -406,6 +468,15 @@ function MainDashboard() {
           </div>
         </div>
         <div className="header-controls">
+          <HeaderSearchBar
+            onSearch={handleAdminSearch}
+            placeholder="Search forms, courses, job log…"
+            dropdownAlign="right"
+            onFocus={() => setCloseNotifSignal(s => s + 1)}
+          />
+          <span className="divider-dot" />
+          <NotificationBell email={ADMIN_NOTIFICATION_EMAIL} closeSignal={closeNotifSignal} />
+          <span className="divider-dot" />
           <button className="ghost-btn" onClick={handleSystemMapToggle}>
             System Map
           </button>
