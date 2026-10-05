@@ -7,6 +7,7 @@ import { useSearchParams } from 'react-router-dom'
 import { API_ENDPOINTS } from '../../config/api'
 import { rowState } from '../utils/courseProgressState'
 import PaginationBar from '../../components/PaginationBar'
+import ClearFilterButton from '../../components/ClearFilterButton'
 import StyledSelect from '../../components/StyledSelect'
 import { showToast } from '../../components/Toast'
 
@@ -223,6 +224,10 @@ function CourseTracking() {
             { value: 'overdue', label: 'Overdue' },
           ]}
           style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e2ea', fontSize: 14, background: '#fff', cursor: 'pointer' }}
+        />
+        <ClearFilterButton
+          visible={query || statusFilter !== 'all'}
+          onClick={() => { setQuery(''); setStatusFilter('all'); setCurrentPage(1) }}
         />
         <span style={{ color: '#9a9aaa', fontSize: 13, marginLeft: 'auto' }}>
           {filtered.length} of {rows.length} records

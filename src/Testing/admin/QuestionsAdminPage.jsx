@@ -1,12 +1,13 @@
 ﻿import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Edit2, Trash2, Upload, FileSpreadsheet, Download, X } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import { useTheme } from '../contexts/ThemeContext';
 import { localToday } from '../../utils/localDate';
 import { API_BASE_URL as HOST_API_BASE_URL } from '../../config/api';
 import PaginationBar from '../../components/PaginationBar';
+import ClearFilterButton from '../../components/ClearFilterButton';
 import StyledSelect from '../../components/StyledSelect';
 import SearchableSelect from '../../components/SearchableSelect';
+import StyledDatePicker from '../../components/StyledDatePicker';
 import { getActorId, getActorName } from '../../utils/actorIdentity';
 import '../PTIS_App.css';
 
@@ -24,6 +25,8 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
   const [currentQuestion, setCurrentQuestion] = useState(null);
   const [filterStandard, setFilterStandard] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
   const [showExcelUploadModal, setShowExcelUploadModal] = useState(false);
   const [excelData, setExcelData] = useState([]);
   const [excelFile, setExcelFile] = useState(null);
@@ -138,16 +141,29 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
       } else {
         matchesStandard = questionStandard === filterStandard.trim().toLowerCase();
       }
-      const matchesSearch = !searchQuery || 
+      const matchesSearch = !searchQuery ||
         q.Question?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         q.Opt_A?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         q.Opt_B?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         q.Opt_C?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         q.Opt_D?.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesStandard && matchesSearch;
+
+      // Date-only comparison — a question's created_at carries a time, but
+      // the From/To pickers only collect a date, so both sides are compared
+      // as calendar days rather than exact timestamps.
+      let matchesDate = true;
+      if (q.Created_At && (filterDateFrom || filterDateTo)) {
+        const questionDate = new Date(q.Created_At).toISOString().slice(0, 10);
+        if (filterDateFrom && questionDate < filterDateFrom) matchesDate = false;
+        if (filterDateTo && questionDate > filterDateTo) matchesDate = false;
+      } else if (!q.Created_At && (filterDateFrom || filterDateTo)) {
+        matchesDate = false;
+      }
+
+      return matchesStandard && matchesSearch && matchesDate;
     });
     return filtered;
-  }, [questions, filterStandard, searchQuery, knownStandardSet]);
+  }, [questions, filterStandard, searchQuery, filterDateFrom, filterDateTo, knownStandardSet]);
 
   // Paginated questions
   const paginatedQuestions = useMemo(() => {
@@ -161,7 +177,7 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
   // Reset to page 1 when filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterStandard, searchQuery]);
+  }, [filterStandard, searchQuery, filterDateFrom, filterDateTo]);
 
   const handleAdd = () => {
     setEditMode(false);
@@ -354,8 +370,11 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
     setExcelFile(file);
     const reader = new FileReader();
     
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
+        // Loaded on demand — only someone actually uploading a file pays
+        // for xlsx, instead of it being bundled into every page load.
+        const XLSX = await import('xlsx');
         const data = new Uint8Array(event.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
@@ -407,7 +426,11 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
-        body: JSON.stringify({ questions: excelData })
+        body: JSON.stringify({
+          questions: excelData,
+          actorId: getActorId(),
+          actorName: getActorName()
+        })
       });
 
       console.log('Response Status:', response.status);
@@ -452,7 +475,8 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
     }
   };
 
-  const downloadSampleExcel = () => {
+  const downloadSampleExcel = async () => {
+    const XLSX = await import('xlsx');
     const sampleData = [
       {
         Question: 'Another Name For A Self-Emulsifying Penetrant Process Is:',
@@ -563,50 +587,9 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
         
         {/* Filter Content */}
         <div style={{ padding: '25px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : isTablet ? '1fr' : 'minmax(200px, 1fr) minmax(300px, 2fr)', gap: '20px', marginBottom: '20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : isTablet ? '1fr' : 'minmax(240px, 1.4fr) minmax(200px, 1fr) auto', gap: '20px', marginBottom: '20px', alignItems: 'end' }}>
             <div>
-              <label style={{ 
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                marginBottom: '10px',
-                fontWeight: '600',
-                fontSize: '0.9em',
-                color: colors.text,
-                letterSpacing: '0.3px'
-              }}>                <span style={{
-                  width: '6px',
-                  height: '6px',
-                  borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #b91c3c, #d7263d)'
-                }}></span>
-                Filter by Standard
-              </label>
-              <SearchableSelect
-                value={filterStandard}
-                onChange={setFilterStandard}
-                options={standards.map(std => std.Standard_List)}
-                emptyOptionLabel="All Standards"
-                placeholder="Type to search…"
-                extraOptions={[{ value: '__UNMATCHED__', label: `⚠ Unmatched Standard ${unmatchedCount != null ? `(${unmatchedCount})` : ''}` }]}
-                style={{
-                  width: '100%',
-                  padding: '12px 15px',
-                  fontSize: '14px',
-                  border: `2px solid ${colors.inputBorder}`,
-                  borderRadius: '16px',
-                  backgroundColor: colors.cardAltBg,
-                  color: colors.text,
-                  fontWeight: '500',
-                  cursor: 'text',
-                  transition: 'all 0.2s ease',
-                  outline: 'none',
-                  boxSizing: 'border-box'
-                }}
-              />
-            </div>
-            <div>
-              <label style={{ 
+              <label style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
@@ -650,11 +633,11 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
                     e.target.style.backgroundColor = colors.cardAltBg;
                   }}
                 />
-                <svg 
-                  width="18" 
-                  height="18" 
-                  viewBox="0 0 24 24" 
-                  fill="none" 
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
                   stroke={colors.textMuted}
                   strokeWidth="2"
                   style={{
@@ -670,8 +653,84 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
                 </svg>
               </div>
             </div>
+            <div>
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                marginBottom: '10px',
+                fontWeight: '600',
+                fontSize: '0.9em',
+                color: colors.text,
+                letterSpacing: '0.3px'
+              }}>                <span style={{
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #b91c3c, #d7263d)'
+                }}></span>
+                Filter by Standard
+              </label>
+              <SearchableSelect
+                value={filterStandard}
+                onChange={setFilterStandard}
+                options={standards.map(std => std.Standard_List)}
+                emptyOptionLabel="All Standards"
+                placeholder="Type to search…"
+                extraOptions={[{ value: '__UNMATCHED__', label: `⚠ Unmatched Standard ${unmatchedCount != null ? `(${unmatchedCount})` : ''}` }]}
+                style={{
+                  width: '100%',
+                  padding: '12px 15px',
+                  fontSize: '14px',
+                  border: `2px solid ${colors.inputBorder}`,
+                  borderRadius: '16px',
+                  backgroundColor: colors.cardAltBg,
+                  color: colors.text,
+                  fontWeight: '500',
+                  cursor: 'text',
+                  transition: 'all 0.2s ease',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+            <div>
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                marginBottom: '10px',
+                fontWeight: '600',
+                fontSize: '0.9em',
+                color: colors.text,
+                letterSpacing: '0.3px'
+              }}>                <span style={{
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #b91c3c, #d7263d)'
+                }}></span>
+                Filter by Date
+              </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: colors.textMuted }}>From</span>
+                <StyledDatePicker
+                  value={filterDateFrom}
+                  onChange={setFilterDateFrom}
+                  max={filterDateTo || undefined}
+                  style={{ padding: '10px 10px', borderRadius: 10, border: `2px solid ${colors.inputBorder}`, background: colors.cardAltBg, color: colors.text, cursor: 'pointer' }}
+                />
+                <span style={{ fontSize: 12, fontWeight: 600, color: colors.textMuted }}>To</span>
+                <StyledDatePicker
+                  value={filterDateTo}
+                  onChange={setFilterDateTo}
+                  min={filterDateFrom || undefined}
+                  style={{ padding: '10px 10px', borderRadius: 10, border: `2px solid ${colors.inputBorder}`, background: colors.cardAltBg, color: colors.text, cursor: 'pointer' }}
+                />
+              </div>
+            </div>
           </div>
-          
+
           {/* Buttons Row: Clear Filter + Export CSV + Bulk Delete */}
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
 
@@ -806,51 +865,10 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
             )}
 
             {/* Clear Filter */}
-            <button
-              onClick={() => { setFilterStandard(''); setSearchQuery(''); }}
-              disabled={!filterStandard && !searchQuery}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '10px 20px',
-                backgroundColor: colors.inputBg,
-                color: colors.textMuted,
-                border: `2px solid ${colors.inputBorder}`,
-                borderRadius: '22px',
-                cursor: (filterStandard || searchQuery) ? 'pointer' : 'not-allowed',
-                fontSize: '14px',
-                fontWeight: '600',
-                transition: 'all 0.3s ease',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
-                opacity: (filterStandard || searchQuery) ? 1 : 0.5,
-                position: 'relative',
-                overflow: 'hidden'
-              }}
-              onMouseOver={e => {
-                if (filterStandard || searchQuery) {
-                  e.currentTarget.style.borderColor = '#c0392b';
-                  e.currentTarget.style.color = '#c0392b';
-                  e.currentTarget.style.backgroundColor = colors.cardBg;
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                }
-              }}
-              onMouseOut={e => {
-                e.currentTarget.style.borderColor = colors.inputBorder;
-                e.currentTarget.style.color = colors.textMuted;
-                e.currentTarget.style.backgroundColor = colors.inputBg;
-                e.currentTarget.style.transform = 'translateY(0)';
-              }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6l-1 14H6L5 6"></path>
-                <path d="M10 11v6"></path>
-                <path d="M14 11v6"></path>
-                <path d="M9 6V4h6v2"></path>
-              </svg>
-              Clear Filter
-            </button>
+            <ClearFilterButton
+              visible={Boolean(filterStandard || searchQuery || filterDateFrom || filterDateTo)}
+              onClick={() => { setFilterStandard(''); setSearchQuery(''); setFilterDateFrom(''); setFilterDateTo(''); }}
+            />
           </div>
         </div>
       </article>

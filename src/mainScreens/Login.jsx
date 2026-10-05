@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Eye, EyeOff, Phone, X, HelpCircle } from "lucide-react";
 import "../assets/style.css";
 import ptisLogo from "/ptisLogo.png";
@@ -20,6 +20,19 @@ function Login() {
     password: "",
   });
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Set by RequireAuth when a logged-out click on a deep link (an ISO Forms
+  // approval email, a course-assignment email, …) bounced here — send them
+  // straight back to it instead of the generic dashboard, so the link they
+  // actually clicked doesn't turn into a dead end once they sign in.
+  // Validated to a same-app relative path only: a bare "/" prefix (not "//",
+  // which a browser treats as protocol-relative to another host) so this
+  // param can't be turned into an open redirect to an external site.
+  const getRedirectTarget = (fallback) => {
+    const target = searchParams.get('redirect');
+    return target && target.startsWith('/') && !target.startsWith('//') ? target : fallback;
+  };
 
   const featureHighlights = [
     // { title: "Inspection Ops", detail: "07 live projects" },
@@ -57,7 +70,7 @@ function Login() {
         localStorage.setItem('adminPassword', formData.password);
         setIsLoading(false);
         showToast("Welcome back!", "success");
-        navigate("/dashboard");
+        navigate(getRedirectTarget("/dashboard"));
         return;
       }
       setShowError(true);
@@ -112,7 +125,7 @@ function Login() {
 
         setIsLoading(false);
         showToast(`Welcome back, ${employee.full_name}!`, "success");
-        navigate("/user/dashboard");
+        navigate(getRedirectTarget("/user/dashboard"));
       } else {
         const errorData = await response.json();
         setShowError(true);

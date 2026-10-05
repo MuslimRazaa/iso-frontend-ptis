@@ -1,14 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ptisLogo from '/ptisLogo.png';
+import { API_ENDPOINTS } from '../../config/api';
+import { getCurrentEmployeeId } from '../../ISOForms/utils/currentEmployee';
+import NotificationBell from '../../components/NotificationBell';
+import HeaderSearchBar from '../../components/HeaderSearchBar';
 
 const UserHeader = () => {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [myEmployeeId, setMyEmployeeId] = useState(null);
+  const [closeOthersSignal, setCloseOthersSignal] = useState(0);
   const navigate = useNavigate();
-  
+
   // Get user info from localStorage
   const userEmail = localStorage.getItem('userEmail') || 'user@ptis.com';
-  const userName = userEmail.split('@')[0].replace(/\./g, ' ').split(' ').map(word => 
+  const userName = userEmail.split('@')[0].replace(/\./g, ' ').split(' ').map(word =>
     word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
   ).join(' ');
 
@@ -16,6 +22,102 @@ const UserHeader = () => {
     localStorage.clear();
     sessionStorage.clear();
     navigate('/');
+  };
+
+  useEffect(() => {
+    getCurrentEmployeeId().then(setMyEmployeeId);
+  }, []);
+
+  // What this account is actually allowed to open — same object Login.jsx
+  // wrote at sign-in. Used to decide which modules the search even asks,
+  // rather than showing hits for data the sidebar itself would hide.
+  const userPermissions = JSON.parse(localStorage.getItem('userPermissions') || '{}');
+  const canSeeIsoForms = userPermissions.iso_forms || userPermissions.iso_forms_admin;
+  const canSeeJobLog = userPermissions.cvs || Object.values(userPermissions.jlr || {}).some(Boolean);
+
+  // Global search across every module this user actually has data in or
+  // access to — ISO Forms entries (submitted + awaiting their decision),
+  // their assigned LMS courses, and Job Log entries — so "search a form"
+  // here jumps straight to that form instead of requiring that module first.
+  const handleSearch = async (query) => {
+    if (!myEmployeeId) return [];
+    const q = query.toLowerCase();
+    const [mine, pending, tasks, jobLog, allCourses] = await Promise.all([
+      canSeeIsoForms
+        ? fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}?employeeId=${myEmployeeId}&email=${encodeURIComponent(userEmail)}`)
+            .then(r => r.ok ? r.json() : { data: [] }).catch(() => ({ data: [] }))
+        : { data: [] },
+      canSeeIsoForms
+        ? fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}?relatedEmployeeId=${myEmployeeId}`)
+            .then(r => r.ok ? r.json() : { data: [] }).catch(() => ({ data: [] }))
+        : { data: [] },
+      fetch(`${API_ENDPOINTS.TASK_ALLOCATIONS}/employee/${myEmployeeId}`)
+        .then(r => r.ok ? r.json() : []).catch(() => []),
+      canSeeJobLog
+        ? fetch(API_ENDPOINTS.JOB_LOG).then(r => r.ok ? r.json() : { data: [] }).catch(() => ({ data: [] }))
+        : { data: [] },
+      fetch(API_ENDPOINTS.COURSES).then(r => r.ok ? r.json() : []).catch(() => []),
+    ]);
+
+    const entries = [...(mine.data || mine || []), ...(pending.data || pending || [])];
+    const seenEntry = new Set();
+    const formResults = entries
+      .filter(e => {
+        if (seenEntry.has(e.id)) return false;
+        seenEntry.add(e.id);
+        return (e.template_name || '').toLowerCase().includes(q);
+      })
+      .map(e => ({
+        type: 'Form',
+        icon: '📄',
+        id: `form-${e.id}`,
+        title: e.template_name || 'Untitled Form',
+        subtitle: `Status: ${e.status || 'pending'}`,
+        path: `/user/iso-forms/entries/${e.id}`,
+      }));
+
+    const taskList = Array.isArray(tasks) ? tasks : [];
+    const courseResults = taskList
+      .filter(t => (t.course_title || '').toLowerCase().includes(q))
+      .map(t => ({
+        type: 'Course',
+        icon: '📚',
+        id: `course-${t.course_id}`,
+        title: t.course_title,
+        subtitle: `Status: ${t.status || 'Assigned'}`,
+        path: `/user/learning-management-system/course/${t.course_id}`,
+      }));
+
+    // Courses that exist in the catalog but aren't assigned to this person
+    // yet — these show up on My Courses as "Request Access", not a task,
+    // so they were previously invisible to this search entirely.
+    const assignedTitles = new Set(taskList.map(t => (t.course_title || '').toLowerCase()));
+    const availableCourseResults = (Array.isArray(allCourses) ? allCourses : [])
+      .filter(c => !assignedTitles.has((c.course_title || '').toLowerCase()))
+      .filter(c => (c.course_title || '').toLowerCase().includes(q))
+      .map(c => ({
+        type: 'Available',
+        icon: '➕',
+        id: `available-${c.id}`,
+        title: c.course_title,
+        subtitle: 'Not assigned — request access',
+        path: `/user/learning-management-system/my-courses?q=${encodeURIComponent(query)}`,
+      }));
+
+    const jobLogRows = jobLog.data || jobLog || [];
+    const jobLogResults = (Array.isArray(jobLogRows) ? jobLogRows : [])
+      .filter(j => [j.client, j.work_order, j.reference, j.nature_of_job, j.inspector_name]
+        .filter(Boolean).join(' ').toLowerCase().includes(q))
+      .map(j => ({
+        type: 'Job Log',
+        icon: '🗂️',
+        id: `joblog-${j.id}`,
+        title: j.work_order || j.reference || j.client || `Job Log #${j.s_no ?? j.id}`,
+        subtitle: `${j.client || 'Job Log'}${j.status ? ` · ${j.status}` : ''}`,
+        path: `/user/job-log/entries?q=${encodeURIComponent(query)}`,
+      }));
+
+    return [...formResults, ...courseResults, ...availableCourseResults, ...jobLogResults];
   };
 
   return (
@@ -40,66 +142,30 @@ const UserHeader = () => {
             <span className="brand-caption" style={{ color: 'rgba(255, 255, 255, 0.85)' }}>Employee Dashboard</span>
           </div>
         </div>
-        
+
         <div className="header-controls">
-          <div className="search-cluster" style={{
-            background: 'rgba(255, 255, 255, 0.15)',
-            backdropFilter: 'blur(10px)',
-            border: '1px solid rgba(255, 255, 255, 0.2)',
-            padding: '10px 18px',
-            borderRadius: '12px'
-          }}>
-            <svg viewBox="0 0 20 20" fill="none" style={{ width: '18px', height: '18px', opacity: 0.9, color: 'white' }}>
-              <circle cx="8.5" cy="8.5" r="5.75" stroke="currentColor" strokeWidth="1.5"/>
-              <path d="M12.5 12.5L16 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-            </svg>
-            <input 
-              type="text" 
-              placeholder="Search courses, modules..." 
-              style={{
-                background: 'transparent',
-                border: 'none',
-                outline: 'none',
-                fontSize: '14px',
-                color: 'white',
-                width: '220px'
-              }}
-            />
-          </div>
-          
-          <span className="divider-dot" style={{ background: 'rgba(255, 255, 255, 0.4)' }} />
-          
-          <button 
-            className="ghost-btn"
-            style={{ 
-              position: 'relative',
-              background: 'rgba(255, 255, 255, 0.15)',
-              border: '1px solid rgba(255, 255, 255, 0.25)',
-              color: 'white',
-              backdropFilter: 'blur(10px)',
-              padding: '10px 14px'
-            }}
-          >
-            <svg viewBox="0 0 24 24" fill="none" style={{ width: '20px', height: '20px' }}>
-              <path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            <span style={{
-              position: 'absolute',
-              top: '6px',
-              right: '10px',
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              background: '#ff5d5d',
-              border: '2px solid rgba(118, 75, 162, 1)',
-              boxShadow: '0 0 8px rgba(255, 93, 93, 0.6)'
-            }}></span>
-          </button>
-          
-          <span className="divider-dot" style={{ background: 'rgba(255, 255, 255, 0.4)' }} />
-          
+          <HeaderSearchBar
+            onSearch={handleSearch}
+            placeholder="Search forms, courses..."
+            onFocus={() => setShowProfileMenu(false)}
+            closeSignal={closeOthersSignal}
+          />
+
+          <span className="divider-dot header-divider" style={{ background: 'rgba(255, 255, 255, 0.4)' }} />
+
+          <NotificationBell
+            email={userEmail}
+            onOpen={() => setShowProfileMenu(false)}
+            closeSignal={closeOthersSignal}
+          />
+
+          <span className="divider-dot header-divider" style={{ background: 'rgba(255, 255, 255, 0.4)' }} />
+
           <div className="user-menu-wrapper">
-            <button className="user-chip" onClick={() => setShowProfileMenu(!showProfileMenu)} style={{
+            <button className="user-chip" onClick={() => {
+              setShowProfileMenu(!showProfileMenu);
+              setCloseOthersSignal(s => s + 1);
+            }} style={{
               background: 'rgba(255, 255, 255, 0.2)',
               border: '1px solid rgba(255, 255, 255, 0.3)',
               backdropFilter: 'blur(10px)',
@@ -128,7 +194,7 @@ const UserHeader = () => {
                 <strong style={{ fontSize: '11px', opacity: 0.85, display: 'block', color: 'rgba(255, 255, 255, 0.9)' }}>User Account</strong>
               </div>
             </button>
-            
+
             {showProfileMenu && (
               <div className="user-menu" style={{
                 background: 'radial-gradient(circle at 20% 20%, #2a2b36 0%, transparent 45%),    radial-gradient(circle at 80% 0%, rgba(255, 0, 0, 0.15) 0%, transparent 40%),    #0e0f14',
@@ -136,8 +202,8 @@ const UserHeader = () => {
                 boxShadow: '0 8px 32px rgba(102, 126, 234, 0.3)',
                 color: 'white'
               }}>
-                <div style={{ 
-                  padding: '16px', 
+                <div style={{
+                  padding: '16px',
                   borderBottom: '1px solid rgba(255, 255, 255, 0.15)',
                   background: 'rgba(255, 255, 255, 0.1)',
                   backdropFilter: 'blur(10px)'
@@ -145,109 +211,14 @@ const UserHeader = () => {
                   <div style={{ fontWeight: '600', marginBottom: '4px', color: 'white' }}>{userName}</div>
                   <div style={{ fontSize: '12px', opacity: 0.85, color: 'rgba(255, 255, 255, 0.9)' }}>{userEmail}</div>
                 </div>
-                
-                <button 
-                  type="button" 
-                  onClick={() => navigate('/user/dashboard')}
-                  style={{
-                    width: '100%',
-                    padding: '12px 16px',
-                    textAlign: 'left',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    fontSize: '14px',
-                    color: 'white',
-                    transition: 'background 0.2s'
-                  }}
-                  onMouseEnter={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.15)'}
-                  onMouseLeave={(e) => e.target.style.background = 'none'}
-                >
-                  <span>📊</span> Dashboard
-                </button>
-                
-                <button 
-                  type="button" 
-                  onClick={() => navigate('/user/my-courses')}
-                  style={{
-                    width: '100%',
-                    padding: '12px 16px',
-                    textAlign: 'left',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    fontSize: '14px',
-                    color: 'white',
-                    transition: 'background 0.2s'
-                  }}
-                  onMouseEnter={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.15)'}
-                  onMouseLeave={(e) => e.target.style.background = 'none'}
-                >
-                  <span>📚</span> My Courses
-                </button>
-                
-                <button 
+
+                <button
                   type="button"
-                  style={{
-                    width: '100%',
-                    padding: '12px 16px',
-                    textAlign: 'left',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    fontSize: '14px',
-                    color: 'white',
-                    transition: 'background 0.2s'
-                  }}
-                  onMouseEnter={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.15)'}
-                  onMouseLeave={(e) => e.target.style.background = 'none'}
-                >
-                  <span>👤</span> My Profile
-                </button>
-                
-                <button 
-                  type="button"
-                  style={{
-                    width: '100%',
-                    padding: '12px 16px',
-                    textAlign: 'left',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    fontSize: '14px',
-                    color: 'white',
-                    transition: 'background 0.2s'
-                  }}
-                  onMouseEnter={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.15)'}
-                  onMouseLeave={(e) => e.target.style.background = 'none'}
-                >
-                  <span>⚙️</span> Settings
-                </button>
-                
-                <div style={{ 
-                  height: '1px', 
-                  background: 'rgba(255, 255, 255, 0.15)', 
-                  margin: '8px 0' 
-                }} />
-                
-                <button 
-                  type="button" 
                   onClick={handleLogout}
                   style={{
                     width: '100%',
-                    padding: '12px 16px',
+                    padding: '14px 16px',
+                    marginTop: '8px',
                     textAlign: 'left',
                     background: 'none',
                     border: 'none',
@@ -276,36 +247,47 @@ const UserHeader = () => {
           </div>
         </div>
       </header>
-      
+
       <style jsx>{`
-        .search-cluster {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          transition: all 0.3s ease;
+        .header-controls {
+          flex-wrap: wrap;
+          justify-content: flex-end;
         }
-        
-        .search-cluster:hover {
-          background: rgba(255, 255, 255, 0.25) !important;
-          transform: translateY(-1px);
+
+        @media (max-width: 640px) {
+          .header-controls {
+            width: 100%;
+          }
+          .header-divider {
+            display: none;
+          }
         }
-        
-        .search-cluster input::placeholder {
-          color: rgba(255, 255, 255, 0.75);
+
+        @media (max-width: 400px) {
+          .user-chip .chip-label,
+          .user-chip strong {
+            display: none;
+          }
+          .user-chip {
+            padding: 8px 12px !important;
+          }
+          .user-chip > div:first-child {
+            margin-right: 0 !important;
+          }
         }
-        
+
         .ghost-btn:hover {
           background: rgba(255, 255, 255, 0.25) !important;
           transform: translateY(-2px);
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
-        
+
         .user-chip:hover {
           background: rgba(255, 255, 255, 0.3) !important;
           transform: translateY(-1px);
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
-        
+
         .user-menu {
           position: absolute;
           top: calc(100% + 12px);
@@ -316,7 +298,7 @@ const UserHeader = () => {
           overflow: hidden;
           animation: slideDown 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        
+
         @keyframes slideDown {
           from {
             opacity: 0;

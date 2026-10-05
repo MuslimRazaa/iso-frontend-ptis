@@ -735,9 +735,10 @@ const TaskAllocations = () => {
                     marginBottom: '1rem',
                     background: '#f3f4f6'
                   }}>
-                    <img 
-                      src={task.thumbnail} 
+                    <img
+                      src={task.thumbnail}
                       alt={task.title}
+                      loading="lazy"
                       style={{
                         width: '100%',
                         height: '100%',

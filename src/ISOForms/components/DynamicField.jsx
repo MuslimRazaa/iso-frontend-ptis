@@ -2,6 +2,7 @@ import React from 'react'
 import { signatureLines } from '../utils/signature'
 import StyledSelect from '../../components/StyledSelect'
 import SearchableSelect from '../../components/SearchableSelect'
+import StyledDatePicker from '../../components/StyledDatePicker'
 
 const inputStyle = {
   width: '100%', padding: '12px 15px', border: '2px solid #e0e0e6',
@@ -80,7 +81,13 @@ function DynamicField({ field, value, onChange, readOnly, employees = [], signer
     case 'number':
       return <input type="number" {...common} />
     case 'date':
-      return <input type="date" {...common} />
+      return (
+        <StyledDatePicker
+          value={value ?? ''}
+          onChange={onChange}
+          style={{ ...inputStyle, cursor: 'pointer' }}
+        />
+      )
     case 'dropdown':
       return (
         <StyledSelect

@@ -3,6 +3,7 @@ import axios from 'axios'
 import { Pencil, Trash2, Search } from 'lucide-react'
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api'
 import PaginationBar from '../../components/PaginationBar'
+import ClearFilterButton from '../../components/ClearFilterButton'
 import StyledSelect from '../../components/StyledSelect'
 import StyledDatePicker from '../../components/StyledDatePicker'
 import { showToast } from '../../components/Toast'
@@ -34,6 +35,8 @@ function AllCourses() {
     prerequisites: '',
     thumbnail: null,
     thumbnailFile: null,
+    pdfPath: null,
+    pdfFile: null,
     videos: [],
     standardId: null,
     generalStandardId: null,
@@ -89,6 +92,7 @@ function AllCourses() {
           updated: updatedText,
           updatedAt: course.updated_at,
           thumbnail: course.course_thumbnail ? `${API_BASE_URL}${course.course_thumbnail}` : dataAnalystThumb,
+          pdfPath: course.pdf_path || null,
           prerequisites: course.prerequisites || 'None',
           videos: course.course_videos || [],
           // Not shown in the table, but the update needs them: the standard is
@@ -134,7 +138,12 @@ function AllCourses() {
       prerequisites: course.prerequisites,
       thumbnail: course.thumbnail,
       thumbnailFile: null,
-      videos: course.videos || [],
+      pdfPath: course.pdfPath || null,
+      pdfFile: null,
+      // Each slot keeps its existing value (an uploaded file's path, or a
+      // pasted external URL) alongside a possible replacement file — so
+      // replacing one video doesn't require re-entering the others.
+      videos: (course.videos || []).map((v) => ({ value: v?.url || v || '', file: null })),
       standardId: course.standardId,
       generalStandardId: course.generalStandardId,
       specificStandardId: course.specificStandardId,
@@ -155,6 +164,8 @@ function AllCourses() {
       prerequisites: '',
       thumbnail: null,
       thumbnailFile: null,
+      pdfPath: null,
+      pdfFile: null,
       videos: [],
       standardId: null,
       generalStandardId: null,
@@ -184,10 +195,17 @@ function AllCourses() {
     if (editForm.standardId) data.append('standard_id', editForm.standardId)
     if (editForm.generalStandardId) data.append('general_standard_id', editForm.generalStandardId)
     if (editForm.specificStandardId) data.append('specific_standard_id', editForm.specificStandardId)
-    // Videos are URLs here, not uploads, so they travel as JSON.
-    data.append('course_videos', JSON.stringify(editForm.videos.filter(v => String(v).trim())))
+    // Slots kept as-is (an existing uploaded path or a pasted URL, not being
+    // replaced) travel as JSON; slots with a newly picked file upload as real
+    // files — the backend merges the two instead of one overwriting the other.
+    const keptVideos = editForm.videos.filter(v => !v.file && String(v.value).trim()).map(v => v.value)
+    data.append('course_videos', JSON.stringify(keptVideos))
+    editForm.videos.forEach(v => { if (v.file) data.append('course_videos', v.file) })
     // Only a newly picked image is uploaded; otherwise the stored one stays.
     if (editForm.thumbnailFile) data.append('course_thumbnail', editForm.thumbnailFile)
+    // Same for the course material — only sent when the admin picked a
+    // replacement; otherwise the existing pdf_path on the course is untouched.
+    if (editForm.pdfFile) data.append('primary_ppt', editForm.pdfFile)
 
     setSaving(true)
     try {
@@ -204,7 +222,7 @@ function AllCourses() {
   }
 
   const addVideoField = () => {
-    setEditForm({ ...editForm, videos: [...editForm.videos, ''] })
+    setEditForm({ ...editForm, videos: [...editForm.videos, { value: '', file: null }] })
   }
 
   const removeVideoField = (index) => {
@@ -216,8 +234,41 @@ function AllCourses() {
 
   const updateVideo = (index, value) => {
     const newVideos = [...editForm.videos]
-    newVideos[index] = value
+    newVideos[index] = { ...newVideos[index], value }
     setEditForm({ ...editForm, videos: newVideos })
+  }
+
+  // Picking a replacement file for a slot that currently holds an uploaded
+  // video — the old path stays as a fallback (cleared on save) in case the
+  // admin changes their mind and removes the file before saving.
+  const setVideoFile = (index, file) => {
+    const newVideos = [...editForm.videos]
+    newVideos[index] = { ...newVideos[index], file }
+    setEditForm({ ...editForm, videos: newVideos })
+  }
+
+  // A plain <a download> only forces a download for same-origin links — the
+  // file is served from the backend's own origin, not the frontend's, so the
+  // browser would otherwise just navigate to it like "View" does. Fetching
+  // it as a blob and downloading that object URL (always same-origin, being
+  // generated locally) makes "Download" actually download. Shared by both
+  // the course PDF and each uploaded video.
+  const downloadCourseFile = async (filePath, filename) => {
+    try {
+      const url = filePath.startsWith('http') ? filePath : `${API_BASE_URL}${filePath}`
+      const response = await fetch(url)
+      if (!response.ok) throw new Error('Download failed')
+      const blob = await response.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(blobUrl)
+    } catch (error) {
+      console.error('Error downloading file:', error)
+      showToast('Could not download the file.', 'error')
+    }
   }
 
   const categoryOptions = useMemo(
@@ -316,29 +367,7 @@ function AllCourses() {
           <StyledDatePicker value={dateTo} onChange={onDateToChange} min={dateFrom || undefined}
             style={{ padding: '10px 10px', borderRadius: 10, border: '1px solid #e2e2ea', fontSize: 14, background: '#fff', cursor: 'pointer' }} />
         </div>
-        {hasActiveFilters && (
-          <button
-            type="button"
-            onClick={clearFilters}
-            style={{
-              background: 'transparent', border: '1px solid #e2e2ea', color: '#595966',
-              padding: '10px 16px', borderRadius: 10, fontSize: 14, cursor: 'pointer',
-              whiteSpace: 'nowrap', transition: 'all 0.2s ease', flexShrink: 0,
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.borderColor = '#d7263d'
-              e.currentTarget.style.color = '#d7263d'
-              e.currentTarget.style.transform = 'translateY(-2px)'
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.borderColor = '#e2e2ea'
-              e.currentTarget.style.color = '#595966'
-              e.currentTarget.style.transform = 'translateY(0)'
-            }}
-          >
-            Clear
-          </button>
-        )}
+        <ClearFilterButton visible={hasActiveFilters} onClick={clearFilters} />
         <span style={{ color: '#9a9aaa', fontSize: 13, width: '100%' }}>
           {filteredCourses.length} of {courses.length} courses
         </span>
@@ -381,7 +410,7 @@ function AllCourses() {
                 <tr key={row.id}>
                   <td>
                     <div className="course-cell">
-                      <img src={row.thumbnail} alt={row.title} className="course-thumb" />
+                      <img src={row.thumbnail} alt={row.title} className="course-thumb" loading="lazy" />
                       <div className="course-info">
                         <strong>{row.title}</strong>
                         <span>{row.description}</span>
@@ -426,7 +455,7 @@ function AllCourses() {
       )}
 
       {showModal && (
-        <div className="modal-overlay" onClick={cancelEdit}>
+        <div className="modal-overlay">
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Edit Course</h2>
@@ -549,27 +578,125 @@ function AllCourses() {
                   </button>
                 </div>
                 {editForm.videos.length > 0 ? (
-                  editForm.videos.map((video, index) => (
-                    <div className="video-input-group" key={index}>
-                      <input
-                        type="url"
-                        placeholder="Paste video URL"
-                        value={video}
-                        onChange={(e) => updateVideo(index, e.target.value)}
-                      />
-                      <button
-                        type="button"
-                        className="remove-video-btn"
-                        onClick={() => removeVideoField(index)}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))
+                  editForm.videos.map((video, index) => {
+                    const isUploadedFile = video.value && !video.value.startsWith('http')
+                    return (
+                      <div key={index} style={{ border: '1px solid #e2e2ea', borderRadius: 10, padding: 10, marginBottom: 8 }}>
+                        <div className="video-input-group" style={{ marginBottom: video.file || isUploadedFile ? 8 : 0 }}>
+                          <input
+                            type="url"
+                            placeholder="Paste video URL (YouTube, Vimeo…)"
+                            value={isUploadedFile ? '' : video.value}
+                            disabled={isUploadedFile}
+                            onChange={(e) => updateVideo(index, e.target.value)}
+                          />
+                          <button
+                            type="button"
+                            className="remove-video-btn"
+                            onClick={() => removeVideoField(index)}
+                          >
+                            ✕
+                          </button>
+                        </div>
+
+                        {video.file ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                            <p style={{ fontSize: 13, color: '#7a7a8c', margin: 0 }}>
+                              New file selected: <strong>{video.file.name}</strong> — will replace on save.
+                            </p>
+                            <button type="button" className="ghost-btn small" onClick={() => setVideoFile(index, null)}>
+                              Cancel replacement
+                            </button>
+                          </div>
+                        ) : isUploadedFile ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                            <a
+                              href={`${API_BASE_URL}${video.value}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="ghost-btn small"
+                              style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                            >
+                              View
+                            </a>
+                            <button
+                              type="button"
+                              className="ghost-btn small"
+                              onClick={() => downloadCourseFile(video.value, `${editForm.title || 'course'}-video-${index + 1}.mp4`)}
+                            >
+                              Download
+                            </button>
+                            <label className="ghost-btn small" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}>
+                              Replace file
+                              <input
+                                type="file"
+                                accept="video/*"
+                                style={{ display: 'none' }}
+                                onChange={(e) => { const f = e.target.files[0]; if (f) setVideoFile(index, f) }}
+                              />
+                            </label>
+                          </div>
+                        ) : (
+                          <label style={{ fontSize: 13, color: '#7a7a8c', display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                            Or upload a video file instead
+                            <input
+                              type="file"
+                              accept="video/*"
+                              style={{ display: 'none' }}
+                              onChange={(e) => { const f = e.target.files[0]; if (f) setVideoFile(index, f) }}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    )
+                  })
                 ) : (
                   <p className="no-videos">No videos added yet</p>
                 )}
               </div>
+
+              <label>
+                <span>Course Material (PDF)</span>
+                {editForm.pdfPath && !editForm.pdfFile && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+                    <a
+                      href={`${API_BASE_URL}${editForm.pdfPath}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ghost-btn small"
+                      style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                    >
+                      View current PDF
+                    </a>
+                    <button
+                      type="button"
+                      className="ghost-btn small"
+                      onClick={() => downloadCourseFile(editForm.pdfPath, `${editForm.title || 'course'}.pdf`)}
+                    >
+                      Download
+                    </button>
+                  </div>
+                )}
+                {editForm.pdfFile && (
+                  <p style={{ fontSize: 13, color: '#7a7a8c', margin: '0 0 10px' }}>
+                    New file selected: <strong>{editForm.pdfFile.name}</strong> — will replace the current PDF on save.
+                  </p>
+                )}
+                {!editForm.pdfPath && !editForm.pdfFile && (
+                  <p style={{ fontSize: 13, color: '#7a7a8c', margin: '0 0 10px' }}>No PDF uploaded yet.</p>
+                )}
+                <div className="upload-box">
+                  <input
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    onChange={(e) => {
+                      const file = e.target.files[0]
+                      if (file) setEditForm((prev) => ({ ...prev, pdfFile: file }))
+                    }}
+                  />
+                  <p>{editForm.pdfPath ? 'Choose a file to replace the current PDF' : 'Upload the course material as a PDF file'}</p>
+                </div>
+              </label>
 
               <div className="modal-actions">
                 <button type="button" className="ghost-btn" onClick={cancelEdit}>

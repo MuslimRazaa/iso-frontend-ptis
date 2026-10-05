@@ -16,6 +16,7 @@ import {
   Loader,
   RefreshCw,
   Download,
+  Upload,
   BookOpen,
   Eye,
   EyeOff,
@@ -44,9 +45,11 @@ import { showToast as showSiteToast } from '../components/Toast';
 import { getActorId, getActorName } from '../utils/actorIdentity';
 import { API_BASE_URL as HOST_API_BASE_URL } from '../config/api';
 import PaginationBar from '../components/PaginationBar';
+import ClearFilterButton from '../components/ClearFilterButton';
 import AuditLogView from '../components/AuditLogView';
 import StyledSelect from '../components/StyledSelect';
 import SearchableSelect from '../components/SearchableSelect';
+import MultiSelect from '../components/MultiSelect';
 import StyledDatePicker from '../components/StyledDatePicker';
 
 // HomePage Component - Moved outside to prevent re-creation
@@ -366,6 +369,10 @@ const TestingModule = () => {
   // avoids client-side races/duplicates). The marker is scoped to this assignment
   // so a re-assignment (new created_at) is a clean slate.
   const courseTestMarkerKey = `ptis_active_test_${lmsCourseId}_${lmsStandardId}_${lmsAssignedSinceMs}`;
+  // Holds the question set + answers-so-far under the same scope as the
+  // marker above, so a reload mid-test can be graded on what was actually
+  // answered instead of My Courses defaulting the whole attempt to zero.
+  const courseTestDataKey = `ptis_active_test_data_${lmsCourseId}_${lmsStandardId}_${lmsAssignedSinceMs}`;
   const readCourseMarker = () => {
     try { return localStorage.getItem(courseTestMarkerKey); } catch { return null; }
   };
@@ -373,7 +380,10 @@ const TestingModule = () => {
     try { localStorage.setItem(courseTestMarkerKey, JSON.stringify({ startedAt: Date.now() })); } catch { /* ignore */ }
   };
   const clearCourseMarker = () => {
-    try { localStorage.removeItem(courseTestMarkerKey); } catch { /* ignore */ }
+    try {
+      localStorage.removeItem(courseTestMarkerKey);
+      localStorage.removeItem(courseTestDataKey);
+    } catch { /* ignore */ }
   };
   const goToCourses = () => { window.location.replace('/user/learning-management-system/my-courses'); };
 
@@ -452,7 +462,12 @@ const TestingModule = () => {
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [activeLoginForm, setActiveLoginForm] = useState('employee'); // 'employee' or 'admin'
   const [adminActiveTab, setAdminActiveTab] = useState('dashboard'); // 'dashboard', 'results', 'standards', 'questions', 'employees'
-  
+  // Audit Log's Export PDF/Excel buttons live in the page's own header (next
+  // to the title) rather than in their own row inside AuditLogView, so they
+  // are triggered through this ref instead of AuditLogView rendering them itself.
+  const auditExportRef = useRef(null);
+  const [auditExporting, setAuditExporting] = useState('');
+
   // --- Add/Update Employee states (Admin)
   const [newEmpId, setNewEmpId] = useState('');
   const [newEmpName, setNewEmpName] = useState('');
@@ -784,6 +799,20 @@ const TestingModule = () => {
     // Arm the integrity marker: from now on, leaving/refreshing = auto-fail.
     if (fromCourse && lmsCourseId && lmsStandardId) armCourseTest();
   };
+
+  // Mirrors the question set + answers-so-far to localStorage on every
+  // answer, so a reload mid-test still leaves something to grade instead of
+  // the attempt silently defaulting to a flat zero. Grading itself (and
+  // deciding this data is stale vs. still-in-progress) happens later, in My
+  // Courses' abandoned-test reconciliation — this effect only keeps the data
+  // available for that to read.
+  useEffect(() => {
+    if (!fromCourse || !lmsCourseId || !lmsStandardId || !testStarted || !originalQuestions.length) return;
+    try {
+      localStorage.setItem(courseTestDataKey, JSON.stringify({ questions: originalQuestions, answers }));
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answers, originalQuestions, testStarted, fromCourse, lmsCourseId, lmsStandardId]);
 
   const handleAnswerSelect = (answer) => {
     setSelectedAnswer(answer);
@@ -2027,6 +2056,8 @@ const TestingModule = () => {
     const norm = useCallback((v) => (v ?? '').toString().trim(), []);
     const normLower = useCallback((v) => norm(v).toLowerCase(), [norm]);
     const isPass = useCallback((status) => normLower(status) === 'pass', [normLower]);
+    // Splits a MultiSelect's comma-joined value back into its picks.
+    const toMultiList = useCallback((v) => (v || '').split(',').map(s => s.trim()).filter(Boolean), []);
     const toPctNumber = useCallback((p) => {
       const n = parseFloat((p ?? '').toString().replace('%', ''));
       return Number.isFinite(n) ? n : 0;
@@ -2059,20 +2090,25 @@ const TestingModule = () => {
       return Array.from(idToName.entries()).sort((a, b) => Number(a[0]) - Number(b[0]));
     }, [results]);
 
-    const employeeIdToName = useMemo(() => new Map(employeePairs), [employeePairs]);
-
-    const employeeNameToId = useMemo(() => {
-      const m = new Map();
-      employeePairs.forEach(([id, name]) => {
-        if (name && !m.has(name)) m.set(name, id);
-      });
-      return m;
-    }, [employeePairs]);
-
     const employeeIdOptions = useMemo(() => employeePairs.map(([id]) => id), [employeePairs]);
     const employeeNameOptions = useMemo(() => {
       const s = new Set(employeePairs.map(([, name]) => name).filter(Boolean));
       return Array.from(s).sort((a, b) => a.localeCompare(b));
+    }, [employeePairs]);
+
+    // ID -> name and name -> ID, for keeping the two filter pickers in sync.
+    // A name -> ID lookup can only ever hold one ID per name, so two
+    // employees who happen to share a display name resolve to whichever one
+    // was seen first — an unavoidable ambiguity of matching by name at all.
+    const employeeIdToName = useMemo(() => {
+      const m = new Map();
+      employeePairs.forEach(([id, name]) => { if (name) m.set(id, name); });
+      return m;
+    }, [employeePairs]);
+    const employeeNameToId = useMemo(() => {
+      const m = new Map();
+      employeePairs.forEach(([id, name]) => { if (name && !m.has(name)) m.set(name, id); });
+      return m;
     }, [employeePairs]);
 
     const standardOptions = useMemo(() => {
@@ -2081,11 +2117,32 @@ const TestingModule = () => {
       return ['All', ...Array.from(set).sort((a, b) => a.localeCompare(b))];
     }, [results]);
 
-    // Filter state
+    // Filter state — empId/empName/standard are comma-separated multi-value
+    // strings (same convention as JLR's Inspector/Team MultiSelect): '' means
+    // no filter, one name is just that name with no comma, several names are
+    // comma-joined. Lets one Export cover several standards/employees at
+    // once instead of one download per pick.
     const [filterEmpId, setFilterEmpId] = useState('');
     const [filterEmpName, setFilterEmpName] = useState('');
+
+    // Picking an ID fills in its matching name(s), and picking a name fills
+    // in its matching ID(s), so the two pickers always describe the same set
+    // of employees instead of drifting apart.
+    const handleFilterEmpIdChange = useCallback((val) => {
+      setFilterEmpId(val);
+      const ids = toMultiList(val);
+      const names = [...new Set(ids.map(id => employeeIdToName.get(id)).filter(Boolean))];
+      setFilterEmpName(names.join(', '));
+    }, [toMultiList, employeeIdToName]);
+    const handleFilterEmpNameChange = useCallback((val) => {
+      setFilterEmpName(val);
+      const names = toMultiList(val);
+      const ids = [...new Set(names.map(name => employeeNameToId.get(name)).filter(Boolean))];
+      setFilterEmpId(ids.join(', '));
+    }, [toMultiList, employeeNameToId]);
+
     const [filterStatus, setFilterStatus] = useState('All');
-    const [filterStandard, setFilterStandard] = useState('All');
+    const [filterStandard, setFilterStandard] = useState('');
     // Set by clicking a bar of the score histogram, and from the filter row.
     const [filterScoreRange, setFilterScoreRange] = useState('All');
     const [filterDateFrom, setFilterDateFrom] = useState('');
@@ -2131,7 +2188,11 @@ const TestingModule = () => {
         const sameCell = active.standard === changes.standard
           && (!changes.status || active.status === changes.status)
           && (!changes.empId || String(active.empId) === String(changes.empId));
-        setFilterStandard(sameCell ? 'All' : changes.standard);
+        // A chart click always drills into exactly one standard, replacing
+        // whatever was picked in the multi-select above — building up a
+        // multi-pick is what that dropdown is for, a bar click is "show me
+        // just this one".
+        setFilterStandard(sameCell ? '' : changes.standard);
         touched = true;
       }
       if (changes.scoreRange) {
@@ -2184,6 +2245,129 @@ const TestingModule = () => {
       };
     };
     const [resultFormData, setResultFormData] = useState(createDefaultResultFormData);
+
+    // --- One-off "import old results" tool. A server-backed visibility flag
+    // (not localStorage) so clicking Delete hides it for every admin on every
+    // device, not just this browser — null while unknown, so the buttons
+    // don't flash visible-then-hidden on first paint.
+    const [importToolVisible, setImportToolVisible] = useState(null);
+    const [showImportModal, setShowImportModal] = useState(false);
+    const [importParsedRows, setImportParsedRows] = useState(null);
+    const [importUploading, setImportUploading] = useState(false);
+    const [importSummary, setImportSummary] = useState(null);
+    const [importErrors, setImportErrors] = useState([]);
+    const importFileInputRef = useRef(null);
+
+    useEffect(() => {
+      let cancelled = false;
+      fetch(`${API_BASE_URL}/api/test-results/legacy/import-tool`)
+        .then(r => r.ok ? r.json() : { visible: true })
+        .then(data => { if (!cancelled) setImportToolVisible(data.visible !== false); })
+        .catch(() => { if (!cancelled) setImportToolVisible(true); });
+      return () => { cancelled = true; };
+    }, []);
+
+    const closeImportModal = () => {
+      setShowImportModal(false);
+      setImportParsedRows(null);
+      setImportSummary(null);
+      setImportErrors([]);
+      if (importFileInputRef.current) importFileInputRef.current.value = '';
+    };
+
+    const handleImportFileChange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const XLSX = await import('xlsx');
+          const data = new Uint8Array(event.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+          if (jsonData.length === 0) {
+            showSiteToast('That file has no rows.', 'error');
+            if (importFileInputRef.current) importFileInputRef.current.value = '';
+            return;
+          }
+
+          const requiredColumns = ['ID', 'NAME', 'STANDARD', 'DATE'];
+          const columns = Object.keys(jsonData[0]);
+          const missingColumns = requiredColumns.filter(col => !columns.includes(col));
+          if (missingColumns.length > 0) {
+            showSiteToast(`Missing columns: ${missingColumns.join(', ')}. Required: ID, NAME, STANDARD, DATE (plus optional TOTAL_QUESTION, CORRECT_ANSWER, WRONG_ANSWER, PERCENTAGE, PASSING_CRITERIA, STATUS).`, 'error');
+            if (importFileInputRef.current) importFileInputRef.current.value = '';
+            return;
+          }
+
+          setImportParsedRows(jsonData);
+          setImportSummary(null);
+          setImportErrors([]);
+          setShowImportModal(true);
+        } catch (err) {
+          console.error('Error parsing import file:', err);
+          showSiteToast('Could not read that file. Please check the format.', 'error');
+          if (importFileInputRef.current) importFileInputRef.current.value = '';
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    };
+
+    const handleImportUpload = async () => {
+      if (!importParsedRows || importParsedRows.length === 0) return;
+      setImportUploading(true);
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/test-results/legacy/bulk-import`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ results: importParsedRows }),
+        });
+        if (!response.ok) throw new Error(`Server error: ${response.status}`);
+        const result = await response.json();
+        setImportSummary({ success: result.success || 0, failed: result.failed || 0, total: result.total || importParsedRows.length });
+        setImportErrors(Array.isArray(result.errors) ? result.errors : []);
+        showSiteToast(
+          result.failed > 0 ? `Imported ${result.success} of ${result.total} rows (${result.failed} failed).` : `Imported ${result.success} result(s) successfully.`,
+          result.failed > 0 ? 'info' : 'success'
+        );
+        loadResults(true);
+      } catch (err) {
+        console.error('Error importing results:', err);
+        showSiteToast(`Import failed: ${err.message}`, 'error');
+      } finally {
+        setImportUploading(false);
+      }
+    };
+
+    const handleHideImportTool = async () => {
+      if (!window.confirm('Remove the Import and Delete buttons for every admin? This cannot be undone from here.')) return;
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/test-results/legacy/import-tool`, { method: 'DELETE' });
+        if (!response.ok) throw new Error('Request failed');
+        setImportToolVisible(false);
+        showSiteToast('Import tool removed.', 'success');
+      } catch (err) {
+        console.error('Error hiding import tool:', err);
+        showSiteToast('Could not remove the import tool. Try again.', 'error');
+      }
+    };
+
+    const downloadImportSampleExcel = async () => {
+      const XLSX = await import('xlsx');
+      const sampleData = [
+        {
+          ID: '1739', NAME: 'Jane Doe', STANDARD: 'API RP 7G-2', DATE: '01-06-2024 10:00:00 AM',
+          TOTAL_QUESTION: 50, CORRECT_ANSWER: 42, WRONG_ANSWER: 8, PERCENTAGE: '84%', PASSING_CRITERIA: '75%', STATUS: 'Pass',
+        },
+      ];
+      const worksheet = XLSX.utils.json_to_sheet(sampleData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Results');
+      XLSX.writeFile(workbook, 'Test_Results_Import_Template.xlsx');
+    };
 
     const resultEmployeeIdOptions = useMemo(() => {
       const ids = new Set(employees.map(emp => String(emp.ID || '')).filter(Boolean));
@@ -2497,26 +2681,11 @@ const TestingModule = () => {
       setShowAddResultModal(true);
     }, [resetResultAttachment]);
 
-    // Interconnected handlers: ID <-> Name (based on results only)
-    const onChangeEmpId = (val) => {
-      setFilterEmpId(val);
-      if (!val) { setFilterEmpName(''); return; }
-      const name = employeeIdToName.get(String(val)) || '';
-      setFilterEmpName(name);
-    };
-
-    const onChangeEmpName = (val) => {
-      setFilterEmpName(val);
-      if (!val) { setFilterEmpId(''); return; }
-      const id = employeeNameToId.get(val) || '';
-      setFilterEmpId(id);
-    };
-
     const clearFilters = () => {
       setFilterEmpId('');
       setFilterEmpName('');
       setFilterStatus('All');
-      setFilterStandard('All');
+      setFilterStandard('');
       setFilterScoreRange('All');
       setFilterDateFrom('');
       setFilterDateTo('');
@@ -2664,7 +2833,15 @@ const TestingModule = () => {
         `${toPctNumber(r.PERCENTAGE)}%`,
         norm(r.PASSING_CRITERIA),
         norm(r.STATUS),
-        norm(r.DATE)
+        // Excel's CSV import auto-detects date-looking text and silently
+        // reformats it per the opener's locale — "09-07-2025" (day 09) is
+        // ambiguous as day-first vs month-first and gets reinterpreted,
+        // while "28-10-2025" (day 28, impossible as a month) can't be
+        // misread so it survives untouched. That's why only some dates
+        // looked wrong after export, never all of them. Wrapping the value
+        // in an Excel "text formula" (`="…"`) forces it to render as the
+        // literal string instead of being parsed as a date at all.
+        `="${norm(r.DATE)}"`,
       ]);
       const csv = [headers, ...data].map(row =>
         row.map(cell => {
@@ -2685,12 +2862,21 @@ const TestingModule = () => {
 
     // Apply filters
     const filteredResults = useMemo(() => {
+      const empIds = toMultiList(filterEmpId).map(v => v.toLowerCase());
+      const empNames = toMultiList(filterEmpName).map(v => normLower(v));
+      const standardsPicked = toMultiList(filterStandard).map(v => norm(v));
       const matching = results.filter(r => {
-        const matchId = filterEmpId ? String(r.ID) === String(filterEmpId) : true;
-        const matchName = filterEmpName ? normLower(r.NAME) === normLower(filterEmpName) : true;
-        const matchEmployee = filterEmpId ? matchId : (filterEmpName ? matchName : true);
+        // Picking employees by ID and by name are alternatives, not a
+        // narrowing AND — but with both pickers populated this used to let
+        // the ID picks win outright and silently drop the name picks
+        // entirely, so a result you searched for by name vanished from the
+        // list whenever any ID was also selected. Match either picker (a
+        // picker with nothing selected contributes no match of its own).
+        const matchId = empIds.length ? empIds.includes(String(r.ID).toLowerCase()) : false;
+        const matchName = empNames.length ? empNames.includes(normLower(r.NAME)) : false;
+        const matchEmployee = (empIds.length || empNames.length) ? (matchId || matchName) : true;
         const matchStatus = filterStatus === 'All' ? true : normLower(r.STATUS) === normLower(filterStatus);
-        const matchStd = filterStandard === 'All' ? true : norm(r.STANDARD) === norm(filterStandard);
+        const matchStd = standardsPicked.length ? standardsPicked.includes(norm(r.STANDARD)) : true;
         const matchScore = filterScoreRange === 'All' ? true : inScoreRange(toPctNumber(r.PERCENTAGE), filterScoreRange);
         const dateKey = toResultDateKey(r.DATE);
         const matchFrom = filterDateFrom ? (dateKey && dateKey >= filterDateFrom) : true;
@@ -2707,7 +2893,7 @@ const TestingModule = () => {
         .map((r, index) => ({ r, index, key: toResultDateKey(r.DATE), at: Number(r.row_id) || 0 }))
         .sort((a, b) => (b.key || '').localeCompare(a.key || '') || b.at - a.at || a.index - b.index)
         .map(entry => entry.r);
-    }, [results, filterEmpId, filterEmpName, filterStatus, filterStandard, filterScoreRange, filterDateFrom, filterDateTo, norm, normLower, toResultDateKey, inScoreRange, toPctNumber]);
+    }, [results, filterEmpId, filterEmpName, filterStatus, filterStandard, filterScoreRange, filterDateFrom, filterDateTo, norm, normLower, toMultiList, toResultDateKey, inScoreRange, toPctNumber]);
 
     // What the charts are drawn from.
     //
@@ -2716,15 +2902,19 @@ const TestingModule = () => {
     // already been applied to left a single bar and nothing to compare it with.
     // Employee and date still apply — those narrow what you are looking at,
     // rather than picking a part of it out.
-    const chartResults = useMemo(() => results.filter(r => {
-      const matchId = filterEmpId ? String(r.ID) === String(filterEmpId) : true;
-      const matchName = filterEmpName ? normLower(r.NAME) === normLower(filterEmpName) : true;
-      const matchEmployee = filterEmpId ? matchId : (filterEmpName ? matchName : true);
-      const dateKey = toResultDateKey(r.DATE);
-      const matchFrom = filterDateFrom ? (dateKey && dateKey >= filterDateFrom) : true;
-      const matchTo = filterDateTo ? (dateKey && dateKey <= filterDateTo) : true;
-      return matchEmployee && matchFrom && matchTo;
-    }), [results, filterEmpId, filterEmpName, filterDateFrom, filterDateTo, normLower, toResultDateKey]);
+    const chartResults = useMemo(() => {
+      const empIds = toMultiList(filterEmpId).map(v => v.toLowerCase());
+      const empNames = toMultiList(filterEmpName).map(v => normLower(v));
+      return results.filter(r => {
+        const matchId = empIds.length ? empIds.includes(String(r.ID).toLowerCase()) : false;
+        const matchName = empNames.length ? empNames.includes(normLower(r.NAME)) : false;
+        const matchEmployee = (empIds.length || empNames.length) ? (matchId || matchName) : true;
+        const dateKey = toResultDateKey(r.DATE);
+        const matchFrom = filterDateFrom ? (dateKey && dateKey >= filterDateFrom) : true;
+        const matchTo = filterDateTo ? (dateKey && dateKey <= filterDateTo) : true;
+        return matchEmployee && matchFrom && matchTo;
+      });
+    }, [results, filterEmpId, filterEmpName, filterDateFrom, filterDateTo, normLower, toMultiList, toResultDateKey]);
 
     const paginatedResults = useMemo(() => {
       const startIndex = (resultsCurrentPage - 1) * resultsItemsPerPage;
@@ -2854,14 +3044,20 @@ const TestingModule = () => {
         // added/deleted practicals reflect immediately).
         const results = resultsRef.current;
         const standards = standardsRef.current;
-        const [searchType, setSearchType] = useState('id'); // 'id' or 'name'
-        const [searchQuery, setSearchQuery] = useState('');
+        // A free-text box searches everything at once; the two dropdowns are
+        // for narrowing to one specific person once you know their ID/name.
+        const [generalSearch, setGeneralSearch] = useState('');
+        const [filterEmpId, setFilterEmpId] = useState('');
+        const [filterEmpName, setFilterEmpName] = useState('');
+        const empIdOptions = useMemo(() => [...new Set(results.map(r => norm(r.ID)).filter(Boolean))].sort(), [results]);
+        const empNameOptions = useMemo(() => [...new Set(results.map(r => norm(r.NAME)).filter(Boolean))].sort(), [results]);
         const [certificateCurrentPage, setCertificateCurrentPage] = useState(1);
         const [certTypes, setCertTypes] = useState({}); // key: stable certificate row id, value: 'New' or 'Recertification'
         const [previousCertNumbers, setPreviousCertNumbers] = useState({}); // key: stable certificate row id, value: manual previous certificate no
         const [certExtras, setCertExtras] = useState({}); // key: stable certificate row id, value: { near_vision, color_vision, training_hours, education, photo }
         const [certModal, setCertModal] = useState(null); // { rowKey, result, selectedCertType, previousCertNo } while the Vision/Photo modal is open
         const [certGenerating, setCertGenerating] = useState(false);
+        const certPhotoInputRef = useRef(null);
         const certificateItemsPerPage = 100;
 
         const handleGenerateCertificateSubmit = async () => {
@@ -3069,16 +3265,19 @@ const TestingModule = () => {
           return recordedAt(candidate) >= recordedAt(current);
         };
         
-        if (searchQuery) {
-          if (searchType === 'id') {
-            passed = passed.filter(r => 
-              norm(r.ID).toLowerCase().includes(searchQuery.toLowerCase())
-            );
-          } else {
-            passed = passed.filter(r => 
-              norm(r.NAME).toLowerCase().includes(searchQuery.toLowerCase())
-            );
-          }
+        if (generalSearch) {
+          const q = generalSearch.toLowerCase();
+          passed = passed.filter(r =>
+            norm(r.ID).toLowerCase().includes(q) ||
+            norm(r.NAME).toLowerCase().includes(q) ||
+            norm(r.STANDARD).toLowerCase().includes(q)
+          );
+        }
+        if (filterEmpId) {
+          passed = passed.filter(r => norm(r.ID) === filterEmpId);
+        }
+        if (filterEmpName) {
+          passed = passed.filter(r => norm(r.NAME) === filterEmpName);
         }
         
         const normalizeCombinedBaseType = (value) => {
@@ -3224,7 +3423,7 @@ const TestingModule = () => {
           .map((r, index) => ({ r, index, at: toSortableTimestamp(r?.DATE) }))
           .sort((a, b) => b.at - a.at || a.index - b.index)
           .map(entry => entry.r);
-      }, [searchType, searchQuery, isPass, norm, standards, results]);
+      }, [generalSearch, filterEmpId, filterEmpName, isPass, norm, standards, results]);
 
       const totalCertificatePages = Math.ceil(filteredResults.length / certificateItemsPerPage);
       const paginatedCertificateResults = filteredResults.slice(
@@ -3237,7 +3436,7 @@ const TestingModule = () => {
 
       useEffect(() => {
         setCertificateCurrentPage(1);
-      }, [searchType, searchQuery]);
+      }, [generalSearch, filterEmpId, filterEmpName]);
 
       useEffect(() => {
         if (totalCertificatePages > 0 && certificateCurrentPage > totalCertificatePages) {
@@ -3281,42 +3480,12 @@ const TestingModule = () => {
               alignItems: 'center',
               flexWrap: 'wrap'
             }}>
-            <div style={{ minWidth: isMobile ? '100%' : '180px' }}>
-              <StyledSelect
-                value={searchType}
-                onChange={setSearchType}
-                options={[]}
-                extraOptions={[{ value: 'id', label: 'Employee ID' }, { value: 'name', label: 'Employee Name' }]}
-                style={{
-                  width: '100%',
-                  padding: '10px 15px',
-                  border: `1px solid ${theme.border.default}`,
-                  borderRadius: '16px',
-                  fontSize: '0.95em',
-                  boxSizing: 'border-box',
-                  outline: 'none',
-                  backgroundColor: theme.bg.input,
-                  color: theme.text.primary,
-                  cursor: 'pointer'
-                }}
-              />
-            </div>
-            <div style={{ flex: '1', minWidth: isMobile ? '100%' : '250px' }}>
+            <div style={{ flex: '1', minWidth: isMobile ? '100%' : '220px' }}>
               <input
                 type="text"
-                placeholder={`Search by ${searchType === 'id' ? 'Employee ID' : 'Employee Name'}...`}
-                value={searchQuery}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (searchType === 'id') {
-                    // Only allow numbers for Employee ID
-                    if (value === '' || /^[0-9]+$/.test(value)) {
-                      setSearchQuery(value);
-                    }
-                  } else {
-                    setSearchQuery(value);
-                  }
-                }}
+                placeholder="Search ID, name or standard…"
+                value={generalSearch}
+                onChange={(e) => setGeneralSearch(e.target.value)}
                 style={{
                   width: '100%',
                   padding: '10px 15px',
@@ -3330,43 +3499,57 @@ const TestingModule = () => {
                 }}
               />
             </div>
-            <button
+            <div style={{ minWidth: isMobile ? '100%' : '180px' }}>
+              <SearchableSelect
+                value={filterEmpId}
+                onChange={setFilterEmpId}
+                options={empIdOptions}
+                emptyOptionLabel="All Employee IDs"
+                placeholder="Type to search ID…"
+                style={{
+                  width: '100%',
+                  padding: '10px 15px',
+                  border: `1px solid ${theme.border.default}`,
+                  borderRadius: '16px',
+                  fontSize: '0.95em',
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                  backgroundColor: theme.bg.input,
+                  color: theme.text.primary,
+                  cursor: 'text'
+                }}
+              />
+            </div>
+            <div style={{ minWidth: isMobile ? '100%' : '200px' }}>
+              <SearchableSelect
+                value={filterEmpName}
+                onChange={setFilterEmpName}
+                options={empNameOptions}
+                emptyOptionLabel="All Employee Names"
+                placeholder="Type to search name…"
+                style={{
+                  width: '100%',
+                  padding: '10px 15px',
+                  border: `1px solid ${theme.border.default}`,
+                  borderRadius: '16px',
+                  fontSize: '0.95em',
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                  backgroundColor: theme.bg.input,
+                  color: theme.text.primary,
+                  cursor: 'text'
+                }}
+              />
+            </div>
+            <ClearFilterButton
+              visible={Boolean(generalSearch || filterEmpId || filterEmpName)}
               onClick={() => {
-                setSearchQuery('');
+                setGeneralSearch('');
+                setFilterEmpId('');
+                setFilterEmpName('');
                 setCertificateCurrentPage(1);
               }}
-              disabled={!searchQuery}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '12px 24px',
-                backgroundColor: colors.inputBg,
-                color: colors.textMuted,
-                border: `2px solid ${colors.inputBorder}`,
-                borderRadius: '28px',
-                cursor: searchQuery ? 'pointer' : 'not-allowed',
-                fontSize: '0.95em',
-                fontWeight: '500',
-                opacity: searchQuery ? 1 : 0.5,
-                transition: 'all 0.2s ease'
-              }}
-              onMouseOver={(e) => {
-                if (searchQuery) e.currentTarget.classList.add('grad-hover-outline');
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.classList.remove('grad-hover-outline');
-              }}
-            >
-              <svg className="grad-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6l-1 14H6L5 6"></path>
-                <path d="M10 11v6"></path>
-                <path d="M14 11v6"></path>
-                <path d="M9 6V4h6v2"></path>
-              </svg>
-              <span className="grad-label">Clear Filter</span>
-            </button>
+            />
             </div>
           </article>
 
@@ -3376,7 +3559,7 @@ const TestingModule = () => {
               <div style={{ padding: '40px', textAlign: 'center' }}>
                 <AlertCircle size={48} color="#95a5a6" style={{ marginBottom: '15px' }} />
                 <p style={{ color: '#7f8c8d', fontSize: '1.1em' }}>
-                  {searchQuery ? 'No matching candidates found' : 'No passed candidates available'}
+                  {(generalSearch || filterEmpId || filterEmpName) ? 'No matching candidates found' : 'No passed candidates available'}
                 </p>
               </div>
             ) : (
@@ -3384,6 +3567,7 @@ const TestingModule = () => {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #ececf0' }}>
+                      <th style={{ padding: '18px 20px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>S.No</th>
                       <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Employee ID</th>
                       <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Name</th>
                       <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Standard</th>
@@ -3397,6 +3581,9 @@ const TestingModule = () => {
                     {paginatedCertificateResults.map((result, index) => {
                       const rowKey = getCertificateRowKey(result);
                       const rowRenderKey = `${rowKey}|${index}`;
+                      // Newest row leads the list, so it should carry the
+                      // highest number — counting down to 1 at the oldest.
+                      const serialNo = filteredResults.length - ((certificateCurrentPage - 1) * certificateItemsPerPage + index);
                       const selectedCertType = certTypes[rowKey] || 'New';
                       const previousCertNo = previousCertNumbers[rowKey] || '';
 
@@ -3408,12 +3595,13 @@ const TestingModule = () => {
                           backgroundColor: isDarkMode ? colors.tableRowBg : 'transparent'
                         }}
                       >
+                        <td style={{ padding: '16px 20px', color: colors.textMuted, textAlign: 'center' }}>{serialNo}</td>
                         <td style={{ padding: '16px 20px', color: colors.text, fontWeight: '500' }}>{norm(result.ID)}</td>
                         <td style={{ padding: '16px 20px', color: colors.text }}>{norm(result.NAME)}</td>
                         <td style={{ padding: '16px 20px', color: colors.text }}>{norm(result.STANDARD)}</td>
                         <td style={{ padding: '16px 20px', textAlign: 'center' }}>
-                          <span style={{ 
-                            backgroundColor: '#e8f5e9', 
+                          <span style={{
+                            backgroundColor: '#e8f5e9',
                             color: '#27ae60', 
                             padding: '4px 12px', 
                             borderRadius: '8px',
@@ -3474,6 +3662,12 @@ const TestingModule = () => {
                               }}
                               style={{
                                 padding: '8px 12px',
+                                // Fixed so the dropdown panel — which opens at
+                                // the trigger's own width — is always big
+                                // enough for "Re-Certification", the longer of
+                                // the two options, even while "New" (the
+                                // shorter one) is what's currently selected.
+                                minWidth: '160px',
                                 border: '2px solid #d7263d',
                                 borderRadius: '8px',
                                 fontSize: '14px',
@@ -3669,7 +3863,47 @@ const TestingModule = () => {
                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: colors.text, fontSize: '0.95em' }}>
                     Passport-Size Photo (optional)
                   </label>
+                  {/* A native <input type="file"> makes its whole box clickable,
+                      not just the "Choose File" button — the empty space next
+                      to it opens the picker too, which reads as the container
+                      itself being a button. This hides the native input and
+                      wires a real button to it instead, so only that button is
+                      clickable / shows the pointer cursor — same pattern and
+                      style as the Add Result modal's attachment picker. */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => certPhotoInputRef.current?.click()}
+                      onMouseEnter={e => {
+                        e.currentTarget.classList.add('grad-hover-outline');
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(192, 57, 43, 0.4)';
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.classList.remove('grad-hover-outline');
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                      style={{
+                        padding: '10px 16px',
+                        background: 'linear-gradient(120deg, #b91c3c, #d7263d)',
+                        color: '#fff',
+                        border: '2px solid transparent',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        fontWeight: '600',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      <span className="grad-label">Choose File</span>
+                    </button>
+                    <span style={{ fontSize: '12px', color: colors.textMuted }}>
+                      {(certExtras[certModal.rowKey] || {}).photo?.name || 'No file chosen'}
+                    </span>
+                  </div>
                   <input
+                    ref={certPhotoInputRef}
                     type="file"
                     accept="image/*"
                     onChange={(e) => {
@@ -3679,15 +3913,7 @@ const TestingModule = () => {
                         [certModal.rowKey]: { ...(prev[certModal.rowKey] || {}), photo: file }
                       }));
                     }}
-                    style={{
-                      width: '100%',
-                      padding: '8px',
-                      border: `2px solid ${colors.inputBorder}`,
-                      borderRadius: '8px',
-                      fontSize: '13px',
-                      backgroundColor: theme.bg.input,
-                      color: colors.text
-                    }}
+                    style={{ display: 'none' }}
                   />
                 </div>
 
@@ -3697,17 +3923,25 @@ const TestingModule = () => {
                     onClick={() => setCertModal(null)}
                     disabled={certGenerating}
                     style={{
-                      padding: '10px 20px',
-                      backgroundColor: 'transparent',
-                      color: colors.text,
-                      border: `2px solid ${colors.border}`,
+                      padding: '12px 30px',
+                      backgroundColor: theme.bg.card,
+                      color: theme.text.secondary,
+                      border: `2px solid ${theme.border.default}`,
                       borderRadius: '28px',
                       cursor: certGenerating ? 'not-allowed' : 'pointer',
-                      fontSize: '14px',
-                      fontWeight: '600'
+                      fontSize: '15px',
+                      fontWeight: '600',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseOver={e => {
+                      if (certGenerating) return;
+                      e.currentTarget.classList.add('grad-hover-outline');
+                    }}
+                    onMouseOut={e => {
+                      e.currentTarget.classList.remove('grad-hover-outline');
                     }}
                   >
-                    Cancel
+                    <span className="grad-label">Cancel</span>
                   </button>
                   <button
                     type="button"
@@ -3722,7 +3956,22 @@ const TestingModule = () => {
                       cursor: certGenerating ? 'not-allowed' : 'pointer',
                       fontSize: '14px',
                       fontWeight: '600',
-                      opacity: certGenerating ? 0.7 : 1
+                      opacity: certGenerating ? 0.7 : 1,
+                      transition: 'all 0.2s ease',
+                      boxShadow: '0 3px 10px rgba(215, 38, 61, 0.3)'
+                    }}
+                    onMouseOver={e => {
+                      if (certGenerating) return;
+                      e.currentTarget.style.backgroundColor = '#ffffff';
+                      e.currentTarget.style.color = '#d7263d';
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 5px 15px rgba(215, 38, 61, 0.4)';
+                    }}
+                    onMouseOut={e => {
+                      e.currentTarget.style.backgroundColor = '#d7263d';
+                      e.currentTarget.style.color = 'white';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 3px 10px rgba(215, 38, 61, 0.3)';
                     }}
                   >
                     {certGenerating ? 'Generating...' : 'Generate Certificate'}
@@ -3836,6 +4085,56 @@ const TestingModule = () => {
               )}
             </div>
             <div className="lms-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {adminActiveTab === 'auditlog' && (
+                <>
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={() => auditExportRef.current?.exportPdf()}
+                    disabled={Boolean(auditExporting)}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <Download size={14} /> {auditExporting === 'pdf' ? 'Exporting…' : 'Export PDF'}
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={() => auditExportRef.current?.exportExcel()}
+                    disabled={Boolean(auditExporting)}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <Download size={14} /> {auditExporting === 'excel' ? 'Exporting…' : 'Export Excel'}
+                  </button>
+                </>
+              )}
+              {adminActiveTab === 'results' && importToolVisible && (
+                <>
+                  <input
+                    ref={importFileInputRef}
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    onChange={handleImportFileChange}
+                    style={{ display: 'none' }}
+                  />
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={() => importFileInputRef.current?.click()}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <Upload size={14} /> Import
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={handleHideImportTool}
+                    title="Remove the Import and Delete buttons for every admin"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#b42318', borderColor: '#f5c2c0' }}
+                  >
+                    <Trash2 size={14} /> Delete
+                  </button>
+                </>
+              )}
               {!(adminActiveTab === 'dashboard' || adminActiveTab === 'certificates' || adminActiveTab === 'auditlog') && (
                 <button
                   style={{
@@ -3900,7 +4199,8 @@ const TestingModule = () => {
               // Results tab uses — a click here always jumps there, so the two
               // never need their own separate notion of "selected".
               const statusPicked = filterStatus !== 'All';
-              const standardPicked = filterStandard !== 'All';
+              const standardsPickedList = toMultiList(filterStandard);
+              const standardPicked = standardsPickedList.length > 0;
               const scorePicked = filterScoreRange !== 'All';
               const dimStyle = (selected) => ({
                 transition: 'filter 0.25s ease, opacity 0.25s ease',
@@ -3918,7 +4218,7 @@ const TestingModule = () => {
               // score band actually shrinks the pie and the standard bars
               // instead of only dimming them.
               const rowMatchesOthers = (r, exclude) => {
-                if (!exclude.standard && standardPicked && norm(r.STANDARD) !== filterStandard) return false;
+                if (!exclude.standard && standardPicked && !standardsPickedList.includes(norm(r.STANDARD))) return false;
                 if (!exclude.status && statusPicked && !matchesStatus(r, filterStatus)) return false;
                 if (!exclude.score && scorePicked && scoreRangeOf(toPctNumber(r.PERCENTAGE)) !== filterScoreRange) return false;
                 return true;
@@ -3955,11 +4255,11 @@ const TestingModule = () => {
                 if (statusPicked) return filterStatus === status;
                 if (!standardPicked && !scorePicked) return true;
                 return chartData.some(r => matchesStatus(r, status)
-                  && (!standardPicked || norm(r.STANDARD) === filterStandard)
+                  && (!standardPicked || standardsPickedList.includes(norm(r.STANDARD)))
                   && (!scorePicked || scoreRangeOf(toPctNumber(r.PERCENTAGE)) === filterScoreRange));
               };
               const standardBarSelected = (standard, status) => {
-                if (standardPicked && filterStandard !== standard) return false;
+                if (standardPicked && !standardsPickedList.includes(standard)) return false;
                 if (statusPicked && filterStatus !== status) return false;
                 return !scorePicked || chartData.some(r => norm(r.STANDARD) === standard && matchesStatus(r, status)
                   && scoreRangeOf(toPctNumber(r.PERCENTAGE)) === filterScoreRange);
@@ -3968,7 +4268,7 @@ const TestingModule = () => {
                 if (scorePicked) return filterScoreRange === range;
                 if (!standardPicked && !statusPicked) return true;
                 return chartData.some(r => scoreRangeOf(toPctNumber(r.PERCENTAGE)) === range
-                  && (!standardPicked || norm(r.STANDARD) === filterStandard)
+                  && (!standardPicked || standardsPickedList.includes(norm(r.STANDARD)))
                   && (!statusPicked || matchesStatus(r, filterStatus)));
               };
 
@@ -4222,26 +4522,12 @@ const TestingModule = () => {
                           }}></span>
                           Employee ID
                         </label>
-                        <SearchableSelect
+                        <MultiSelect
                           value={filterEmpId}
-                          onChange={onChangeEmpId}
+                          onChange={handleFilterEmpIdChange}
                           options={employeeIdOptions}
-                          emptyOptionLabel="All Employees"
-                          placeholder="Type to search…"
-                          style={{
-                            width: '100%',
-                            padding: '12px 15px',
-                            fontSize: '14px',
-                            border: `2px solid ${theme.border.default}`,
-                            borderRadius: '16px',
-                            backgroundColor: theme.bg.input,
-                            color: theme.text.primary,
-                            fontWeight: '500',
-                            cursor: 'text',
-                            transition: 'all 0.2s ease',
-                            outline: 'none',
-                            boxSizing: 'border-box'
-                          }}
+                          placeholder="All Employees"
+                          searchPlaceholder="Search employee ID…"
                         />
                       </div>
                       <div>
@@ -4262,26 +4548,12 @@ const TestingModule = () => {
                           }}></span>
                           Employee Name
                         </label>
-                        <SearchableSelect
+                        <MultiSelect
                           value={filterEmpName}
-                          onChange={onChangeEmpName}
+                          onChange={handleFilterEmpNameChange}
                           options={employeeNameOptions}
-                          emptyOptionLabel="All Names"
-                          placeholder="Type to search…"
-                          style={{
-                            width: '100%',
-                            padding: '12px 15px',
-                            fontSize: '14px',
-                            border: `2px solid ${theme.border.default}`,
-                            borderRadius: '16px',
-                            backgroundColor: theme.bg.input,
-                            color: theme.text.primary,
-                            fontWeight: '500',
-                            cursor: 'text',
-                            transition: 'all 0.2s ease',
-                            outline: 'none',
-                            boxSizing: 'border-box'
-                          }}
+                          placeholder="All Names"
+                          searchPlaceholder="Search employee name…"
                         />
                       </div>
                       <div>
@@ -4339,27 +4611,12 @@ const TestingModule = () => {
                           }}></span>
                           Standard
                         </label>
-                        <SearchableSelect
+                        <MultiSelect
                           value={filterStandard}
                           onChange={setFilterStandard}
                           options={standardOptions.filter(s => s !== 'All')}
-                          emptyOptionLabel="All Standards"
-                          emptyOptionValue="All"
-                          placeholder="Type to search…"
-                          style={{
-                            width: '100%',
-                            padding: '12px 15px',
-                            fontSize: '14px',
-                            border: `2px solid ${theme.border.default}`,
-                            borderRadius: '16px',
-                            backgroundColor: theme.bg.input,
-                            color: theme.text.primary,
-                            fontWeight: '500',
-                            cursor: 'text',
-                            transition: 'all 0.2s ease',
-                            outline: 'none',
-                            boxSizing: 'border-box'
-                          }}
+                          placeholder="All Standards"
+                          searchPlaceholder="Search standard…"
                         />
                       </div>
                       <div>
@@ -4538,42 +4795,10 @@ const TestingModule = () => {
                         >
                           <Download size={16} style={{ color: 'inherit' }} /> Export to CSV
                         </button>
-                        <button 
+                        <ClearFilterButton
+                          visible={Boolean(filterEmpId || filterEmpName || filterStatus !== 'All' || filterStandard || filterScoreRange !== 'All' || filterDateFrom || filterDateTo)}
                           onClick={clearFilters}
-                          disabled={!filterEmpId && !filterEmpName && filterStatus === 'All' && filterStandard === 'All' && filterScoreRange === 'All' && !filterDateFrom && !filterDateTo}
-                          style={{ 
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            padding: '12px 24px',
-                            backgroundColor: colors.inputBg,
-                            color: colors.textMuted,
-                            border: `2px solid ${colors.inputBorder}`,
-                            borderRadius: '28px',
-                            cursor: (filterEmpId || filterEmpName || filterStatus !== 'All' || filterStandard !== 'All' || filterScoreRange !== 'All' || filterDateFrom || filterDateTo) ? 'pointer' : 'not-allowed',
-                            fontSize: '0.95em',
-                            fontWeight: '500',
-                            transition: 'all 0.2s ease',
-                            opacity: (filterEmpId || filterEmpName || filterStatus !== 'All' || filterStandard !== 'All' || filterScoreRange !== 'All' || filterDateFrom || filterDateTo) ? 1 : 0.5
-                          }}
-                          onMouseOver={e => {
-                            if (filterEmpId || filterEmpName || filterStatus !== 'All' || filterStandard !== 'All' || filterScoreRange !== 'All' || filterDateFrom || filterDateTo) {
-                              e.currentTarget.classList.add('grad-hover-outline');
-                            }
-                          }}
-                          onMouseOut={e => {
-                            e.currentTarget.classList.remove('grad-hover-outline');
-                          }}
-                        >
-                          <svg className="grad-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                            <polyline points="3 6 5 6 21 6"></polyline>
-                            <path d="M19 6l-1 14H6L5 6"></path>
-                            <path d="M10 11v6"></path>
-                            <path d="M14 11v6"></path>
-                            <path d="M9 6V4h6v2"></path>
-                          </svg>
-                          <span className="grad-label">Clear Filter</span>
-                        </button>
+                        />
                       </div>
                     </div>
                   </div>
@@ -4587,7 +4812,9 @@ const TestingModule = () => {
                   // With something selected, everything else goes grey, so the
                   // chart shows what the table below is now listing.
                   const statusPicked = filterStatus !== 'All';
-                  const standardPicked = filterStandard !== 'All';
+                  const standardsPickedList = toMultiList(filterStandard);
+                  const standardPicked = standardsPickedList.length > 0;
+                  const empIdsPickedList = toMultiList(filterEmpId).map(v => v.toLowerCase());
                   const scorePicked = filterScoreRange !== 'All';
                   // Grey and faded, and eased so the change reads as the chart
                   // responding rather than as a redraw.
@@ -4599,12 +4826,12 @@ const TestingModule = () => {
                     if (statusPicked) return filterStatus === status;
                     if (!standardPicked && !scorePicked) return true;
                     return rfData.some(r => (status === 'Pass' ? isPass(r.STATUS) : !isPass(r.STATUS))
-                      && (!standardPicked || norm(r.STANDARD) === filterStandard)
+                      && (!standardPicked || standardsPickedList.includes(norm(r.STANDARD)))
                       && (!scorePicked || scoreRangeOf(toPctNumber(r.PERCENTAGE)) === filterScoreRange));
                   };
                   const trendDotSelected = (point) =>
-                    (!filterEmpId || String(filterEmpId) === String(point.empId)) &&
-                    (!standardPicked || filterStandard === point.standard);
+                    (empIdsPickedList.length === 0 || empIdsPickedList.includes(String(point.empId).toLowerCase())) &&
+                    (!standardPicked || standardsPickedList.includes(point.standard));
                   const renderTrendDot = (props) => {
                     const { cx, cy, index, payload } = props;
                     if (!Number.isFinite(cx) || !Number.isFinite(cy)) return null;
@@ -4624,7 +4851,7 @@ const TestingModule = () => {
                   };
                   const matchesStatus = (r, status) => (status === 'Pass' ? isPass(r.STATUS) : !isPass(r.STATUS));
                   const standardBarSelected = (standard, status) => {
-                    if (standardPicked && filterStandard !== standard) return false;
+                    if (standardPicked && !standardsPickedList.includes(standard)) return false;
                     if (statusPicked && filterStatus !== status) return false;
                     return !scorePicked || rfData.some(r => norm(r.STANDARD) === standard && matchesStatus(r, status)
                       && scoreRangeOf(toPctNumber(r.PERCENTAGE)) === filterScoreRange);
@@ -4633,7 +4860,7 @@ const TestingModule = () => {
                     if (scorePicked) return filterScoreRange === range;
                     if (!standardPicked && !statusPicked) return true;
                     return rfData.some(r => scoreRangeOf(toPctNumber(r.PERCENTAGE)) === range
-                      && (!standardPicked || norm(r.STANDARD) === filterStandard)
+                      && (!standardPicked || standardsPickedList.includes(norm(r.STANDARD)))
                       && (!statusPicked || matchesStatus(r, filterStatus)));
                   };
                   const ttStyle = { background: '#fff', border: '1px solid #ececf0', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.08)', fontSize: 13 };
@@ -4645,7 +4872,7 @@ const TestingModule = () => {
                   // choosing a score band actually shrinks the pie and the
                   // standard bars instead of only dimming them.
                   const rowMatchesOthers = (r, exclude) => {
-                    if (!exclude.standard && standardPicked && norm(r.STANDARD) !== filterStandard) return false;
+                    if (!exclude.standard && standardPicked && !standardsPickedList.includes(norm(r.STANDARD))) return false;
                     if (!exclude.status && statusPicked && !matchesStatus(r, filterStatus)) return false;
                     if (!exclude.score && scorePicked && scoreRangeOf(toPctNumber(r.PERCENTAGE)) !== filterScoreRange) return false;
                     return true;
@@ -4852,6 +5079,7 @@ const TestingModule = () => {
                         <tbody>
                           {paginatedResults.map((result, index) => {
                             const hasAnswerSheet = String(result.HAS_ANSWER_SHEET) === '1' || result.HAS_ANSWER_SHEET === 1;
+                            const isInterrupted = String(result.IS_INTERRUPTED) === '1' || result.IS_INTERRUPTED === 1;
 
                             const handleDeleteResult = async () => {
                               if (!window.confirm(`Are you sure you want to delete this test result for ${result.NAME}?`)) return;
@@ -4872,11 +5100,15 @@ const TestingModule = () => {
                             };
 
                             const handleDownloadPDF = async () => {
-                              if (!hasAnswerSheet) {
-                                showToast('Detailed answer sheet is not available for this result.', 'info');
+                              // Fetches for a real answer sheet OR an interrupted-session
+                              // explanation — both are genuine PDFs the backend generates.
+                              // A manually entered row with neither is blocked below instead
+                              // of downloading an empty, confusing "No Detailed Answers
+                              // Available" filler PDF for something that was never a test.
+                              if (!hasAnswerSheet && !isInterrupted) {
+                                showToast('No answer sheet to download — this result was entered manually.', 'info');
                                 return;
                               }
-
                               const url = `${API_BASE_URL}/api/test-results/legacy/${encodeURIComponent(result.ID)}/${encodeURIComponent(result.STANDARD)}/${encodeURIComponent(result.DATE)}/pdf`;
                               try {
                                 const response = await fetch(url);
@@ -4940,11 +5172,14 @@ const TestingModule = () => {
                               }
                             };
 
-                            const downloadEnabled = hasAttachment || hasAnswerSheet;
+                            // Enabled for a real answer sheet, an interrupted-session
+                            // explanation, or an attachment — not for a manually entered
+                            // row with none of those, which has no PDF to offer at all.
+                            const downloadEnabled = hasAttachment || hasAnswerSheet || isInterrupted;
                             const handleDownload = hasAttachment ? handleDownloadAttachment : handleDownloadPDF;
                             const downloadTitle = hasAttachment
                               ? (isPracticalResult ? 'Download Practical Attachment' : 'Download Attachment')
-                              : (hasAnswerSheet ? 'Download Test Sheet PDF' : 'No attachment or answer sheet available');
+                              : (downloadEnabled ? 'Download Test Sheet PDF' : 'No attachment or answer sheet available');
 
                             return (
                               <tr key={`${result.ID}-${result.STANDARD}-${result.DATE}-${index}`} style={{ 
@@ -5704,6 +5939,117 @@ const TestingModule = () => {
                 )}
 
                 {/* Removed certification type edit modal - now handled at certificate generation time */}
+
+                {showImportModal && (
+                  <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: 'rgba(26, 26, 46, 0.85)', backdropFilter: 'blur(4px)',
+                    display: 'flex', justifyContent: 'center', alignItems: 'center',
+                    zIndex: 1000, padding: '20px',
+                  }}>
+                    <div style={{
+                      backgroundColor: theme.bg.card,
+                      padding: isMobile ? '22px 16px' : '35px',
+                      borderRadius: '28px',
+                      width: '100%',
+                      maxWidth: isMobile ? '100%' : '560px',
+                      maxHeight: '90vh',
+                      overflowY: 'auto',
+                      boxShadow: `0 20px 60px ${isDarkMode ? 'rgba(0,0,0,0.5)' : 'rgba(0, 0, 0, 0.3)'}`,
+                    }}>
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        marginBottom: '20px', borderBottom: '3px solid #d7263d', paddingBottom: '15px',
+                      }}>
+                        <h3 style={{ margin: 0, color: theme.text.primary, fontSize: '1.4em', fontWeight: 600 }}>
+                          Import Old Results
+                        </h3>
+                        <button type="button" onClick={closeImportModal} style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.textMuted }}>
+                          <X size={22} />
+                        </button>
+                      </div>
+
+                      {!importSummary ? (
+                        <>
+                          <p style={{ color: colors.textMuted, fontSize: 14, marginTop: 0 }}>
+                            {importParsedRows?.length || 0} row(s) found in the file. Each row needs at least
+                            {' '}<strong>ID, NAME, STANDARD, DATE</strong> — everything else (score, status, pass
+                            criteria) is optional and defaults sensibly if left out.
+                          </p>
+                          <button
+                            type="button"
+                            className="ghost-btn"
+                            onClick={downloadImportSampleExcel}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 20 }}
+                          >
+                            <Download size={14} /> Download sample template
+                          </button>
+                          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '10px', paddingTop: '20px', borderTop: `2px solid ${theme.border.default}` }}>
+                            <button
+                              type="button"
+                              onClick={closeImportModal}
+                              style={{
+                                padding: '12px 30px', backgroundColor: theme.bg.card, color: theme.text.secondary,
+                                border: `2px solid ${theme.border.default}`, borderRadius: '28px', cursor: 'pointer',
+                                fontSize: '15px', fontWeight: 600,
+                              }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              disabled={importUploading}
+                              onClick={handleImportUpload}
+                              style={{
+                                padding: '12px 30px',
+                                background: importUploading ? '#95a5a6' : 'linear-gradient(120deg, #b91c3c, #d7263d)',
+                                color: 'white', border: 'none', borderRadius: '18px',
+                                cursor: importUploading ? 'not-allowed' : 'pointer', fontSize: '15px', fontWeight: 600,
+                              }}
+                            >
+                              {importUploading ? 'Uploading…' : `Upload ${importParsedRows?.length || 0} Row(s)`}
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div style={{
+                            padding: '14px 16px', borderRadius: 12, marginBottom: 16,
+                            background: importSummary.failed > 0 ? '#fff7e6' : '#eefbf2',
+                            border: `1px solid ${importSummary.failed > 0 ? '#ffe1a8' : '#b7e4c7'}`,
+                            color: importSummary.failed > 0 ? '#92660a' : '#1e7e45', fontSize: 14,
+                          }}>
+                            Imported {importSummary.success} of {importSummary.total} row(s).
+                            {importSummary.failed > 0 ? ` ${importSummary.failed} failed — see below.` : ''}
+                          </div>
+                          {importErrors.length > 0 && (
+                            <div style={{ maxHeight: 220, overflowY: 'auto', marginBottom: 16, border: `1px solid ${theme.border.default}`, borderRadius: 10 }}>
+                              {importErrors.map((e, i) => (
+                                <div key={i} style={{ padding: '8px 12px', fontSize: 13, color: '#b42318', borderBottom: i < importErrors.length - 1 ? `1px solid ${theme.border.default}` : 'none' }}>
+                                  Row {e.row}: {e.error}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '10px', borderTop: `2px solid ${theme.border.default}` }}>
+                            <button
+                              type="button"
+                              onClick={closeImportModal}
+                              style={{
+                                padding: '12px 30px',
+                                background: 'linear-gradient(120deg, #b91c3c, #d7263d)',
+                                color: 'white', border: 'none', borderRadius: '18px',
+                                cursor: 'pointer', fontSize: '15px', fontWeight: 600,
+                              }}
+                            >
+                              Done
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
               </>
             )}
 
@@ -5735,10 +6081,13 @@ const TestingModule = () => {
             {/* Audit Log Tab */}
             {adminActiveTab === 'auditlog' && (
               <AuditLogView
+                ref={auditExportRef}
                 module="testing"
                 actions={['create', 'update', 'delete']}
                 padded={false}
                 showHeader={false}
+                hideOwnExportButtons
+                onExportingChange={setAuditExporting}
               />
             )}
           </section>
@@ -5758,6 +6107,9 @@ const TestingModule = () => {
     const isDarkMode = isDarkModeRef.current;
     const isMobile = isMobileRef.current;
     const colors = colorsRef.current;
+    // Local — this page isn't nested inside AdminPageInner (unlike
+    // Certificates/Standards), so it doesn't inherit that component's `norm`.
+    const norm = useCallback((v) => (v ?? '').toString().trim(), []);
     const [showModal, setShowModal] = useState(false);
     const [editMode, setEditMode] = useState(false);
     const [currentResult, setCurrentResult] = useState(null);
@@ -5773,8 +6125,13 @@ const TestingModule = () => {
       passingCriteria: '75'
     });
     const [loading, setLoading] = useState(false);
-    const [searchType, setSearchType] = useState('id'); // 'id' or 'name'
-    const [searchQuery, setSearchQuery] = useState('');
+    // A free-text box searches everything at once; the two dropdowns are
+    // for narrowing to one specific person once you know their ID/name.
+    const [generalSearch, setGeneralSearch] = useState('');
+    const [filterEmpId, setFilterEmpId] = useState('');
+    const [filterEmpName, setFilterEmpName] = useState('');
+    const empIdOptions = useMemo(() => [...new Set(results.map(r => norm(r.ID)).filter(Boolean))].sort(), [results]);
+    const empNameOptions = useMemo(() => [...new Set(results.map(r => norm(r.NAME)).filter(Boolean))].sort(), [results]);
     const [attachmentFile, setAttachmentFile] = useState(null);
     const attachmentInputRef = useRef(null);
     const [practicalActiveTable, setPracticalActiveTable] = useState('results');
@@ -5978,23 +6335,55 @@ const TestingModule = () => {
     }, [standards, normalizePracticalBaseType, isPracticalRequiredFlag]);
 
     const practicalResults = useMemo(() => {
-      const allPracticalResults = results.filter(
+      let allPracticalResults = results.filter(
         (r) => r.STANDARD && r.STANDARD.includes('(Practical)')
       );
 
-      if (!searchQuery) return allPracticalResults;
-
-      const query = searchQuery.toLowerCase();
-      if (searchType === 'id') {
-        return allPracticalResults.filter((result) =>
-          String(result.ID || '').toLowerCase().includes(query)
+      if (generalSearch) {
+        const q = generalSearch.toLowerCase();
+        allPracticalResults = allPracticalResults.filter((result) =>
+          String(result.ID || '').toLowerCase().includes(q) ||
+          String(result.NAME || '').toLowerCase().includes(q) ||
+          String(result.STANDARD || '').toLowerCase().includes(q)
         );
       }
+      if (filterEmpId) {
+        allPracticalResults = allPracticalResults.filter((result) => norm(result.ID) === filterEmpId);
+      }
+      if (filterEmpName) {
+        allPracticalResults = allPracticalResults.filter((result) => norm(result.NAME) === filterEmpName);
+      }
 
-      return allPracticalResults.filter((result) =>
-        String(result.NAME || '').toLowerCase().includes(query)
-      );
-    }, [results, searchQuery, searchType]);
+      // Latest first — the most recently recorded practical result leads,
+      // same-day rows settled by row_id (the order they were recorded in).
+      const toSortableTimestamp = (value) => {
+        const raw = norm(value);
+        if (!raw) return Number.NEGATIVE_INFINITY;
+        const dateOnly = raw.split(' ')[0];
+        let parsedDate = null;
+        if (dateOnly.includes('/')) {
+          const parts = dateOnly.split('/');
+          if (parts.length === 3) parsedDate = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+        } else if (dateOnly.includes('-')) {
+          const parts = dateOnly.split('-');
+          if (parts.length === 3) {
+            parsedDate = parts[0].length === 4
+              ? new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
+              : new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+          }
+        }
+        if (!parsedDate || Number.isNaN(parsedDate.getTime())) {
+          const fallback = new Date(raw);
+          return Number.isNaN(fallback.getTime()) ? Number.NEGATIVE_INFINITY : fallback.getTime();
+        }
+        return parsedDate.getTime();
+      };
+
+      return allPracticalResults
+        .map((r, index) => ({ r, index, at: toSortableTimestamp(r?.DATE) }))
+        .sort((a, b) => b.at - a.at || (Number(b.r?.row_id) || 0) - (Number(a.r?.row_id) || 0) || a.index - b.index)
+        .map(entry => entry.r);
+    }, [results, generalSearch, filterEmpId, filterEmpName, norm]);
 
     const eligibleEmployees = useMemo(() => {
       const grouped = {};
@@ -6128,7 +6517,7 @@ const TestingModule = () => {
 
     useEffect(() => {
       setPracticalCurrentPage(1);
-    }, [searchQuery, searchType]);
+    }, [generalSearch, filterEmpId, filterEmpName]);
 
     useEffect(() => {
       setEligibleCurrentPage(1);
@@ -6361,47 +6750,18 @@ const TestingModule = () => {
             alignItems: 'center',
             flexWrap: 'wrap'
           }}>
-            <div style={{ minWidth: isMobile ? '100%' : '180px' }}>
-              <StyledSelect
-                value={searchType}
-                onChange={setSearchType}
-                options={[]}
-                extraOptions={[{ value: 'id', label: 'Employee ID' }, { value: 'name', label: 'Employee Name' }]}
-                style={{
-                  width: '100%',
-                  padding: '10px 15px',
-                  border: `2px solid ${colors.inputBorder}`,
-                  borderRadius: '16px',
-                    fontSize: '0.95em',
-                  boxSizing: 'border-box',
-                  outline: 'none',
-                  backgroundColor: colors.inputBg,
-                  color: colors.text,
-                  cursor: 'pointer'
-                }}
-              />
-            </div>
-            <div style={{ flex: '1', minWidth: isMobile ? '100%' : '250px' }}>
+            <div style={{ flex: '1', minWidth: isMobile ? '100%' : '220px' }}>
               <input
                 type="text"
-                placeholder={`Search by ${searchType === 'id' ? 'Employee ID' : 'Employee Name'}...`}
-                value={searchQuery}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (searchType === 'id') {
-                    if (value === '' || /^[0-9]+$/.test(value)) {
-                      setSearchQuery(value);
-                    }
-                  } else {
-                    setSearchQuery(value);
-                  }
-                }}
+                placeholder="Search ID, name or standard…"
+                value={generalSearch}
+                onChange={(e) => setGeneralSearch(e.target.value)}
                 style={{
                   width: '100%',
                   padding: '10px 15px',
                   border: `2px solid ${colors.inputBorder}`,
                   borderRadius: '16px',
-                    fontSize: '0.95em',
+                  fontSize: '0.95em',
                   boxSizing: 'border-box',
                   outline: 'none',
                   backgroundColor: colors.inputBg,
@@ -6409,40 +6769,52 @@ const TestingModule = () => {
                 }}
               />
             </div>
-            <button
-              onClick={() => setSearchQuery('')}
-              disabled={!searchQuery}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '12px 24px',
-                backgroundColor: colors.inputBg,
-                color: colors.textMuted,
-                border: `2px solid ${colors.inputBorder}`,
-                borderRadius: '28px',
-                cursor: searchQuery ? 'pointer' : 'not-allowed',
-                fontSize: '0.95em',
-                fontWeight: '500',
-                transition: 'all 0.2s ease',
-                opacity: searchQuery ? 1 : 0.5
-              }}
-              onMouseOver={(e) => {
-                if (searchQuery) e.currentTarget.classList.add('grad-hover-outline');
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.classList.remove('grad-hover-outline');
-              }}
-            >
-              <svg className="grad-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6l-1 14H6L5 6"></path>
-                <path d="M10 11v6"></path>
-                <path d="M14 11v6"></path>
-                <path d="M9 6V4h6v2"></path>
-              </svg>
-              <span className="grad-label">Clear Filter</span>
-            </button>
+            <div style={{ minWidth: isMobile ? '100%' : '180px' }}>
+              <SearchableSelect
+                value={filterEmpId}
+                onChange={setFilterEmpId}
+                options={empIdOptions}
+                emptyOptionLabel="All Employee IDs"
+                placeholder="Type to search ID…"
+                style={{
+                  width: '100%',
+                  padding: '10px 15px',
+                  border: `2px solid ${colors.inputBorder}`,
+                  borderRadius: '16px',
+                  fontSize: '0.95em',
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                  backgroundColor: colors.inputBg,
+                  color: colors.text,
+                  cursor: 'text'
+                }}
+              />
+            </div>
+            <div style={{ minWidth: isMobile ? '100%' : '200px' }}>
+              <SearchableSelect
+                value={filterEmpName}
+                onChange={setFilterEmpName}
+                options={empNameOptions}
+                emptyOptionLabel="All Employee Names"
+                placeholder="Type to search name…"
+                style={{
+                  width: '100%',
+                  padding: '10px 15px',
+                  border: `2px solid ${colors.inputBorder}`,
+                  borderRadius: '16px',
+                  fontSize: '0.95em',
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                  backgroundColor: colors.inputBg,
+                  color: colors.text,
+                  cursor: 'text'
+                }}
+              />
+            </div>
+            <ClearFilterButton
+              visible={Boolean(generalSearch || filterEmpId || filterEmpName)}
+              onClick={() => { setGeneralSearch(''); setFilterEmpId(''); setFilterEmpName(''); }}
+            />
           </div>
         </article>
 
@@ -6598,6 +6970,7 @@ const TestingModule = () => {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #ececf0' }}>
+                  <th style={{ padding: '16px 20px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>S.No</th>
                   <th style={{ padding: '16px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Employee ID</th>
                   <th style={{ padding: '16px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Name</th>
                   <th style={{ padding: '16px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Standard</th>
@@ -6610,6 +6983,9 @@ const TestingModule = () => {
               <tbody>
                 {paginatedPracticalResults.map((result, index) => {
                   const hasAttachment = String(result.HAS_PRACTICAL_ATTACHMENT) === '1' || result.HAS_PRACTICAL_ATTACHMENT === 1;
+                  // Newest row leads the list, so it should carry the
+                  // highest number — counting down to 1 at the oldest.
+                  const serialNo = practicalResults.length - ((practicalCurrentPage - 1) * practicalItemsPerPage + index);
 
                   return (
                     <tr key={index} style={{
@@ -6617,6 +6993,7 @@ const TestingModule = () => {
                       transition: 'background-color 0.2s',
                       backgroundColor: isDarkMode ? colors.tableRowBg : 'transparent'
                     }}>
+                      <td style={{ padding: '16px 20px', color: colors.textMuted, textAlign: 'center' }}>{serialNo}</td>
                       <td style={{ padding: '16px 20px', color: colors.text }}>{result.ID}</td>
                       <td style={{ padding: '16px 20px', color: colors.text }}>{result.NAME}</td>
                       <td style={{ padding: '16px 20px', color: colors.text }}>{result.STANDARD}</td>
@@ -6730,7 +7107,7 @@ const TestingModule = () => {
                 })}
                 {practicalResults.length === 0 && (
                   <tr>
-                    <td colSpan="7" style={{ padding: '40px', textAlign: 'center', color: colors.textMuted }}>
+                    <td colSpan="8" style={{ padding: '40px', textAlign: 'center', color: colors.textMuted }}>
                       No practical results found. Click "Add Practical Result" to add one.
                     </td>
                   </tr>
@@ -7503,43 +7880,15 @@ const TestingModule = () => {
                 }}
               />
             </div>
-            <button
-              onClick={() => {
-                setSearchQuery('');
-                setEmployeeCurrentPage(1);
-              }}
-              disabled={!searchQuery}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '12px 24px',
-                backgroundColor: colors.inputBg,
-                color: colors.textMuted,
-                border: `2px solid ${colors.inputBorder}`,
-                borderRadius: '28px',
-                cursor: searchQuery ? 'pointer' : 'not-allowed',
-                fontSize: '0.95em',
-                fontWeight: '500',
-                opacity: searchQuery ? 1 : 0.5,
-                transition: 'all 0.2s ease'
-              }}
-              onMouseOver={(e) => {
-                if (searchQuery) e.currentTarget.classList.add('grad-hover-outline');
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.classList.remove('grad-hover-outline');
-              }}
-            >
-              <svg className="grad-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6l-1 14H6L5 6"></path>
-                <path d="M10 11v6"></path>
-                <path d="M14 11v6"></path>
-                <path d="M9 6V4h6v2"></path>
-              </svg>
-              <span className="grad-label">Clear Filter</span>
-            </button>
+            {searchQuery && (
+              <ClearFilterButton
+                visible
+                onClick={() => {
+                  setSearchQuery('');
+                  setEmployeeCurrentPage(1);
+                }}
+              />
+            )}
             </div>
           </div>
 

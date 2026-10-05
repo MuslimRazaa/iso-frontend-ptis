@@ -33,8 +33,11 @@ const AllLmsCourses = () => {
       const allCourses = await coursesRes.json();
       const allTasks   = await tasksRes.json();
 
+      // Matched by email, not name — see MyCourses.jsx for why: a stale or
+      // differently-cased localStorage userFullName silently drops a course
+      // that's genuinely assigned.
       const myTasks = allTasks.filter(t =>
-        t.employee_name?.toLowerCase().trim() === userFullName.toLowerCase().trim()
+        t.employee_email?.toLowerCase().trim() === userEmail.toLowerCase().trim()
       );
       const assignedTitles = new Set(myTasks.map(t => t.course_title?.toLowerCase()));
       setMyAssignedTitles(assignedTitles);
@@ -177,7 +180,7 @@ const AllLmsCourses = () => {
                   <div style={{ width:44, height:44, borderRadius:10, background:'#f4f4f7',
                     display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, overflow:'hidden', flexShrink:0 }}>
                     {course.course_thumbnail
-                      ? <img src={`${API_BASE_URL}/${course.course_thumbnail}`} alt="" style={{ width:'100%', height:'100%', objectFit:'cover', borderRadius:10 }} />
+                      ? <img src={`${API_BASE_URL}/${course.course_thumbnail}`} alt="" loading="lazy" style={{ width:'100%', height:'100%', objectFit:'cover', borderRadius:10 }} />
                       : '📚'}
                   </div>
                   <span style={{ fontSize:11, fontWeight:700, padding:'4px 10px', borderRadius:6,

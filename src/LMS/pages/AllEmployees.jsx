@@ -217,7 +217,7 @@ function AllEmployees() {
       )}
 
       {showModal && (
-        <div className="modal-overlay" onClick={closeModal}>
+        <div className="modal-overlay">
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Edit Employee</h2>

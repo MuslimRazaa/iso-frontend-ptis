@@ -1,11 +1,10 @@
-import React, { useEffect, useState } from 'react'
+import React, { forwardRef, useEffect, useImperativeHandle, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Search, Calendar, X, Download } from 'lucide-react'
-import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
-import * as XLSX from 'xlsx'
+import { Search, Calendar, Download } from 'lucide-react'
+import { loadPtisLogoDataUrl, drawPdfLetterhead, drawPdfWatermark } from '../utils/pdfBranding'
 import { API_ENDPOINTS } from '../config/api'
 import { showToast } from './Toast'
+import ClearFilterButton from './ClearFilterButton'
 import PaginationBar from './PaginationBar'
 import StyledSelect from './StyledSelect'
 import SearchableSelect from './SearchableSelect'
@@ -59,7 +58,16 @@ const ENTITY_LABEL = {
   certificate: 'Certificate', employee: 'Employee',
 }
 
-function AuditLogView({ module, title, subtitle, actions, backTo, padded = true, showHeader = true }) {
+// `exportRef` and `onExportingChange` let a caller that renders its own page
+// header (Testing module — it draws its own "Audit Log" title bar outside
+// this component) put the Export PDF/Excel buttons in THAT header's action
+// row instead of the extra standalone row this component would otherwise
+// render above the filters. Pass `hideOwnExportButtons` in that case so the
+// buttons aren't shown twice.
+const AuditLogView = forwardRef(function AuditLogView(
+  { module, title, subtitle, actions, backTo, padded = true, showHeader = true, hideOwnExportButtons = false, onExportingChange },
+  exportRef
+) {
   const [rows, setRows] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -120,6 +128,8 @@ function AuditLogView({ module, title, subtitle, actions, backTo, padded = true,
 
   const [exporting, setExporting] = useState('')
 
+  useEffect(() => { onExportingChange?.(exporting) }, [exporting]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Export downloads every row matching the current filters, not just the
   // page on screen — a report is only useful if it's complete. The list
   // endpoint caps a single request at 200 rows, so this pages through it.
@@ -158,16 +168,39 @@ function AuditLogView({ module, title, subtitle, actions, backTo, padded = true,
   const handleExportPdf = async () => {
     setExporting('pdf')
     try {
-      const allRows = await fetchAllFilteredRows()
+      // jsPDF + autotable (~230KB) only ever get used if someone actually
+      // clicks Export — loading them here instead of at module import time
+      // keeps every page that embeds this table (JLR, ISO Forms, Testing)
+      // from paying that weight just to view the log.
+      const [{ default: jsPDF }, { default: autoTable }, [allRows, logoDataUrl]] = await Promise.all([
+        import('jspdf'),
+        import('jspdf-autotable'),
+        Promise.all([fetchAllFilteredRows(), loadPtisLogoDataUrl()]),
+      ])
       const doc = new jsPDF({ orientation: 'landscape' })
-      doc.setFontSize(14)
-      doc.text(title || 'Audit Log', 14, 16)
+      const generatedAt = new Date().toLocaleString()
+      // Reserve the same top margin on every page (autoTable applies one
+      // margin.top uniformly) and redraw the letterhead in willDrawPage,
+      // which fires before that page's rows render so the table starts
+      // below it. The watermark can't go there too: autoTable paints an
+      // OPAQUE background on every cell, so anything drawn before the table
+      // is completely hidden underneath it — only the header/margin area
+      // was ever visible. Drawing it in didDrawPage instead, after the
+      // table's content for that page, layers it on top (still faint enough
+      // to read as a background) so it actually shows through the rows.
+      const marginTop = subtitle ? 48 : 42
       autoTable(doc, {
-        startY: 22,
+        margin: { top: marginTop },
         head: [['When', 'Action', 'What', 'Who', 'Details']],
         body: exportRowsToTable(allRows),
         styles: { fontSize: 8 },
         headStyles: { fillColor: [20, 20, 28] },
+        willDrawPage: () => {
+          drawPdfLetterhead(doc, { logoDataUrl, title: title || 'Audit Log', subtitle: subtitle || undefined, generatedAt })
+        },
+        didDrawPage: () => {
+          drawPdfWatermark(doc, logoDataUrl)
+        },
       })
       doc.save(`${module}-audit-log.pdf`)
       showToast(`Exported ${allRows.length} record${allRows.length === 1 ? '' : 's'} to PDF.`, 'success')
@@ -181,7 +214,7 @@ function AuditLogView({ module, title, subtitle, actions, backTo, padded = true,
   const handleExportExcel = async () => {
     setExporting('excel')
     try {
-      const allRows = await fetchAllFilteredRows()
+      const [XLSX, allRows] = await Promise.all([import('xlsx'), fetchAllFilteredRows()])
       const sheetRows = allRows.map(row => ({
         When: row.created_at ? new Date(row.created_at).toLocaleString() : '—',
         Action: row.action || '',
@@ -201,7 +234,11 @@ function AuditLogView({ module, title, subtitle, actions, backTo, padded = true,
     }
   }
 
-  const exportButtons = (
+  // Exposed so a caller with `hideOwnExportButtons` can trigger these from
+  // buttons it renders in its own header instead.
+  useImperativeHandle(exportRef, () => ({ exportPdf: handleExportPdf, exportExcel: handleExportExcel }))
+
+  const exportButtons = hideOwnExportButtons ? null : (
     <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
       <button
         type="button"
@@ -242,7 +279,7 @@ function AuditLogView({ module, title, subtitle, actions, backTo, padded = true,
           <div style={{ marginBottom: 24 }} />
         </>
       ) : (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>{exportButtons}</div>
+        exportButtons && <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>{exportButtons}</div>
       )}
 
       <div className="panel" style={{ padding: 20, marginBottom: 20, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -277,11 +314,7 @@ function AuditLogView({ module, title, subtitle, actions, backTo, padded = true,
           <span style={{ color: '#9a9aaa' }}>to</span>
           <StyledDatePicker value={dateTo} onChange={onDateToChange} min={dateFrom || undefined} style={{ ...inputStyle, padding: '10px 10px' }} />
         </div>
-        {hasActiveFilters && (
-          <button type="button" className="ghost-btn" onClick={clearFilters} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-            <X size={14} /> Clear
-          </button>
-        )}
+        <ClearFilterButton visible={hasActiveFilters} onClick={clearFilters} />
       </div>
 
       {error && (
@@ -339,6 +372,6 @@ function AuditLogView({ module, title, subtitle, actions, backTo, padded = true,
       </article>
     </div>
   )
-}
+})
 
 export default AuditLogView

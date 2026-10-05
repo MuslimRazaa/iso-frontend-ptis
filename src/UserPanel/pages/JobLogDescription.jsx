@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useSearchParams } from 'react-router-dom'
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api'
 import PaginationBar from '../../components/PaginationBar'
+import ClearFilterButton from '../../components/ClearFilterButton'
 import StyledSelect from '../../components/StyledSelect'
+import MultiSelect from '../../components/MultiSelect'
 import StyledDatePicker from '../../components/StyledDatePicker'
 import InfoTooltip from '../../components/InfoTooltip'
 import { showToast } from '../../components/Toast'
@@ -467,133 +469,6 @@ function ModalSection({ Icon, title, hint }) {
           marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: '#9a9aaa',
           letterSpacing: '0.04em'
         }}>{hint}</span>
-      )}
-    </div>
-  )
-}
-
-/* Searchable multi-select (select2-style) — value is a comma-separated string */
-function MultiSelect({ value, onChange, options, placeholder = 'Select…', disabled, onAdd }) {
-  const [open, setOpen] = useState(false)
-  const [query, setQuery] = useState('')
-  const ref = useRef(null)
-
-  const selected = (value || '').split(',').map(s => s.trim()).filter(Boolean)
-  // Accepts either plain name strings or { name, label } objects — `label`
-  // is what the dropdown ROW shows (e.g. "Mr Ali — IT", so two employees
-  // sharing a name can be told apart while picking one); `name` is what
-  // actually gets stored/toggled, and must stay the exact employee name the
-  // ERP's attendance matching depends on. Selected chips always show the
-  // plain name, never the department.
-  const normalized = options.map(o => (typeof o === 'string' ? { name: o, label: o } : o))
-
-  useEffect(() => {
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
-  const commit = (arr) => onChange(arr.join(', '))
-  const toggle = (name) =>
-    commit(selected.includes(name) ? selected.filter(s => s !== name) : [...selected, name])
-  const remove = (name) => commit(selected.filter(s => s !== name))
-
-  const q = query.trim()
-  const canAdd = !!onAdd && q.length > 0 && !normalized.some(o => o.name.toLowerCase() === q.toLowerCase())
-  const doAdd = async () => {
-    const added = (onAdd && await onAdd(q)) || q
-    if (added && !selected.includes(added)) commit([...selected, added])
-    setQuery('')
-  }
-
-  const filtered = normalized.filter(
-    o => o.label.toLowerCase().includes(query.toLowerCase()) || selected.includes(o.name)
-  )
-
-  return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      <div
-        onClick={() => { if (!disabled) setOpen(o => !o) }}
-        style={{
-          minHeight: 42, width: '100%', boxSizing: 'border-box',
-          display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6,
-          padding: selected.length ? '6px 36px 6px 8px' : '0 36px 0 12px',
-          border: '1px solid #e0e0e6', borderRadius: 8,
-          background: disabled ? '#f4f4f7' : '#ffffff',
-          color: disabled ? '#aaa' : '#1f1f27',
-          cursor: disabled ? 'not-allowed' : 'pointer',
-          position: 'relative', fontSize: 14,
-        }}
-      >
-        {selected.length === 0 && (
-          <span style={{ color: '#9a9aaa' }}>{placeholder}</span>
-        )}
-        {selected.map(name => (
-          <span key={name} style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            background: '#fdf2f3', color: '#d7263d', border: '1px solid #ffd1d8',
-            borderRadius: 6, padding: '3px 8px', fontSize: 12.5, fontWeight: 600,
-          }}>
-            {name}
-            {!disabled && (
-              <span
-                onClick={(e) => { e.stopPropagation(); remove(name) }}
-                style={{ cursor: 'pointer', fontWeight: 700, lineHeight: 1 }}
-              >×</span>
-            )}
-          </span>
-        ))}
-        <span style={{
-          position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
-          color: '#9a9aaa', fontSize: 11, pointerEvents: 'none',
-        }}>▼</span>
-      </div>
-
-      {open && !disabled && (
-        <div style={{
-          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50,
-          background: '#fff', border: '1px solid #e0e0e6', borderRadius: 8,
-          boxShadow: '0 8px 24px rgba(0,0,0,0.12)', maxHeight: 240, overflowY: 'auto',
-        }}>
-          <div style={{ padding: 8, borderBottom: '1px solid #efeff2', position: 'sticky', top: 0, background: '#fff' }}>
-            <input
-              autoFocus
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search inspector…"
-              style={{
-                width: '100%', boxSizing: 'border-box', padding: '8px 10px',
-                border: '1px solid #e0e0e6', borderRadius: 6, fontSize: 13, outline: 'none',
-              }}
-            />
-          </div>
-          {canAdd && (
-            <div onClick={doAdd}
-              style={{ padding: '9px 14px', cursor: 'pointer', fontSize: 13.5, color: '#d7263d', fontWeight: 600, borderBottom: '1px solid #efeff2' }}>
-              + Add “{q}”
-            </div>
-          )}
-          {filtered.length === 0 && !canAdd && (
-            <div style={{ padding: '12px 14px', color: '#9a9aaa', fontSize: 13 }}>No matches</div>
-          )}
-          {filtered.map(({ name, label }) => {
-            const isSel = selected.includes(name)
-            return (
-              <div key={name} onClick={() => toggle(name)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '9px 14px', cursor: 'pointer', fontSize: 13.5,
-                  background: isSel ? '#fdf2f3' : '#fff', color: '#1f1f27',
-                }}
-                onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = '#f7f7f9' }}
-                onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = '#fff' }}
-              >
-                <input type="checkbox" readOnly checked={isSel} style={{ accentColor: '#d7263d' }} />
-                {label}
-              </div>
-            )
-          })}
-        </div>
       )}
     </div>
   )
@@ -1066,6 +941,17 @@ function JobLogDescription() {
     setSearchParams(prev => { const next = new URLSearchParams(prev); next.delete('add'); return next }, { replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, searchParams, canAccessAnyJlr])
+
+  // Arriving from the header's global search (?q=<term>) — land already
+  // filtered to that entry instead of dropping the user on the unfiltered
+  // register and making them retype what they just searched.
+  useEffect(() => {
+    const q = searchParams.get('q')
+    if (!q) return
+    setSearchTerm(q)
+    setSearchParams(prev => { const next = new URLSearchParams(prev); next.delete('q'); return next }, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
   const sourceOptions = useMemo(() => [...new Set(entries.map(e => e.source).filter(Boolean))], [entries])
 
   const filteredEntries = useMemo(() => {
@@ -1792,28 +1678,10 @@ function JobLogDescription() {
             onChange={setDateTo} />
         </div>
         {/* Clear */}
-        <button
-          type="button"
-          style={{
-            background: 'transparent', border: T.clearBtnBorder,
-            color: T.clearBtnColor, padding: '12px 18px', borderRadius: 16,
-            fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap',
-            transition: 'all 0.2s ease',
-          }}
+        <ClearFilterButton
+          visible={hasActiveFilters}
           onClick={() => { setSearchTerm(''); setStatusFilter('all'); setSourceFilter('all'); setDateFrom(''); setDateTo(''); setSortBy('entryDesc') }}
-          onMouseEnter={e => {
-            e.currentTarget.style.borderColor = '#d7263d'
-            e.currentTarget.style.color = '#d7263d'
-            e.currentTarget.style.transform = 'translateY(-2px)'
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.borderColor = T.clearBtnBorder.split(' ').pop()
-            e.currentTarget.style.color = T.clearBtnColor
-            e.currentTarget.style.transform = 'translateY(0)'
-          }}
-        >
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><X size={14} /> Clear Filters</span>
-        </button>
+        />
       </div>
 
       {/* ══ TABLE SHELL ════════════════════════════════════════ */}
@@ -2158,6 +2026,7 @@ function JobLogDescription() {
                         value={modalState.inspectorName}
                         options={inspectorOptions}
                         placeholder="Select inspector(s)…"
+                        searchPlaceholder="Search inspector…"
                         disabled={!canEdit('operations')}
                         onChange={val => handleModalChange('inspectorName', val)} />
                     </div>
@@ -2174,6 +2043,7 @@ function JobLogDescription() {
                         value={modalState.inspectorTeam}
                         options={teamOptions}
                         placeholder="Select team members…"
+                        searchPlaceholder="Search inspector…"
                         disabled={!canEdit('operations')}
                         onChange={val => handleModalChange('inspectorTeam', val)} />
                     </div>
@@ -2484,6 +2354,7 @@ function JobLogDescription() {
                           value={changeOldValue}
                           options={currentRosterFor(changeField).map(withDept)}
                           placeholder="Select who is being replaced…"
+                          searchPlaceholder="Search inspector…"
                           onChange={setChangeOldValue} />
                       </div>
                     </div>
@@ -2496,6 +2367,7 @@ function JobLogDescription() {
                         value={changeNewValue}
                         options={changeField === 'team' ? teamOptions : inspectorOptions}
                         placeholder="Select one or more…"
+                        searchPlaceholder="Search inspector…"
                         onChange={setChangeNewValue} />
                     </div>
                   </div>
@@ -2634,7 +2506,7 @@ function JobLogDescription() {
 
       {/* Export to CSV / Excel — pick month & year, exports from all entries */}
       {showExport && (
-        <div className="modal-overlay" style={{ zIndex: 2100 }} onMouseDown={e => { if (e.target === e.currentTarget) setShowExport(false) }}>
+        <div className="modal-overlay" style={{ zIndex: 2100 }}>
           <div className="modal-content" style={{ maxWidth: 500 }}>
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -2701,8 +2573,7 @@ function JobLogDescription() {
       {/* ══ DELETE-ALL GUARDED FLOW ═══════════════════════════════
           confirm → admin password → confirm → 5s undo countdown → delete */}
       {deleteStep && (
-        <div className="modal-overlay" style={{ zIndex: 2200 }}
-          onMouseDown={e => { if (e.target === e.currentTarget && deleteStep !== 'countdown') closeDelete() }}>
+        <div className="modal-overlay" style={{ zIndex: 2200 }}>
           <div className="modal-content" style={{ maxWidth: 460 }}>
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

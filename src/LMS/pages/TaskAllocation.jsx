@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { Video, FileText, Trash2, Inbox, Info, RotateCcw, Search } from 'lucide-react'
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api'
 import PaginationBar from '../../components/PaginationBar'
+import ClearFilterButton from '../../components/ClearFilterButton'
 import SearchableSelect from '../../components/SearchableSelect'
 import StyledSelect from '../../components/StyledSelect'
 import StyledDatePicker from '../../components/StyledDatePicker'
@@ -30,6 +31,18 @@ function TaskAllocation() {
   const [activeTab, setActiveTab] = useState(
     searchParams.get('tab') === 'requests' ? 'requests' : 'allocations') // 'allocations' | 'requests'
   const [courseRequests, setCourseRequests] = useState([])
+  // The request currently being rejected — its reason is composed in a modal
+  // rather than a native browser prompt, which can't be styled and reads as
+  // out of place next to the rest of the app.
+  const [rejectModalRequest, setRejectModalRequest] = useState(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [rejectSubmitting, setRejectSubmitting] = useState(false)
+  // The request currently being approved — the deadline used to be silently
+  // hardcoded to +30 days with no way to change it; this modal lets the admin
+  // actually set it before the course is assigned.
+  const [approveModalRequest, setApproveModalRequest] = useState(null)
+  const [approveDeadline, setApproveDeadline] = useState('')
+  const [approveSubmitting, setApproveSubmitting] = useState(false)
   const [tasksPage, setTasksPage] = useState(1)
   const [requestsPage, setRequestsPage] = useState(1)
   const [taskQuery, setTaskQuery] = useState('')
@@ -171,7 +184,47 @@ function TaskAllocation() {
     }
   }
 
-  const handleApproveRequest = async (request) => {
+  const openRejectModal = (request) => {
+    setRejectModalRequest(request)
+    setRejectReason('')
+  }
+
+  const closeRejectModal = () => {
+    if (rejectSubmitting) return
+    setRejectModalRequest(null)
+    setRejectReason('')
+  }
+
+  const confirmRejectRequest = async () => {
+    const request = rejectModalRequest
+    if (!request) return
+
+    setRejectSubmitting(true)
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/course-requests/${request.id}/reject`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: rejectReason.trim() }),
+      })
+
+      if (response.ok) {
+        await fetchCourseRequests()
+        showToast(`Course request from ${request.employee_name} rejected.`, 'success')
+        setRejectModalRequest(null)
+        setRejectReason('')
+      } else {
+        const data = await response.json().catch(() => ({}))
+        showToast(data.error || 'Failed to reject request', 'error')
+      }
+    } catch (error) {
+      console.error('Error rejecting request:', error)
+      showToast('Failed to reject request.', 'error')
+    } finally {
+      setRejectSubmitting(false)
+    }
+  }
+
+  const openApproveModal = (request) => {
     const emp = employees.find(
       (e) => e.full_name?.toLowerCase() === request.employee_name?.toLowerCase()
     )
@@ -185,20 +238,68 @@ function TaskAllocation() {
       return
     }
 
-    const deadline = new Date()
-    deadline.setDate(deadline.getDate() + 30)
-    const deadlineStr = localYmd(deadline)
+    const defaultDeadline = new Date()
+    defaultDeadline.setDate(defaultDeadline.getDate() + 30)
+    setApproveDeadline(localYmd(defaultDeadline))
+    setApproveModalRequest(request)
+  }
 
+  const closeApproveModal = () => {
+    if (approveSubmitting) return
+    setApproveModalRequest(null)
+    setApproveDeadline('')
+  }
+
+  const confirmApproveRequest = async () => {
+    const request = approveModalRequest
+    if (!request || !approveDeadline) return
+
+    const emp = employees.find(
+      (e) => e.full_name?.toLowerCase() === request.employee_name?.toLowerCase()
+    )
+    const course = courses.find(
+      (c) => c.course_title?.toLowerCase() === request.course_title?.toLowerCase()
+    )
+    if (!emp || !course) {
+      showToast('Could not find matching employee or course. Please assign manually.', 'error')
+      setApproveModalRequest(null)
+      setShowModal(true)
+      return
+    }
+
+    setApproveSubmitting(true)
     try {
-      const response = await fetch(API_ENDPOINTS.TASK_ALLOCATIONS, {
+      const assign = () => fetch(API_ENDPOINTS.TASK_ALLOCATIONS, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           employee_id: emp.id,
           course_id: course.id,
-          deadline: deadlineStr,
+          deadline: approveDeadline,
         }),
       })
+
+      let response = await assign()
+      let data = response.ok ? null : await response.json().catch(() => ({}))
+      const alreadyAssigned = !response.ok && /already assigned/i.test(data?.error || '')
+
+      // A person can only re-request a course from My Courses once they've
+      // FULLY COMPLETED it (an active/incomplete course never shows a Request
+      // button there) — so hitting the DB's duplicate check here always means
+      // a leftover completed assignment, not a still-active one. Marking the
+      // request "approved" without actually resetting it (what the previous
+      // version of this did) left the course genuinely unassigned: no fresh
+      // task, no notification, nothing — while the request still said
+      // "approved", which is exactly backwards. Clear the stale completed row
+      // and really reassign it, the same reset `handleReassign` already does.
+      if (alreadyAssigned) {
+        const staleTask = tasks.find(t => Number(t.employee_id) === Number(emp.id) && Number(t.course_id) === Number(course.id))
+        if (staleTask) {
+          await fetch(`${API_ENDPOINTS.TASK_ALLOCATIONS}/${staleTask.id}`, { method: 'DELETE' })
+          response = await assign()
+          data = response.ok ? null : await response.json().catch(() => ({}))
+        }
+      }
 
       if (response.ok) {
         // Mark request as approved in backend if endpoint exists
@@ -212,13 +313,16 @@ function TaskAllocation() {
         await fetchAllData()
         await fetchCourseRequests()
         showToast(`Course "${request.course_title}" assigned to ${request.employee_name}!`, 'success')
+        setApproveModalRequest(null)
+        setApproveDeadline('')
       } else {
-        const data = await response.json()
-        showToast(data.error || 'Failed to approve request', 'error')
+        showToast(data?.error || 'Failed to approve request', 'error')
       }
     } catch (error) {
       console.error('Error approving request:', error)
       showToast('Failed to approve. Please assign manually.', 'error')
+    } finally {
+      setApproveSubmitting(false)
     }
   }
 
@@ -430,29 +534,7 @@ function TaskAllocation() {
               <StyledDatePicker value={taskDateTo} onChange={onTaskDateToChange} min={taskDateFrom || undefined}
                 style={{ padding: '10px 10px', borderRadius: 10, border: '1px solid #e2e2ea', fontSize: 14, background: '#fff', cursor: 'pointer' }} />
             </div>
-            {hasActiveTaskFilters && (
-              <button
-                type="button"
-                onClick={clearTaskFilters}
-                style={{
-                  background: 'transparent', border: '1px solid #e2e2ea', color: '#595966',
-                  padding: '10px 16px', borderRadius: 10, fontSize: 14, cursor: 'pointer',
-                  whiteSpace: 'nowrap', transition: 'all 0.2s ease', flexShrink: 0,
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.borderColor = '#d7263d'
-                  e.currentTarget.style.color = '#d7263d'
-                  e.currentTarget.style.transform = 'translateY(-2px)'
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.borderColor = '#e2e2ea'
-                  e.currentTarget.style.color = '#595966'
-                  e.currentTarget.style.transform = 'translateY(0)'
-                }}
-              >
-                Clear
-              </button>
-            )}
+            <ClearFilterButton visible={hasActiveTaskFilters} onClick={clearTaskFilters} />
             <span style={{ color: '#9a9aaa', fontSize: 13, width: '100%' }}>
               {filteredTasks.length} of {tasks.length} tasks
             </span>
@@ -619,9 +701,16 @@ function TaskAllocation() {
                             <button
                               className="primary-btn"
                               style={{ fontSize: '12px', padding: '6px 14px' }}
-                              onClick={() => handleApproveRequest(req)}
+                              onClick={() => openApproveModal(req)}
                             >
                               Approve & Assign
+                            </button>
+                            <button
+                              className="ghost-btn"
+                              style={{ fontSize: '12px', padding: '6px 14px' }}
+                              onClick={() => openRejectModal(req)}
+                            >
+                              Reject
                             </button>
                           </div>
                         )}
@@ -645,13 +734,7 @@ function TaskAllocation() {
 
       {/* Assign Course Modal */}
       {showModal && (
-        <div
-          className="modal-overlay"
-          onClick={() => {
-            setShowModal(false)
-            setFormData({ employee_id: '', course_id: '', deadline: '' })
-          }}
-        >
+        <div className="modal-overlay">
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Assign Course to Employee</h2>
@@ -729,6 +812,104 @@ function TaskAllocation() {
                 </button>
                 <button type="submit" className="primary-btn">
                   Assign Course
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {rejectModalRequest && (
+        <div className="modal-overlay">
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+            <div className="modal-header">
+              <h2>Reject Course Request</h2>
+              <button className="close-modal-btn" onClick={closeRejectModal}>
+                ✕
+              </button>
+            </div>
+
+            <form
+              className="modal-form"
+              onSubmit={(e) => {
+                e.preventDefault()
+                confirmRejectRequest()
+              }}
+            >
+              <div className="info-box" style={{ marginBottom: 4 }}>
+                <p>
+                  <Info size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                  Rejecting <strong>"{rejectModalRequest.course_title}"</strong> for{' '}
+                  <strong>{rejectModalRequest.employee_name}</strong>. They'll be notified.
+                </p>
+              </div>
+
+              <label>
+                <span>Reason (optional)</span>
+                <textarea
+                  rows={4}
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="Let them know why — e.g. already covered in another course, seat limit reached…"
+                  style={{ ...formSelectStyle, cursor: 'text', resize: 'vertical', fontFamily: 'inherit' }}
+                  autoFocus
+                />
+              </label>
+
+              <div className="modal-actions">
+                <button type="button" className="ghost-btn" onClick={closeRejectModal} disabled={rejectSubmitting}>
+                  Cancel
+                </button>
+                <button type="submit" className="primary-btn" disabled={rejectSubmitting}>
+                  {rejectSubmitting ? 'Rejecting…' : 'Reject Request'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {approveModalRequest && (
+        <div className="modal-overlay">
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+            <div className="modal-header">
+              <h2>Approve & Assign Course</h2>
+              <button className="close-modal-btn" onClick={closeApproveModal}>
+                ✕
+              </button>
+            </div>
+
+            <form
+              className="modal-form"
+              onSubmit={(e) => {
+                e.preventDefault()
+                confirmApproveRequest()
+              }}
+            >
+              <div className="info-box" style={{ marginBottom: 4 }}>
+                <p>
+                  <Info size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                  Approving <strong>"{approveModalRequest.course_title}"</strong> for{' '}
+                  <strong>{approveModalRequest.employee_name}</strong>. Set the deadline before it's assigned.
+                </p>
+              </div>
+
+              <label>
+                <span>Deadline *</span>
+                <StyledDatePicker
+                  value={approveDeadline}
+                  onChange={setApproveDeadline}
+                  min={new Date().toISOString().split('T')[0]}
+                  style={formSelectStyle}
+                />
+              </label>
+
+              <div className="modal-actions">
+                <button type="button" className="ghost-btn" onClick={closeApproveModal} disabled={approveSubmitting}>
+                  Cancel
+                </button>
+                <button type="submit" className="primary-btn" disabled={approveSubmitting || !approveDeadline}>
+                  {approveSubmitting ? 'Assigning…' : 'Approve & Assign'}
                 </button>
               </div>
             </form>

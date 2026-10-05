@@ -161,13 +161,70 @@ const TopNavbar = () => {
           to { opacity: 1; }
         }
         @keyframes slideUp {
-          from { 
+          from {
             opacity: 0;
             transform: translate(-50%, -45%);
           }
-          to { 
+          to {
             opacity: 1;
             transform: translate(-50%, -50%);
+          }
+        }
+
+        /* Notification bell — an attention-grabbing but on-theme control:
+           gradient fill on hover/open (matches the profile avatar and primary
+           buttons elsewhere in this bar), a soft pulse on the badge so a new
+           notification is noticed without being obnoxious, and a dropdown
+           that never overflows a narrow viewport instead of a fixed 380px. */
+        @keyframes ptisBellRing {
+          0%, 100% { transform: rotate(0deg); }
+          10%, 30% { transform: rotate(-12deg); }
+          20%, 40% { transform: rotate(10deg); }
+          50% { transform: rotate(0deg); }
+        }
+        @keyframes ptisBadgePulse {
+          0% { box-shadow: 0 0 0 0 rgba(230, 57, 70, 0.45); }
+          70% { box-shadow: 0 0 0 7px rgba(230, 57, 70, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(230, 57, 70, 0); }
+        }
+        @keyframes ptisDropdownIn {
+          from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .ptis-notif-btn {
+          background: #F8F9FA;
+          border: 2px solid #E2E8F0;
+          color: #64748b;
+          transition: background 0.25s ease, border-color 0.25s ease, color 0.25s ease, transform 0.2s ease, box-shadow 0.25s ease;
+        }
+        .ptis-notif-btn:hover, .ptis-notif-btn.active {
+          background: linear-gradient(135deg, #E63946 0%, #FA5252 100%);
+          border-color: transparent;
+          color: #fff;
+          transform: translateY(-2px);
+          box-shadow: 0 8px 20px rgba(230, 57, 70, 0.3);
+        }
+        .ptis-notif-btn.has-unread svg {
+          animation: ptisBellRing 2.2s ease-in-out 1s infinite;
+          transform-origin: 50% 20%;
+        }
+        .ptis-notif-badge {
+          animation: ptisBadgePulse 2s infinite;
+        }
+        .ptis-notif-dropdown {
+          animation: ptisDropdownIn 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        @media (max-width: 480px) {
+          .ptis-notif-dropdown {
+            position: fixed !important;
+            top: 68px !important;
+            right: 12px !important;
+            left: 12px !important;
+            width: auto !important;
+          }
+          .ptis-notif-btn {
+            width: 38px !important;
+            height: 38px !important;
           }
         }
       `}</style>
@@ -377,14 +434,13 @@ const TopNavbar = () => {
         {/* Notifications */}
         <div style={{ position: 'relative' }}>
           <button
+            className={`ptis-notif-btn${showNotifications ? ' active' : ''}${unreadCount > 0 ? ' has-unread' : ''}`}
             onClick={() => {
               setShowNotifications(!showNotifications);
               setShowProfileMenu(false);
               setShowHelpMenu(false);
             }}
             style={{
-              background: '#F8F9FA',
-              border: '2px solid #E2E8F0',
               borderRadius: '10px',
               width: '44px',
               height: '44px',
@@ -393,29 +449,18 @@ const TopNavbar = () => {
               justifyContent: 'center',
               cursor: 'pointer',
               position: 'relative',
-              transition: 'all 0.3s ease'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = '#E63946';
-              e.currentTarget.style.borderColor = '#E63946';
-              e.currentTarget.querySelector('svg').style.stroke = '#fff';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = '#F8F9FA';
-              e.currentTarget.style.borderColor = '#E2E8F0';
-              e.currentTarget.querySelector('svg').style.stroke = '#64748b';
             }}
           >
-            <svg width="20" height="20" fill="none" stroke="#64748b" strokeWidth="2" viewBox="0 0 24 24">
+            <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
               <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
             </svg>
             {unreadCount > 0 && (
-              <span style={{
+              <span className="ptis-notif-badge" style={{
                 position: 'absolute',
                 top: '-5px',
                 right: '-5px',
-                background: '#E63946',
+                background: 'linear-gradient(135deg, #E63946 0%, #FA5252 100%)',
                 color: '#fff',
                 borderRadius: '50%',
                 width: '20px',
@@ -427,26 +472,28 @@ const TopNavbar = () => {
                 justifyContent: 'center',
                 border: '2px solid #fff'
               }}>
-                {unreadCount}
+                {unreadCount > 9 ? '9+' : unreadCount}
               </span>
             )}
           </button>
 
           {/* Notifications Dropdown */}
           {showNotifications && (
-            <div style={{
+            <div className="ptis-notif-dropdown" style={{
               position: 'absolute',
               top: '55px',
               right: 0,
-              width: '380px',
+              width: 'min(380px, calc(100vw - 32px))',
               background: '#fff',
-              borderRadius: '12px',
-              boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
+              borderRadius: '14px',
+              boxShadow: '0 16px 48px rgba(0,0,0,0.18)',
               border: '1px solid #E2E8F0',
-              zIndex: 1000
+              zIndex: 1000,
+              overflow: 'hidden'
             }}>
               <div style={{
                 padding: '1rem 1.25rem',
+                background: 'linear-gradient(135deg, rgba(230,57,70,0.06) 0%, rgba(250,82,82,0.06) 100%)',
                 borderBottom: '1px solid #E2E8F0',
                 display: 'flex',
                 justifyContent: 'space-between',
@@ -455,9 +502,15 @@ const TopNavbar = () => {
                 <h3 style={{ fontSize: '0.95rem', fontWeight: '700', color: '#1a202c', margin: 0 }}>
                   Notifications
                 </h3>
-                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                  {unreadCount} unread
-                </span>
+                {unreadCount > 0 && (
+                  <span style={{
+                    fontSize: '0.7rem', fontWeight: 700, color: '#fff',
+                    background: 'linear-gradient(135deg, #E63946 0%, #FA5252 100%)',
+                    padding: '0.2rem 0.6rem', borderRadius: 999,
+                  }}>
+                    {unreadCount} unread
+                  </span>
+                )}
               </div>
               <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
                 {notifications.length === 0 ? (
