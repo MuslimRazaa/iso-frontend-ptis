@@ -2,6 +2,7 @@
 import { Edit2, Trash2, Upload, FileSpreadsheet, Download, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useTheme } from '../contexts/ThemeContext';
+import { localToday } from '../../utils/localDate';
 import { API_BASE_URL as HOST_API_BASE_URL } from '../../config/api';
 import PaginationBar from '../../components/PaginationBar';
 import StyledSelect from '../../components/StyledSelect';
@@ -279,7 +280,7 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
     const link = document.createElement('a');
     link.href = url;
     const label = filterStandard && filterStandard !== '__UNMATCHED__' ? filterStandard : 'All';
-    link.download = `Questions_${label}_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `Questions_${label}_${localToday()}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

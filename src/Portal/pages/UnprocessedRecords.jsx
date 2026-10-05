@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { showToast } from '../../components/Toast'
+import { localToday } from '../../utils/localDate'
 
 const initialPdfRecords = [
   {
@@ -57,7 +58,7 @@ function UnprocessedRecords() {
       const newRecord = {
         id: `PDF-${String(records.length + 1).padStart(3, '0')}`,
         fileName: file.name,
-        uploadDate: new Date().toISOString().split('T')[0],
+        uploadDate: localToday(),
         fileSize: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
         status: 'Pending',
         uploadedBy: 'Current User',

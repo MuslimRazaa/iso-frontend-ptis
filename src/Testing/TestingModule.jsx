@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { Links, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTheme } from './contexts/ThemeContext';
+import { localToday } from '../utils/localDate';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import StandardsAdminPage from './admin/StandardsAdminPage';
 import QuestionsAdminPage from './admin/QuestionsAdminPage';
@@ -2677,7 +2678,7 @@ const TestingModule = () => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `ptis-test-results-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `ptis-test-results-${localToday()}.csv`;
       a.click();
       URL.revokeObjectURL(url);
     };

@@ -7,6 +7,7 @@ import SearchableSelect from '../../components/SearchableSelect'
 import StyledSelect from '../../components/StyledSelect'
 import StyledDatePicker from '../../components/StyledDatePicker'
 import { showToast } from '../../components/Toast'
+import { localToday, localYmd } from '../../utils/localDate'
 
 const formSelectStyle = {
   border: '1px solid #dcdce3', borderRadius: 14, padding: '12px 14px',
@@ -186,7 +187,7 @@ function TaskAllocation() {
 
     const deadline = new Date()
     deadline.setDate(deadline.getDate() + 30)
-    const deadlineStr = deadline.toISOString().split('T')[0]
+    const deadlineStr = localYmd(deadline)
 
     try {
       const response = await fetch(API_ENDPOINTS.TASK_ALLOCATIONS, {
@@ -297,9 +298,12 @@ function TaskAllocation() {
         if (taskStatusFilter === 'Completed' ? !label.startsWith('Completed') : label !== taskStatusFilter) return false
       }
       if (taskDateFrom || taskDateTo) {
-        const deadline = task.deadline ? new Date(task.deadline) : null
-        if (!deadline || Number.isNaN(deadline.getTime())) return false
-        const dateKey = deadline.toISOString().slice(0, 10)
+        // The API already sends deadline as a plain 'YYYY-MM-DD' string — comparing
+        // it directly (not round-tripping through `new Date(...).toISOString()`,
+        // which re-reads it in UTC and can land on the wrong day) keeps this an
+        // exact match of what was actually saved.
+        const dateKey = task.deadline ? String(task.deadline).slice(0, 10) : null
+        if (!dateKey) return false
         if (taskDateFrom && dateKey < taskDateFrom) return false
         if (taskDateTo && dateKey > taskDateTo) return false
       }
@@ -700,7 +704,7 @@ function TaskAllocation() {
                 <StyledDatePicker
                   value={formData.deadline}
                   onChange={(v) => setFormData({ ...formData, deadline: v })}
-                  min={new Date().toISOString().split('T')[0]}
+                  min={localToday()}
                   style={formSelectStyle}
                 />
               </label>

@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { FileText } from 'lucide-react'
 import SearchableSelect from '../../components/SearchableSelect'
 import { showToast } from '../../components/Toast'
+import { localToday } from '../../utils/localDate'
 
 const formSelectStyle = {
   border: '1px solid #dcdce3', borderRadius: 14, padding: '12px 14px',
@@ -89,7 +90,7 @@ function Certificates() {
       employeeId: test.employeeId,
       employeeName: test.employeeName,
       testName: test.testName,
-      issueDate: new Date().toISOString().split('T')[0],
+      issueDate: localToday(),
       certificateUrl: `/certificates/${test.employeeId}-${test.testName.toLowerCase().replace(/\s+/g, '-')}.pdf`,
       thumbnail: '/src/assets/thumbnails/cert-placeholder.jpg',
     }
@@ -132,7 +133,7 @@ function Certificates() {
       employeeId: uploadForm.employeeId,
       employeeName: employee?.name || 'Unknown',
       testName: uploadForm.certificateName,
-      issueDate: new Date().toISOString().split('T')[0],
+      issueDate: localToday(),
       certificateUrl: URL.createObjectURL(uploadForm.file),
       thumbnail: '/src/assets/thumbnails/cert-placeholder.jpg',
     }

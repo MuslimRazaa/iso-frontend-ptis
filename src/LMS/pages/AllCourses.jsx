@@ -6,6 +6,7 @@ import PaginationBar from '../../components/PaginationBar'
 import StyledSelect from '../../components/StyledSelect'
 import StyledDatePicker from '../../components/StyledDatePicker'
 import { showToast } from '../../components/Toast'
+import { localYmd } from '../../utils/localDate'
 
 const formSelectStyle = {
   border: '1px solid #dcdce3', borderRadius: 14, padding: '12px 14px',
@@ -242,7 +243,7 @@ function AllCourses() {
       if (dateFrom || dateTo) {
         const updated = c.updatedAt ? new Date(c.updatedAt) : null
         if (!updated || Number.isNaN(updated.getTime())) return false
-        const dateKey = updated.toISOString().slice(0, 10)
+        const dateKey = localYmd(updated)
         if (dateFrom && dateKey < dateFrom) return false
         if (dateTo && dateKey > dateTo) return false
       }

@@ -7,6 +7,7 @@ import StyledDatePicker from '../../components/StyledDatePicker'
 import InfoTooltip from '../../components/InfoTooltip'
 import { showToast } from '../../components/Toast'
 import { getActorId, getActorName } from '../../utils/actorIdentity'
+import { localToday } from '../../utils/localDate'
 import { BsBriefcase, BsBoxSeam, BsWallet2, BsLaptop, BsClipboardData, BsPencilSquare } from 'react-icons/bs'
 import { MdOutlineHealthAndSafety } from 'react-icons/md'
 import {
@@ -478,6 +479,13 @@ function MultiSelect({ value, onChange, options, placeholder = 'Select…', disa
   const ref = useRef(null)
 
   const selected = (value || '').split(',').map(s => s.trim()).filter(Boolean)
+  // Accepts either plain name strings or { name, label } objects — `label`
+  // is what the dropdown ROW shows (e.g. "Mr Ali — IT", so two employees
+  // sharing a name can be told apart while picking one); `name` is what
+  // actually gets stored/toggled, and must stay the exact employee name the
+  // ERP's attendance matching depends on. Selected chips always show the
+  // plain name, never the department.
+  const normalized = options.map(o => (typeof o === 'string' ? { name: o, label: o } : o))
 
   useEffect(() => {
     const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
@@ -491,15 +499,15 @@ function MultiSelect({ value, onChange, options, placeholder = 'Select…', disa
   const remove = (name) => commit(selected.filter(s => s !== name))
 
   const q = query.trim()
-  const canAdd = !!onAdd && q.length > 0 && !options.some(o => o.toLowerCase() === q.toLowerCase())
+  const canAdd = !!onAdd && q.length > 0 && !normalized.some(o => o.name.toLowerCase() === q.toLowerCase())
   const doAdd = async () => {
     const added = (onAdd && await onAdd(q)) || q
     if (added && !selected.includes(added)) commit([...selected, added])
     setQuery('')
   }
 
-  const filtered = options.filter(
-    o => o.toLowerCase().includes(query.toLowerCase()) || selected.includes(o)
+  const filtered = normalized.filter(
+    o => o.label.toLowerCase().includes(query.toLowerCase()) || selected.includes(o.name)
   )
 
   return (
@@ -568,7 +576,7 @@ function MultiSelect({ value, onChange, options, placeholder = 'Select…', disa
           {filtered.length === 0 && !canAdd && (
             <div style={{ padding: '12px 14px', color: '#9a9aaa', fontSize: 13 }}>No matches</div>
           )}
-          {filtered.map(name => {
+          {filtered.map(({ name, label }) => {
             const isSel = selected.includes(name)
             return (
               <div key={name} onClick={() => toggle(name)}
@@ -581,7 +589,7 @@ function MultiSelect({ value, onChange, options, placeholder = 'Select…', disa
                 onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = '#fff' }}
               >
                 <input type="checkbox" readOnly checked={isSel} style={{ accentColor: '#d7263d' }} />
-                {name}
+                {label}
               </div>
             )
           })}
@@ -915,7 +923,7 @@ function JobLogDescription() {
   // separate "add" or "link" step. The ERP's Attendance module then
   // recognizes a job's Inspector/Team names automatically by matching them
   // exactly against employees.full_name — no manual linking required.
-  const [jlrEmployees, setJlrEmployees] = useState([]) // [{ id, empCode, name }]
+  const [jlrEmployees, setJlrEmployees] = useState([]) // [{ id, empCode, name, department }]
   const fetchJlrEmployees = useCallback(async () => {
     try {
       const res = await fetch(`${API_ENDPOINTS.JOB_LOG}/employees`)
@@ -925,24 +933,45 @@ function JobLogDescription() {
   }, [])
   useEffect(() => { fetchJlrEmployees() }, [fetchJlrEmployees])
 
+  // name -> department, so the dropdowns below can show it next to the name
+  // — two employees sharing a first+last name are otherwise indistinguishable
+  // while picking one. Only ERP employees have a department on file; anyone
+  // added via "+ Add" (labour/helpers with no ERP record) just shows plain.
+  const departmentByName = useMemo(() => {
+    const m = new Map()
+    jlrEmployees.forEach(e => { if (e.department) m.set(e.name, e.department) })
+    return m
+  }, [jlrEmployees])
+  const withDept = (name) => {
+    const dept = departmentByName.get(name)
+    return { name, label: dept ? `${name} — ${dept}` : name }
+  }
+  // Dedupe by name (not by the whole {name,label} object — two entries for
+  // the same name would otherwise both survive) while keeping each name's
+  // department label.
+  const dedupeByName = (list) => {
+    const m = new Map()
+    list.forEach(o => m.set(o.name, o))
+    return [...m.values()].sort((a, b) => a.name.localeCompare(b.name))
+  }
+
   // Inspector Name options = every ERP employee + anyone separately added
   // via "+ Add" (labour/helpers with no ERP record — never affects
   // attendance since their name won't match any employee's full_name).
   const inspectorOptions = useMemo(
-    () => Array.from(new Set([...jlrEmployees.map(e => e.name), ...jlInspectors.map(i => i.name)]))
-      .sort((a, b) => a.localeCompare(b)),
-    [jlrEmployees, jlInspectors]
+    () => dedupeByName([...jlrEmployees.map(e => withDept(e.name)), ...jlInspectors.map(i => withDept(i.name))]),
+    [jlrEmployees, jlInspectors, departmentByName]
   )
 
   // Team Member options = the same, plus the team-member roster (seeded +
   // admin-added labour/helpers).
   const teamOptions = useMemo(
-    () => Array.from(new Set([
-      ...jlrEmployees.map(e => e.name),
-      ...jlInspectors.map(i => i.name),
-      ...jlTeams.map(t => t.name),
-    ])).sort((a, b) => a.localeCompare(b)),
-    [jlrEmployees, jlInspectors, jlTeams]
+    () => dedupeByName([
+      ...jlrEmployees.map(e => withDept(e.name)),
+      ...jlInspectors.map(i => withDept(i.name)),
+      ...jlTeams.map(t => withDept(t.name)),
+    ]),
+    [jlrEmployees, jlInspectors, jlTeams, departmentByName]
   )
 
   const appendInspector = (field, name) => {
@@ -1333,7 +1362,7 @@ function JobLogDescription() {
   // "End Replacement" — caps an ongoing replacement's end_date at today so it
   // stops reading as active, without deleting its history.
   const endReplacementNow = async (change) => {
-    const today = new Date().toISOString().slice(0, 10)
+    const today = localToday()
     try {
       const res = await fetch(`${API_ENDPOINTS.JOB_LOG}/${editingId}/inspector-changes/${change.id}?${actorQuery()}`, {
         method: 'PUT',
@@ -2453,7 +2482,7 @@ function JobLogDescription() {
                       <div className="field-col"><span>Currently on the job (select one or more) *</span>
                         <MultiSelect
                           value={changeOldValue}
-                          options={currentRosterFor(changeField)}
+                          options={currentRosterFor(changeField).map(withDept)}
                           placeholder="Select who is being replaced…"
                           onChange={setChangeOldValue} />
                       </div>
@@ -2518,7 +2547,7 @@ function JobLogDescription() {
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {inspectorChangesList.map(c => {
-                      const today = new Date().toISOString().slice(0, 10)
+                      const today = localToday()
                       const isActiveReplacement = c.changeType === 'replace' && c.endDate >= today
                       return (
                       <div key={c.id} style={{
