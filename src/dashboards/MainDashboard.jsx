@@ -21,9 +21,12 @@ const dashboardTiles = [
     title: "Portal",
     link: "/portal",
     description: "Centralize department shortcuts and SOPs in one place.",
-    status: "online",
-    statusLabel: "Live",
-    metric: "24 quick links curated",
+    // Every page under /portal (dashboard, add admin/client, records) is
+    // still static mock data — not one of them makes a network call — so
+    // "Live" would claim this module does something it doesn't yet.
+    status: "sync",
+    statusLabel: "Preview",
+    metric: "Design preview — not yet built",
   },
   {
     id: "lms",
@@ -215,6 +218,11 @@ function MainDashboard() {
   const [loadingCourses, setLoadingCourses] = useState(true);
   const [loadingStats, setLoadingStats] = useState(true);
   const [tileMetrics, setTileMetrics] = useState({});
+  // Computed per tile from that module's own real data, the same way
+  // tileMetrics already is — replaces the fixed "Live"/"Syncing"/"Review"
+  // text every tile used to carry regardless of what was actually happening
+  // in that module.
+  const [tileStatus, setTileStatus] = useState({});
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
   const [, setSyncTick] = useState(0);
   const [showCustomize, setShowCustomize] = useState(false);
@@ -320,13 +328,14 @@ function MainDashboard() {
     // instead of fixed text no data ever fed.
     const fetchTileMetrics = async () => {
       try {
-        const [progressRes, jobLogRes, testingRes, standardsRes, isoTemplatesRes, isoPendingRes] = await Promise.all([
+        const [progressRes, jobLogRes, testingRes, standardsRes, isoTemplatesRes, isoPendingRes, courseRequestsRes] = await Promise.all([
           fetch(`${API_ENDPOINTS.COURSE_PROGRESS}/admin/all`),
           fetch(API_ENDPOINTS.JOB_LOG),
           fetch(`${API_BASE_URL}/api/test-results/legacy`),
           fetch(API_ENDPOINTS.STANDARDS),
           fetch(API_ENDPOINTS.ISO_FORMS_TEMPLATES),
           fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}/pending-count?admin=1`),
+          fetch(API_ENDPOINTS.COURSE_REQUESTS).catch(() => null),
         ]);
 
         const progressJson = progressRes.ok ? await progressRes.json() : null;
@@ -336,6 +345,10 @@ function MainDashboard() {
         const lmsMetric = progress.total
           ? `${avgCompletion}% average completion · ${progress.total} enrolment${progress.total === 1 ? '' : 's'}`
           : "No enrolments yet";
+
+        const courseRequestsJson = courseRequestsRes?.ok ? await courseRequestsRes.json() : [];
+        const courseRequestsList = Array.isArray(courseRequestsJson) ? courseRequestsJson : [];
+        const pendingCourseRequests = courseRequestsList.filter(r => r.status === 'pending').length;
 
         const jobLogJson = jobLogRes.ok ? await jobLogRes.json() : null;
         const jobLogRows = Array.isArray(jobLogJson?.data) ? jobLogJson.data : (Array.isArray(jobLogJson) ? jobLogJson : []);
@@ -361,6 +374,26 @@ function MainDashboard() {
           : "No form templates yet";
 
         setTileMetrics({ lms: lmsMetric, "cv-gen": jobLogMetric, testing: testingMetric, iso: isoMetric });
+        // "Review" when there's something an admin actually needs to act on
+        // (a pending course request, a pending job, a form awaiting
+        // approval) — "Live" once that module's data loaded with nothing
+        // outstanding. Portal and Premier ERP aren't included: neither one
+        // fetches any data here (Portal is static links, Premier ERP is a
+        // separate external app), so there's nothing in this module to
+        // derive a sync/review state from — they stay on their fixed
+        // "Live" label for that reason, not because it was left hardcoded.
+        setTileStatus({
+          lms: pendingCourseRequests > 0
+            ? { status: 'attention', statusLabel: `${pendingCourseRequests} Request${pendingCourseRequests === 1 ? '' : 's'}` }
+            : { status: 'online', statusLabel: 'Live' },
+          testing: { status: 'online', statusLabel: 'Live' },
+          'cv-gen': pendingJobs > 0
+            ? { status: 'attention', statusLabel: `${pendingJobs} Pending` }
+            : { status: 'online', statusLabel: 'Live' },
+          iso: isoPending > 0
+            ? { status: 'attention', statusLabel: `${isoPending} Pending` }
+            : { status: 'online', statusLabel: 'Live' },
+        });
       } catch (error) {
         console.error('Error fetching tile metrics:', error);
       }
@@ -556,18 +589,22 @@ function MainDashboard() {
             </div>
           ) : (
           <div className="module-grid">
-            {visibleTiles.map((tile) => (
+            {visibleTiles.map((tile) => {
+              const computed = tileStatus[tile.id]
+              const status = computed?.status || tile.status
+              const statusLabel = computed?.statusLabel || tile.statusLabel
+              return (
               <button
                 type="button"
                 key={tile.id}
-                className={`module-card ${tile.status}`}
+                className={`module-card ${status}`}
                 onClick={() => handleModuleClick(tile.id)}
                 aria-label={`Open ${tile.title} dashboard`}
               >
                 <div className="module-top-row">
                   <div className="module-icon">{renderTileIcon(tile.id)}</div>
-                  <span className={`module-status ${tile.status}`}>
-                    {tile.statusLabel}
+                  <span className={`module-status ${status}`}>
+                    {statusLabel}
                   </span>
                 </div>
                 <div className="module-meta">
@@ -603,7 +640,8 @@ function MainDashboard() {
                   )}
                 </div>
               </button>
-            ))}
+              )
+            })}
           </div>
           )}
         </section>

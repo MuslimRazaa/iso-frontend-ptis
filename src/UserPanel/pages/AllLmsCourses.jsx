@@ -9,6 +9,11 @@ const AllLmsCourses = () => {
   const [myAssignedTitles, setMyAssignedTitles] = useState(new Set());
   const [courseIdMap, setCourseIdMap]   = useState({});   // title (lower) → course.id
   const [pendingRequests, setPendingRequests]   = useState(new Set());
+  // Courses with a request currently in flight — separate from
+  // pendingRequests (which only flips once the request has actually
+  // finished) so the button shows something changed the instant it's
+  // clicked, not just after the round-trip completes.
+  const [submittingIds, setSubmittingIds]       = useState(new Set());
   const [loading, setLoading]           = useState(true);
   const [toastMsg, setToastMsg]         = useState('');
   const [searchQuery, setSearchQuery]   = useState('');
@@ -58,6 +63,7 @@ const AllLmsCourses = () => {
   const showToast = (msg) => { setToastMsg(msg); setTimeout(() => setToastMsg(''), 3500); };
 
   const handleRequest = async (course) => {
+    setSubmittingIds(prev => new Set([...prev, course.id]));
     try {
       await fetch(`${API_BASE_URL}/api/course-requests`, {
         method: 'POST',
@@ -77,6 +83,7 @@ const AllLmsCourses = () => {
       { courseId: course.id, courseTitle: course.course_title, requestedAt: new Date().toISOString(), status: 'pending' },
     ]));
     setPendingRequests(prev => new Set([...prev, course.id]));
+    setSubmittingIds(prev => { const next = new Set(prev); next.delete(course.id); return next; });
     showToast(`Request sent for "${course.course_title}". Admin will assign it to you.`);
   };
 
@@ -162,6 +169,7 @@ const AllLmsCourses = () => {
           {filtered.map(course => {
             const assigned    = isAssigned(course);
             const pending     = pendingRequests.has(course.id);
+            const submitting  = submittingIds.has(course.id);
             const statusLabel = assigned ? 'Assigned' : pending ? 'Requested' : 'Available';
             const statusColor = assigned ? '#1d814c' : pending ? '#c87e1c' : '#7a7a8c';
             const courseId    = courseIdMap[course.course_title?.toLowerCase()];
@@ -233,13 +241,16 @@ const AllLmsCourses = () => {
                   ) : (
                     <button
                       onClick={() => handleRequest(course)}
+                      disabled={submitting}
                       style={{ width:'100%', padding:'10px', borderRadius:8,
-                        border:'1px solid #ffd1d8', background:'#fff5f6',
-                        color:'#d7263d', fontSize:13, fontWeight:700, cursor:'pointer', transition:'all 0.18s' }}
-                      onMouseEnter={e => e.currentTarget.style.background='#ffe8ea'}
-                      onMouseLeave={e => e.currentTarget.style.background='#fff5f6'}
+                        border:'1px solid #ffd1d8', background: submitting ? '#ffe8ea' : '#fff5f6',
+                        color:'#d7263d', fontSize:13, fontWeight:700,
+                        cursor: submitting ? 'not-allowed' : 'pointer', transition:'all 0.18s',
+                        opacity: submitting ? 0.75 : 1 }}
+                      onMouseEnter={e => { if (!submitting) e.currentTarget.style.background='#ffe8ea' }}
+                      onMouseLeave={e => { if (!submitting) e.currentTarget.style.background='#fff5f6' }}
                     >
-                      Request Access
+                      {submitting ? 'Sending…' : 'Request Access'}
                     </button>
                   )}
                 </div>
