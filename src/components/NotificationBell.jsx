@@ -29,7 +29,18 @@ const NotificationBell = ({ email, onOpen, closeSignal }) => {
         const response = await fetch(`${API_BASE_URL}/api/notifications/${email}`);
         if (response.ok && !cancelled) {
           const data = await response.json();
-          setNotifications(data.notifications || []);
+          // MySQL's JSON-column auto-parsing only kicks in when the column is
+          // genuinely typed JSON — on a live table still carrying an older TEXT
+          // column (CREATE TABLE IF NOT EXISTS never upgrades an existing
+          // table's column types), `data` arrives as a raw JSON string instead
+          // of an object, which silently broke click-through: `.url` on a
+          // string is just undefined, not an error, so nothing looked wrong
+          // except that clicking a notification did nothing at all.
+          const normalized = (data.notifications || []).map(n => ({
+            ...n,
+            data: typeof n.data === 'string' ? (() => { try { return JSON.parse(n.data); } catch { return {}; } })() : (n.data || {}),
+          }));
+          setNotifications(normalized);
         }
       } catch (error) {
         console.error('Error loading notifications:', error);

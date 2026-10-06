@@ -47,6 +47,10 @@ const MyCourses = () => {
   const [assignedCourses, setAssignedCourses] = useState([]);
   const [browseCourses, setBrowseCourses] = useState([]);
   const [pendingRequests, setPendingRequests] = useState(new Set());
+  // Separate from pendingRequests (which only flips once the request has
+  // actually finished) so the button shows something changed the instant
+  // it's clicked, not just after the round-trip completes.
+  const [submittingRequestIds, setSubmittingRequestIds] = useState(new Set());
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -410,6 +414,7 @@ const MyCourses = () => {
   };
 
   const handleRequest = async (course) => {
+    setSubmittingRequestIds(prev => new Set([...prev, course.id]));
     try {
       await fetch(`${API_BASE_URL}/api/course-requests`, {
         method: 'POST',
@@ -428,6 +433,7 @@ const MyCourses = () => {
       { courseId: course.id, courseTitle: course.course_title, requestedAt: new Date().toISOString(), status: 'pending' },
     ]));
     setPendingRequests(prev => new Set([...prev, course.id]));
+    setSubmittingRequestIds(prev => { const next = new Set(prev); next.delete(course.id); return next; });
     showToast(`Request sent for "${course.course_title}". Admin will assign it to you.`);
   };
 
@@ -621,6 +627,7 @@ const MyCourses = () => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px,1fr))', gap: 20 }}>
           {filteredBrowse.map(course => {
             const pending = pendingRequests.has(course.id);
+            const submitting = submittingRequestIds.has(course.id);
             return (
               <div key={course.id} style={{
                 background: C.surface, border: `1px solid ${pending ? `${C.overdue}55` : C.border}`, borderRadius: 18, overflow: 'hidden',
@@ -654,10 +661,11 @@ const MyCourses = () => {
                   {pending ? (
                     <button disabled style={{ width: '100%', padding: '10px', borderRadius: 8, border: `1px solid ${C.overdue}44`, background: `${C.overdue}12`, color: C.overdue, fontSize: 13, fontWeight: 700, cursor: 'not-allowed', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}><Icon name="clock" size={15} /> Request Pending</button>
                   ) : (
-                    <button onClick={() => handleRequest(course)} style={{ width: '100%', padding: '10px', borderRadius: 8, border: `1px solid ${C.brand}44`, background: C.brandTint, color: C.brand, fontSize: 13, fontWeight: 700, cursor: 'pointer', transition: 'all 0.18s' }}
-                      onMouseEnter={e => e.currentTarget.style.background = '#fde4e4'}
-                      onMouseLeave={e => e.currentTarget.style.background = C.brandTint}
-                    >Request Access</button>
+                    <button onClick={() => handleRequest(course)} disabled={submitting}
+                      style={{ width: '100%', padding: '10px', borderRadius: 8, border: `1px solid ${C.brand}44`, background: submitting ? '#fde4e4' : C.brandTint, color: C.brand, fontSize: 13, fontWeight: 700, cursor: submitting ? 'not-allowed' : 'pointer', opacity: submitting ? 0.75 : 1, transition: 'all 0.18s' }}
+                      onMouseEnter={e => { if (!submitting) e.currentTarget.style.background = '#fde4e4' }}
+                      onMouseLeave={e => { if (!submitting) e.currentTarget.style.background = C.brandTint }}
+                    >{submitting ? 'Sending…' : 'Request Access'}</button>
                   )}
                 </div>
                 </div>

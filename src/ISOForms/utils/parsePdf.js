@@ -37,7 +37,12 @@ const isNoise = (text) => {
   const t = text.trim()
   if (!t || t.length < 2) return true
   // Page / form headers
-  if (/^(premier|ptis|fm-\d|issue\s|code\s|title\s|rev\s*\d|page\s*\d|the strongest link)/i.test(t)) return true
+  if (/^(premier|ptis|fm-\d|rev\s*\d|page\s*\d|the strongest link)/i.test(t)) return true
+  // The letterhead's own bare "Title"/"Issue"/"Code" cell headers — exact
+  // match only, not a prefix: "Title of Account" or "Issue Date" are real
+  // field labels that happen to start with the same word, and a prefix
+  // match here was silently discarding them along with the actual noise.
+  if (/^(issue|code|title)$/i.test(t)) return true
   // Pure numbers, single chars, date strings, short codes
   if (/^\d+$/.test(t) || /^[a-z]$/i.test(t) || /^\d{2}[\/\-]\w+[\/\-]\d{4}$/.test(t) || /^0\d$/.test(t)) return true
   // Section banners
@@ -52,7 +57,25 @@ const isNoise = (text) => {
 // ── Label detector ────────────────────────────────────────────────────────────
 const isLabelLike = (text) => {
   const t = text.trim()
-  if (!t || t.length > 90 || t.length < 3) return false
+  if (!t || t.length < 3) return false
+  // A genuine question ("Was there a specific event...?") is exactly the
+  // kind of label a Yes/No checkbox hangs off, but used to be invisible
+  // here — the sentence-case branch below explicitly excludes anything
+  // ending in '?' so random prose wouldn't become a field, and that same
+  // exclusion also threw out every real interrogative label in the form.
+  // Allowed a longer length than the other branches since questionnaire
+  // questions routinely run longer than a short field caption.
+  if (t.endsWith('?')) return t.length <= 160
+  // A numbered list item ("4. Quantity and quality of training received...")
+  // is just as real a question/field label as one ending in '?' — it starts
+  // with a digit, which fails every other branch's leading-capital-letter
+  // check, and routinely ends in a period or runs past 7 words, which the
+  // short Title-Case branch below explicitly excludes. Required to actually
+  // end the sentence (not just start with a number) so a long question that
+  // wraps onto a second physical line doesn't also match on its own
+  // mid-sentence first line — the real label is the line that finishes it.
+  if (/^\d{1,2}[.)]\s+\S/.test(t) && /[.?!]$/.test(t)) return t.length <= 160
+  if (t.length > 90) return false
   if (t.endsWith(':')) return true
   if (t === t.toUpperCase() && t.length >= 4 && t.length <= 70 && /[A-Z]/.test(t)) return true
   if (/^[A-Z][a-z]/.test(t) && t.split(/\s+/).length <= 7 && !/[.?!]$/.test(t)) return true
@@ -500,8 +523,14 @@ export async function parsePdf(file) {
   const rows = groupByRow(allItems)
   const fields = []
   let currentSectionOwner = 'requester'
+  // A row borrowed as the next row's Yes/No (or other short choice list) —
+  // see the lookahead below — must not also be walked as its own row of
+  // labels afterward, or "Yes"/"No" would each additionally show up as
+  // their own one-word phantom fields.
+  const consumedRowIdxs = new Set()
 
   for (let i = 0; i < rows.length; i++) {
+    if (consumedRowIdxs.has(i)) continue
     const row = rows[i]
     const rowFullText = row.map(r => r.text).join(' ')
 
@@ -509,21 +538,61 @@ export async function parsePdf(file) {
     const sectionOwner = detectSectionOwner(rowFullText)
     if (sectionOwner) currentSectionOwner = sectionOwner
 
+    // A second/third-column label is routinely merged with its own trailing
+    // blank into one text run ("Email: ___________________________", or
+    // "NTN# _______________________________" — some forms use '#' rather
+    // than ':' for the same purpose) — that never ends with the separator
+    // itself (it ends with the blank), so it used to be invisible as a
+    // column boundary entirely and silently vanished into whatever label
+    // came before it on the row instead of becoming its own field. Pulling
+    // the part before whichever separator comes first out separately lets
+    // it still be recognised.
+    const extractEmbeddedLabel = (text) => {
+      const t = text.trim()
+      const colonIdx = t.indexOf(':')
+      const hashIdx = t.indexOf('#')
+      const candidates = [colonIdx, hashIdx].filter(n => n >= 0)
+      if (!candidates.length) return null
+      const sepIdx = Math.min(...candidates)
+      if (sepIdx === t.length - 1) return null
+      const before = t.slice(0, sepIdx).trim()
+      return isLabelLike(`${before}:`) ? before : null
+    }
+
     // Every label in the row is a candidate, not just the leftmost — forms are
     // routinely two- or three-column ("Date of Issue: ___   NCR No: ___"), and
     // taking only row[0] silently dropped every right-hand field.
-    // Later items must end with ':' to qualify, which distinguishes a real
-    // second-column label from a checkbox option word sitting on the same line.
+    // Later items must end with ':' (or embed one, per above) to qualify,
+    // which distinguishes a real second-column label from a checkbox option
+    // word sitting on the same line.
+    // A numbered question's own "4." sometimes lands as its own separate
+    // text item rather than merged with the sentence that follows it — too
+    // short to be a label itself (fails the length-3 floor), but it means
+    // the real question text right after it is effectively starting the
+    // row's content, the same as if it were idx 0.
+    const isBareNumbering = (t) => /^\d{1,2}[.)]$/.test(t.trim())
     const labelIdxs = row
       .map((item, idx) => ({ item, idx }))
-      .filter(({ item, idx }) =>
-        !isNoise(item.text) &&
-        isLabelLike(item.text) &&
-        (idx === 0 || item.text.trim().endsWith(':')))
+      .filter(({ item, idx }) => {
+        if (isNoise(item.text)) return false
+        const precededByBareNumber = idx === 1 && isBareNumbering(row[0]?.text || '')
+        // Re-attach the "4." when testing whether this reads as a label —
+        // isLabelLike's own numbered-list branch only recognises one when
+        // the digit is part of the same string, which it isn't here (the
+        // two are separate items); tested alone, a long question just fails
+        // the short Title-Case branch's 7-word cap instead.
+        const testText = precededByBareNumber ? `${row[0].text.trim()} ${item.text.trim()}` : item.text
+        if (!isLabelLike(testText) && !extractEmbeddedLabel(item.text)) return false
+        return idx === 0 || precededByBareNumber || item.text.trim().endsWith(':') || extractEmbeddedLabel(item.text)
+      })
 
     for (const { item: labelItem, idx } of labelIdxs) {
-      // Clean label: strip trailing colon and parenthetical suffixes
-      const label = labelItem.text.replace(/:$/, '').replace(/\s*\(.*?\)\s*$/, '').trim()
+      // Clean label: an embedded label ("Email: ____") uses the part before
+      // its own colon; otherwise the normal strip-trailing-colon cleanup.
+      const embedded = extractEmbeddedLabel(labelItem.text)
+      const label = (embedded ?? labelItem.text)
+        .replace(/^\d{1,2}[.)]\s+/, '')
+        .replace(/:$/, '').replace(/\s*\(.*?\)\s*$/, '').trim()
       if (!label || label.length < 3) continue
 
       // Skip section-level headings that slipped through
@@ -536,10 +605,45 @@ export async function parsePdf(file) {
       // why choice lists came through with no options at all.
       const nextLabelIdx = labelIdxs.find(l => l.idx > idx)?.idx ?? row.length
       const between = row.slice(idx + 1, nextLabelIdx)
-      const optionItems = between.filter(r => {
+      // A run of underscores/dots/dashes anywhere in the text is always
+      // blank-fill, never a printed option word ("Minor"/"Yes"/"Urgent"
+      // never contains one) — without this, a label whose own value blank
+      // sat in the same row-slice (every other field's blank line too, on a
+      // form that packs several "Label: ____" pairs onto one visual row)
+      // was being read as a multi-choice list of nonsense options built
+      // from underscore runs.
+      const isBlankFill = (t) => /^[_.․‥…\-—–\s]+$/.test(t) || /[_.․‥…\-—–]{3,}/.test(t)
+      let optionItems = between.filter(r => {
         const t = r.text.trim()
-        return t && t.length < 40 && !t.endsWith(':') && !/^\d{1,2}[/-]/.test(t)
+        return t && t.length < 40 && !t.endsWith(':') && !/^\d{1,2}[/-]/.test(t) && !isBlankFill(t)
       })
+
+      // Many forms print a question's choices ("Yes   No") on the line
+      // below it rather than beside it — the same-row scan above can never
+      // see those. Only borrowed when this label was the last thing on its
+      // own row (so a genuinely different field's label on the same row
+      // never loses its own options to this) and the next row is short and
+      // plain, so a wrapped continuation of this label or the next real
+      // field's own label is never mistaken for a choice list.
+      let optionsFromNextRow = false
+      if (optionItems.length < 2 && idx === row.length - 1 && i + 1 < rows.length && !consumedRowIdxs.has(i + 1)) {
+        const nextRow = rows[i + 1]
+        const candidates = nextRow.filter(r => {
+          const t = r.text.trim()
+          // isNoise excludes a bare 1-2 digit number (normally a stray page
+          // number) — but a short row of them right under a rating question
+          // ("1 2 3 4 5") is exactly the kind of choice list this is meant
+          // to find, so a short number is let through here even though it
+          // still can't become a label by itself anywhere else.
+          const isShortNumber = /^\d{1,2}$/.test(t)
+          return t && t.length < 40 && !t.endsWith(':') && (isShortNumber || !isNoise(t)) && !isBlankFill(t)
+        })
+        if (candidates.length === nextRow.length && candidates.length >= 2 && candidates.length <= 6) {
+          optionItems = candidates
+          optionsFromNextRow = true
+          consumedRowIdxs.add(i + 1)
+        }
+      }
 
       let type = guessType(label)
       // Two or more printed choices next to the label means it's a choice
@@ -551,7 +655,91 @@ export async function parsePdf(file) {
       const isChoice = type === 'checkbox-group' || type === 'dropdown'
 
       const geom = geometry[labelItem.page] || {}
-      const coords = valueBoxFor(labelItem, geom, row[nextLabelIdx])
+      // valueBoxFor always anchors to the label's own row — correct for a
+      // same-row value, but a choice field whose options live on the row
+      // below was landing its box (and the field's on-page position in the
+      // editor) up on the label's row instead of down where the options
+      // actually are. Anchor to the first option's own row position instead
+      // whenever that's where this field's options really came from.
+      let coords = optionsFromNextRow
+        ? {
+            page: labelItem.page,
+            pageWidth: labelItem.pageWidth,
+            pageHeight: labelItem.pageHeight,
+            x: optionItems[0].x,
+            y: optionItems[0].pdfY - 1,
+            width: Math.max(MIN_USABLE_WIDTH, optionItems[optionItems.length - 1].x + optionItems[optionItems.length - 1].width - optionItems[0].x),
+            height: VALUE_BOX_HEIGHT,
+          }
+        : embedded
+          ? (() => {
+              // valueBoxFor positions the value after the label item's own
+              // full width — right for a plain label, but an embedded label
+              // ("Email: ___________________________") already spans past
+              // its own blank, so "after the label" landed the box off to
+              // the right of empty space instead of on the blank itself.
+              // Estimate the blank's start from where the colon falls
+              // within the merged string (PDF text isn't monospace, so this
+              // is approximate — close enough for the admin to nudge in the
+              // position editor rather than not finding the field at all).
+              const t = labelItem.text.trim()
+              // Whichever separator (':' or '#') extractEmbeddedLabel found
+              // — reusing its own result keeps this in step with it rather
+              // than re-deciding which character it was.
+              const sepIdx = embedded.length
+              const charWidth = labelItem.width / Math.max(t.length, 1)
+              const offsetX = Math.round((sepIdx + 1) * charWidth)
+              return {
+                page: labelItem.page,
+                pageWidth: labelItem.pageWidth,
+                pageHeight: labelItem.pageHeight,
+                x: labelItem.x + offsetX + 2,
+                y: labelItem.pdfY + 2 - VALUE_BOX_HEIGHT + VALUE_FONT_SIZE,
+                width: Math.max(MIN_USABLE_WIDTH, labelItem.width - offsetX - 4),
+                height: VALUE_BOX_HEIGHT,
+              }
+            })()
+          : valueBoxFor(labelItem, geom, row[nextLabelIdx])
+
+      // A label whose own row has no real value (nothing after it, or just
+      // a typed blank) with more blank-only rows directly beneath it is a
+      // multi-line answer, not a one-line one — matching the user's own
+      // "this blank continues on the next line" marking. Not tried for a
+      // choice field (it already has its own meaning for what follows) or
+      // when the row had a real same-row value (a short answer next to its
+      // own label shouldn't swallow unrelated blank lines further down the
+      // page that belong to the next question).
+      //
+      // isBlankFill itself is deliberately loose ("contains a long run of
+      // underscores anywhere") because it only has to rule something OUT as
+      // an option word there — "Designation: ____" rightly fails that test
+      // too. Here the question is the opposite one, "is this row nothing
+      // BUT blank", so it needs the strict, whole-string version — the loose
+      // one was swallowing a real neighbouring "Label: ____" row as if it
+      // were just another continuation line of blank space.
+      const isPureBlank = (t) => /^[_.․‥…\-—–\s]*$/.test(t)
+      if (!isChoice && !optionsFromNextRow && between.every(r => isPureBlank(r.text.trim()))) {
+        let lastRowIdx = i
+        let j = i + 1
+        while (j < rows.length && !consumedRowIdxs.has(j)) {
+          const candidateRow = rows[j]
+          const isPureBlankRow = candidateRow.length > 0 && candidateRow.every(r => isPureBlank(r.text.trim()))
+          if (!isPureBlankRow) break
+          consumedRowIdxs.add(j)
+          lastRowIdx = j
+          j++
+        }
+        if (lastRowIdx > i) {
+          // Top edge stays where the single-line box already put it; the
+          // bottom edge drops to the last absorbed line, same -3 baseline
+          // offset valueBoxFor itself uses so the two line up consistently.
+          const topY = coords.y + coords.height
+          const lastRow = rows[lastRowIdx]
+          const bottomY = Math.min(...lastRow.map(r => r.pdfY)) - 3
+          coords = { ...coords, y: bottomY, height: Math.max(VALUE_BOX_HEIGHT, topY - bottomY) }
+          type = 'textarea'
+        }
+      }
 
       // Remember where each printed choice sits so the overlay ticks the
       // selected ones in place instead of writing a comma-separated list on
@@ -643,15 +831,21 @@ export async function parsePdf(file) {
       })
   })
 
-  // The drawn-area pass is the more reliable of the two, so when it finds
-  // anything it supersedes the label scan rather than being merged with it —
-  // merging produced two fields for every labelled box.
-  if (regionFields.length) {
-    fields.length = 0
-    fields.push(...regionFields)
-  }
+  // Both passes' results are kept — the drawn-area pass used to unconditionally
+  // replace the label scan's entire result the moment it found anything at
+  // all, on forms with no stroked geometry in the body (typed underscore
+  // blanks, glyph checkboxes — a Word-exported form, not a drawn one) the only
+  // thing with real vector geometry is often the letterhead's bordered table,
+  // so that one unrelated hit would wipe out every field the label scan had
+  // already found correctly. Label-scan fields are pushed first so the dedup
+  // step below keeps that version whenever both passes land on the same box
+  // (same label text) — the prior "merging produced two fields" problem it
+  // was replaced to avoid — while a region the label scan never saw at all
+  // still comes through.
+  fields.push(...regionFields)
 
-  // Deduplicate by label (table structures repeat the same label text)
+  // Deduplicate by label (table structures repeat the same label text, and a
+  // box both passes independently found carries the same label from each).
   const seen = new Set()
   const deduped = fields.filter(f => {
     const key = f.label.toLowerCase()

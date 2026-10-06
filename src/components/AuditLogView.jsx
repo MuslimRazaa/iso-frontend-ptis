@@ -45,7 +45,15 @@ const inputStyle = {
 function summariseDetails(row) {
   const d = row.details
   if (!d || typeof d !== 'object') return ''
-  if (Array.isArray(d.changedFields) && d.changedFields.length) return `Changed: ${d.changedFields.join(', ')}`
+  // The field is still named `changedFields` in the data a create action logs
+  // (same shape as an update, just describing the new record instead of a
+  // diff) — "Changed: Score 90%, Status Pass" reads as if something was
+  // edited when the row had just been created, so the label itself needs to
+  // say which one actually happened.
+  if (Array.isArray(d.changedFields) && d.changedFields.length) {
+    const verb = row.action === 'create' ? 'Details' : 'Changed'
+    return `${verb}: ${d.changedFields.join(', ')}`
+  }
   if (d.remarks) return `Remarks: ${d.remarks}`
   if (d.mode && d.inserted != null) return `${d.inserted} row(s), mode: ${d.mode}`
   if (d.count != null) return `${d.count} row(s)`

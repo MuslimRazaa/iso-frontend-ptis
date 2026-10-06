@@ -54,6 +54,7 @@ function TaskAllocation() {
     course_id: '',
     deadline: '',
   })
+  const [assignSubmitting, setAssignSubmitting] = useState(false)
 
   useEffect(() => {
     fetchAllData()
@@ -155,6 +156,7 @@ function TaskAllocation() {
 
   const handleCreate = async () => {
     if (formData.employee_id && formData.course_id && formData.deadline) {
+      setAssignSubmitting(true)
       try {
         const response = await fetch(API_ENDPOINTS.TASK_ALLOCATIONS, {
           method: 'POST',
@@ -180,6 +182,8 @@ function TaskAllocation() {
       } catch (error) {
         console.error('Error assigning course:', error)
         showToast('Failed to assign course. Please try again.', 'error')
+      } finally {
+        setAssignSubmitting(false)
       }
     }
   }
@@ -803,6 +807,7 @@ function TaskAllocation() {
                 <button
                   type="button"
                   className="ghost-btn"
+                  disabled={assignSubmitting}
                   onClick={() => {
                     setShowModal(false)
                     setFormData({ employee_id: '', course_id: '', deadline: '' })
@@ -810,8 +815,8 @@ function TaskAllocation() {
                 >
                   Cancel
                 </button>
-                <button type="submit" className="primary-btn">
-                  Assign Course
+                <button type="submit" className="primary-btn" disabled={assignSubmitting}>
+                  {assignSubmitting ? 'Assigning…' : 'Assign Course'}
                 </button>
               </div>
             </form>
