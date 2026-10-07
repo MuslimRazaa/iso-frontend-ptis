@@ -625,15 +625,15 @@ const StandardsAdminPage = ({ onBack, showToast, onSaved }) => {
                 )}
               </tbody>
             </table>
+            <PaginationBar
+              page={standardsCurrentPage}
+              totalPages={totalStandardPages}
+              totalItems={filteredStandards.length}
+              pageSize={standardsItemsPerPage}
+              onPageChange={setStandardsCurrentPage}
+              itemLabel="standards"
+            />
           </div>
-          <PaginationBar
-            page={standardsCurrentPage}
-            totalPages={totalStandardPages}
-            totalItems={filteredStandards.length}
-            pageSize={standardsItemsPerPage}
-            onPageChange={setStandardsCurrentPage}
-            itemLabel="standards"
-          />
         </article>
       </div>
 

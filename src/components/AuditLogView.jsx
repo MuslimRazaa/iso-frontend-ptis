@@ -54,6 +54,7 @@ function summariseDetails(row) {
     const verb = row.action === 'create' ? 'Details' : 'Changed'
     return `${verb}: ${d.changedFields.join(', ')}`
   }
+  if (d.note) return d.note
   if (d.remarks) return `Remarks: ${d.remarks}`
   if (d.mode && d.inserted != null) return `${d.inserted} row(s), mode: ${d.mode}`
   if (d.count != null) return `${d.count} row(s)`
@@ -368,15 +369,15 @@ const AuditLogView = forwardRef(function AuditLogView(
               ))}
             </tbody>
           </table>
+          <PaginationBar
+            page={page}
+            totalPages={totalPages}
+            totalItems={total}
+            pageSize={limit}
+            onPageChange={setPage}
+            itemLabel="records"
+          />
         </div>
-        <PaginationBar
-          page={page}
-          totalPages={totalPages}
-          totalItems={total}
-          pageSize={limit}
-          onPageChange={setPage}
-          itemLabel="records"
-        />
       </article>
     </div>
   )

@@ -246,7 +246,7 @@ export async function fillOriginalPdf(base64, fields, formValues, approverValues
         rawVal ? box.check() : box.uncheck()
         return true
       }
-      if (field.type === 'checkbox-group' || field.type === 'dropdown') {
+      if (field.type === 'checkbox-group' || field.type === 'dropdown' || field.type === 'radio') {
         const selected = Array.isArray(rawVal) ? rawVal : (rawVal ? [rawVal] : [])
         if (!selected.length) return true
         try {
@@ -288,7 +288,7 @@ export async function fillOriginalPdf(base64, fields, formValues, approverValues
     // writing it again would just overlap it. These marks carry their own
     // positions, so they work even for a field with no value box of its own.
     const optionMarks = Array.isArray(field.pdfCoords?.optionMarks) ? field.pdfCoords.optionMarks : null
-    if (optionMarks?.length && (field.type === 'checkbox-group' || field.type === 'dropdown')) {
+    if (optionMarks?.length && (field.type === 'checkbox-group' || field.type === 'dropdown' || field.type === 'radio')) {
       const markPage = pages[Number.isFinite(field.pdfCoords?.page) ? field.pdfCoords.page : (coords?.page ?? 0)]
       const selected = Array.isArray(rawVal) ? rawVal : (rawVal ? [rawVal] : [])
       if (!markPage || !selected.length) continue

@@ -10,8 +10,8 @@ const FIELD_TYPES = [
   { value: 'number',         label: 'Number' },
   { value: 'date',           label: 'Date' },
   { value: 'dropdown',       label: 'Dropdown' },
-  { value: 'checkbox',       label: 'Checkbox (yes/no)' },
   { value: 'checkbox-group', label: 'Checkbox Group' },
+  { value: 'radio',          label: 'Checkbox (select one only)' },
   { value: 'employee',       label: 'Employee Picker' },
 ]
 
@@ -288,10 +288,10 @@ function PdfImportModal({ onImport, onClose }) {
               )}
 
               {/* Options for checkbox-group / dropdown */}
-              {fields.filter(f => selected.has(f.id) && (f.type === 'checkbox-group' || f.type === 'dropdown')).length > 0 && (
+              {fields.filter(f => selected.has(f.id) && (f.type === 'checkbox-group' || f.type === 'dropdown' || f.type === 'radio')).length > 0 && (
                 <div style={{ background: '#fafafb', borderRadius: 12, padding: '14px 16px', marginBottom: 20 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: '#595966', marginBottom: 10 }}>Options (comma-separated) for checkbox/dropdown fields:</div>
-                  {fields.filter(f => selected.has(f.id) && (f.type === 'checkbox-group' || f.type === 'dropdown')).map(f => (
+                  {fields.filter(f => selected.has(f.id) && (f.type === 'checkbox-group' || f.type === 'dropdown' || f.type === 'radio')).map(f => (
                     <div key={f.id} style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 10, alignItems: 'center', marginBottom: 8 }}>
                       <span style={{ fontSize: 13, color: '#14141c', fontWeight: 500 }}>{f.label}</span>
                       <input

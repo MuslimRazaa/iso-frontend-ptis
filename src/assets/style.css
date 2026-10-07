@@ -5626,3 +5626,59 @@ span.cui-img-cont-float.cui-img-14by14 {
 .recharts-rectangle:focus {
     outline: none;
 }
+
+/* ── Sticky table headers ───────────────────────────────────────────────
+   Every table keeps its header row in view while its rows scroll. A sticky
+   header sticks to its nearest scrolling ancestor, so whatever directly wraps
+   a table becomes a height-bounded scroll area (it was either unbounded, which
+   gives the header nothing to stick against, or clipped with overflow:hidden).
+   The wrapper keeps its own horizontal scroll for wide tables. Tables with no
+   <thead> are unaffected. Placed last so it wins over the per-page rules above;
+   `!important` is needed because many wrappers set overflow inline.
+   ─────────────────────────────────────────────────────────────────────── */
+:where(thead) {
+  background-color: #fafafb;   /* fallback only: any header that sets its own colour wins */
+}
+
+/* The header GROUP sticks, not each cell, so whatever paints the header —
+   a gradient on <thead>, a colour on the <tr>, or on each <th> — travels with
+   it and keeps covering the rows scrolling underneath. Sticking the cells
+   instead needed a colour on every <th>, which wrongly overrode headers that
+   are coloured on the row (white text on a dark row went invisible). */
+table thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+/* border-collapse drops cell borders from a stuck header, so draw the rule
+   under it explicitly */
+table thead th {
+  box-shadow: 0 1px 0 #ececf0;
+}
+
+*:has(> table) {
+  /* Close to a full screen so as many rows as possible show, but never
+     shorter than ~360px (header + at least 4 rows) however small the window.
+     The pagination bar lives INSIDE this box, after the rows, so it only
+     comes into view once the rows have been scrolled to the end. */
+  max-height: max(360px, calc(100vh - 120px));
+  overflow: auto !important;
+}
+
+@media print {
+  *:has(> table) {
+    max-height: none;
+    overflow: visible !important;
+  }
+  table thead {
+    position: static;
+  }
+}
+
+/* The pagination bar sits at the end of the scrolling table box; keep it pinned
+   to the left edge so it stays in view while a wide table is scrolled sideways. */
+.all-records-pagination {
+  position: sticky;
+  left: 0;
+}

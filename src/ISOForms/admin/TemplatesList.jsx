@@ -1,14 +1,51 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Eye, Plus, Pencil, Trash2, X } from 'lucide-react'
+import { Eye, Plus, Pencil, Trash2, X, Search, Calendar } from 'lucide-react'
 import { API_ENDPOINTS } from '../../config/api'
 import { showToast } from '../../components/Toast'
 import { getActorId, getActorName } from '../../utils/actorIdentity'
 import { SEED_TEMPLATES, SEED_VERSION } from '../seedTemplates'
 import { ensureSeeded, getOfflineTemplates, deleteOfflineTemplate } from '../utils/offlineStore'
 import PaginationBar from '../../components/PaginationBar'
+import ClearFilterButton from '../../components/ClearFilterButton'
+import StyledSelect from '../../components/StyledSelect'
+import StyledDatePicker from '../../components/StyledDatePicker'
 
 const PAGE_SIZE = 100
+
+const inputStyle = {
+  background: '#fff',
+  border: '1px solid #e0e0e6',
+  color: '#14141c',
+  borderRadius: 16,
+  padding: '12px 16px',
+  fontSize: 14,
+  outline: 'none',
+  fontFamily: 'inherit',
+}
+
+const hasPdf = (t) => Boolean(t.hasOriginalPdf ?? t.originalPdf)
+const creatorOf = (t) => t.created_by_name || t.created_by || ''
+// created_at arrives as an ISO timestamp; the date pickers speak YYYY-MM-DD.
+const createdDay = (t) => {
+  const d = t.created_at ? new Date(t.created_at) : null
+  if (!d || Number.isNaN(d.getTime())) return ''
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+const fieldCountOf = (t) => {
+  try {
+    const f = typeof t.fields === 'string' ? JSON.parse(t.fields) : t.fields
+    return Array.isArray(f) ? f.length : 0
+  } catch { return 0 }
+}
+
+const SORT_OPTIONS = [
+  { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
+  { value: 'name', label: 'Name A–Z' },
+  { value: 'fields', label: 'Most fields' },
+]
 
 // Preview shows the template's ACTUAL PDF, not a rebuilt approximation — it is
 // the same document filled forms are generated from, so what an admin sees
@@ -100,6 +137,11 @@ function TemplatesList() {
   const [error, setError] = useState('')
   const [previewTemplate, setPreviewTemplate] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
+  const [search, setSearch] = useState('')
+  const [pdfFilter, setPdfFilter] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [sortBy, setSortBy] = useState('newest')
 
   const load = () => {
     fetch(API_ENDPOINTS.ISO_FORMS_TEMPLATES)
@@ -122,12 +164,41 @@ function TemplatesList() {
 
   useEffect(() => { load() }, [])
 
-  const totalPages = Math.max(1, Math.ceil(templates.length / PAGE_SIZE))
+  const filteredTemplates = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const rows = templates.filter(t => {
+      if (q && ![t.name, t.description, t.formCode].some(v => String(v || '').toLowerCase().includes(q))) return false
+      if (pdfFilter === 'has' && !hasPdf(t)) return false
+      if (pdfFilter === 'missing' && hasPdf(t)) return false
+      const day = createdDay(t)
+      if (dateFrom && (!day || day < dateFrom)) return false
+      if (dateTo && (!day || day > dateTo)) return false
+      return true
+    })
+    const byDate = (t) => new Date(t.created_at || 0).getTime()
+    const byName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' })
+    if (sortBy === 'oldest') rows.sort((a, b) => byDate(a) - byDate(b))
+    else if (sortBy === 'name') rows.sort(byName)
+    else if (sortBy === 'fields') rows.sort((a, b) => fieldCountOf(b) - fieldCountOf(a) || byName(a, b))
+    else rows.sort((a, b) => byDate(b) - byDate(a))
+    return rows
+  }, [templates, search, pdfFilter, dateFrom, dateTo, sortBy])
+
+  const hasActiveFilters = Boolean(search || pdfFilter || dateFrom || dateTo || sortBy !== 'newest')
+  const clearFilters = () => {
+    setSearch(''); setPdfFilter('')
+    setDateFrom(''); setDateTo(''); setSortBy('newest'); setCurrentPage(1)
+  }
+  // Every filter change returns to page 1, or a narrowed list could leave the
+  // user on a page that no longer exists.
+  const onFilter = (setter) => (value) => { setter(value); setCurrentPage(1) }
+
+  const totalPages = Math.max(1, Math.ceil(filteredTemplates.length / PAGE_SIZE))
   const safePage = Math.min(currentPage, totalPages)
   const paginatedTemplates = useMemo(() => {
     const start = (safePage - 1) * PAGE_SIZE
-    return templates.slice(start, start + PAGE_SIZE)
-  }, [templates, safePage])
+    return filteredTemplates.slice(start, start + PAGE_SIZE)
+  }, [filteredTemplates, safePage])
 
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this template? Forms already submitted from it will keep their data.')) return
@@ -172,12 +243,82 @@ function TemplatesList() {
         </div>
       )}
 
+      {!loading && templates.length > 0 && (
+        <div style={{
+          display: 'flex', gap: 12, padding: '18px 20px',
+          background: '#fff', border: '1px solid #e0e0e6', borderRadius: 16,
+          flexWrap: 'wrap', alignItems: 'center', marginBottom: 20,
+        }}>
+          <div style={{ flex: 1, minWidth: 220, position: 'relative' }}>
+            <span style={{
+              position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
+              color: '#aaa', pointerEvents: 'none', display: 'inline-flex',
+            }}>
+              <Search size={15} />
+            </span>
+            <input
+              type="text"
+              style={{ ...inputStyle, paddingLeft: 40, width: '100%', boxSizing: 'border-box' }}
+              placeholder="Search by name, form code or description…"
+              value={search}
+              onChange={e => onFilter(setSearch)(e.target.value)}
+            />
+          </div>
+
+          <StyledSelect
+            style={{ ...inputStyle, minWidth: 140, cursor: 'pointer' }}
+            value={pdfFilter}
+            onChange={onFilter(setPdfFilter)}
+            options={[]}
+            extraOptions={[
+              { value: 'has', label: 'PDF attached' },
+              { value: 'missing', label: 'Needs PDF' },
+            ]}
+            emptyOptionLabel="All PDF Status"
+          />
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#7a7a8c', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <Calendar size={13} /> From
+            </span>
+            <StyledDatePicker
+              value={dateFrom}
+              max={dateTo || undefined}
+              style={{ ...inputStyle, padding: '10px 10px', minWidth: 0, cursor: 'pointer' }}
+              onChange={onFilter(setDateFrom)}
+            />
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#7a7a8c' }}>To</span>
+            <StyledDatePicker
+              value={dateTo}
+              min={dateFrom || undefined}
+              style={{ ...inputStyle, padding: '10px 10px', minWidth: 0, cursor: 'pointer' }}
+              onChange={onFilter(setDateTo)}
+            />
+          </div>
+
+          <StyledSelect
+            style={{ ...inputStyle, minWidth: 150, cursor: 'pointer' }}
+            value={sortBy}
+            onChange={onFilter(setSortBy)}
+            options={[]}
+            extraOptions={SORT_OPTIONS}
+            placeholder="Sort by"
+          />
+
+          <ClearFilterButton visible={hasActiveFilters} onClick={clearFilters} />
+        </div>
+      )}
+
       <article className="panel" style={{ padding: 0, overflow: 'hidden' }}>
         {loading ? (
           <div style={{ padding: 40, textAlign: 'center', color: '#7a7a8c' }}>Loading templates…</div>
         ) : templates.length === 0 ? (
           <div style={{ padding: 40, textAlign: 'center', color: '#7a7a8c' }}>
             No templates yet. Create one to let employees start submitting this form.
+          </div>
+        ) : filteredTemplates.length === 0 ? (
+          <div style={{ padding: 40, textAlign: 'center', color: '#7a7a8c' }}>
+            No templates match these filters.
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -186,17 +327,13 @@ function TemplatesList() {
                 <th style={{ textAlign: 'left', padding: '14px 20px', fontSize: 12, color: '#7a7a8c', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Name</th>
                 <th style={{ textAlign: 'left', padding: '14px 20px', fontSize: 12, color: '#7a7a8c', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Fields</th>
                 <th style={{ textAlign: 'left', padding: '14px 20px', fontSize: 12, color: '#7a7a8c', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Created By</th>
+                <th style={{ textAlign: 'left', padding: '14px 20px', fontSize: 12, color: '#7a7a8c', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Created</th>
                 <th style={{ textAlign: 'right', padding: '14px 20px', fontSize: 12, color: '#7a7a8c', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {paginatedTemplates.map(t => {
-                const fieldCount = (() => {
-                  try {
-                    const f = typeof t.fields === 'string' ? JSON.parse(t.fields) : t.fields
-                    return Array.isArray(f) ? f.length : 0
-                  } catch { return 0 }
-                })()
+                const fieldCount = fieldCountOf(t)
                 return (
                   <tr key={t.id} style={{ borderTop: '1px solid #ececf0' }}>
                     <td style={{ padding: '16px 20px' }}>
@@ -208,7 +345,7 @@ function TemplatesList() {
                           </span>
                         )}
                         {/* No PDF = no visual base to generate a filled form from. */}
-                        {!(t.hasOriginalPdf ?? Boolean(t.originalPdf)) && (
+                        {!hasPdf(t) && (
                           <span
                             title="No PDF attached — this template can't be filled or downloaded until an admin imports its PDF."
                             style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#b42318', background: '#fdecea', border: '1px solid #f5c2c0', borderRadius: 999, padding: '2px 8px' }}
@@ -217,10 +354,12 @@ function TemplatesList() {
                           </span>
                         )}
                       </div>
+                      {t.formCode && <div style={{ fontSize: 12, fontWeight: 600, color: '#595966', marginTop: 2 }}>{t.formCode}</div>}
                       {t.description && <div style={{ fontSize: 13, color: '#7a7a8c', marginTop: 2 }}>{t.description}</div>}
                     </td>
                     <td style={{ padding: '16px 20px', color: '#595966' }}>{fieldCount} field{fieldCount === 1 ? '' : 's'}</td>
-                    <td style={{ padding: '16px 20px', color: '#595966' }}>{t.created_by_name || t.created_by || '—'}</td>
+                    <td style={{ padding: '16px 20px', color: '#595966' }}>{creatorOf(t) || '—'}</td>
+                    <td style={{ padding: '16px 20px', color: '#595966', whiteSpace: 'nowrap' }}>{createdDay(t) || '—'}</td>
                     <td style={{ padding: '16px 20px', textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
                         {/* Eye — preview blank form layout */}
@@ -269,7 +408,7 @@ function TemplatesList() {
         <PaginationBar
           page={safePage}
           totalPages={totalPages}
-          totalItems={templates.length}
+          totalItems={filteredTemplates.length}
           pageSize={PAGE_SIZE}
           onPageChange={setCurrentPage}
           itemLabel="templates"

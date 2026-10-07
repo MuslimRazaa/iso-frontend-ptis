@@ -10,8 +10,9 @@ export const FIELD_TYPES = [
   { value: 'number',         label: 'Number' },
   { value: 'date',           label: 'Date' },
   { value: 'dropdown',       label: 'Dropdown (single choice)' },
-  { value: 'checkbox',       label: 'Checkbox (yes/no)' },
   { value: 'checkbox-group', label: 'Checkbox Group (multi-select)' },
+  // Same look as the group above, but ticking one option clears the others.
+  { value: 'radio',          label: 'Checkbox (select one only)' },
   { value: 'employee',       label: 'Employee Picker (from Employee Management)' },
   // Placed where the form asks for a signature. Nobody types it: the app stamps
   // the name of whoever completed that part of the form and the time they did,
@@ -28,7 +29,7 @@ export const OWNERS = [
 ]
 
 /** Types whose comma-separated `options` string is meaningful. */
-export const hasOptions = (type) => type === 'dropdown' || type === 'checkbox-group'
+export const hasOptions = (type) => type === 'dropdown' || type === 'checkbox-group' || type === 'radio'
 
 export const blankField = () => ({
   id: `f_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,

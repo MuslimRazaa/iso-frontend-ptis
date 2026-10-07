@@ -16,7 +16,7 @@ import { getActorId, getActorName } from '../../utils/actorIdentity'
 // column on a laptop-narrow pane and four across on a wide monitor.
 const FIELD_COLUMNS = 'repeat(auto-fit, minmax(340px, 1fr))'
 
-const isWideField = (field) => field.type === 'textarea' || field.type === 'checkbox-group'
+const isWideField = (field) => field.type === 'textarea' || field.type === 'checkbox-group' || field.type === 'radio'
 
 function FormFiller() {
   // The same screen fills a new form (`new/:templateId`) and revises a
