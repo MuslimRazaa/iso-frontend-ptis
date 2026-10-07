@@ -9,7 +9,6 @@ import {
   tickBoxNearText,
   valueBoxForLabel,
   detectInputRegions,
-  detectRatingMatrices,
   labelForRegion,
 } from './detectPdfGeometry'
 import { readAcroFormFields } from './readAcroForm'
@@ -44,8 +43,6 @@ const isNoise = (text) => {
   // field labels that happen to start with the same word, and a prefix
   // match here was silently discarding them along with the actual noise.
   if (/^(issue|code|title)$/i.test(t)) return true
-  // A template author's own "Input" placeholder marking where a value goes.
-  if (/^input$/i.test(t)) return true
   // Pure numbers, single chars, date strings, short codes
   if (/^\d+$/.test(t) || /^[a-z]$/i.test(t) || /^\d{2}[\/\-]\w+[\/\-]\d{4}$/.test(t) || /^0\d$/.test(t)) return true
   // Section banners
@@ -519,57 +516,6 @@ export async function parsePdf(file) {
 
   const allItems = pages.flat()
 
-  // Rating grids (a "1 2 3 4 5" header over rows of empty cells). Each row
-  // becomes one single-choice field whose marks are that row's own cells, and
-  // the grid's area is then kept out of the generic passes below so its labels
-  // and empty cells don't also turn up as stray text fields.
-  const ratingGrids = geometry.flatMap((geom, pageIdx) =>
-    detectRatingMatrices(geom.rects || [], pages[pageIdx] || []).map(m => ({ ...m, page: pageIdx })))
-  // The header sits above the digit row (a "Poor → Excellent" banner); the
-  // band reaches up far enough to take that in too.
-  const HEADER_BAND = 16
-  const inRatingGrid = (page, y) => ratingGrids.some(g =>
-    g.page === page && y >= g.bottom - 2 && y <= g.top + HEADER_BAND)
-  const inRatingCell = (page, r) => ratingGrids.some(g => g.page === page && g.rows.some(row =>
-    row.cells.some(c => r.x + r.w / 2 >= c.x && r.x + r.w / 2 <= c.x + c.w &&
-      r.y + r.h / 2 >= c.y && r.y + r.h / 2 <= c.y + c.h)))
-  const ratingFields = ratingGrids.flatMap(g => {
-    const sample = pages[g.page]?.[0]
-    const left = Math.min(...g.rows.flatMap(r => r.cells.map(c => c.x)))
-    const right = Math.max(...g.rows.flatMap(r => r.cells.map(c => c.x + c.w)))
-    return g.rows.map((row, i) => {
-      const markSize = Math.max(6, Math.min(14, row.h - 4, ...row.cells.map(c => c.w - 4)))
-      return {
-        id: `f_rating_${g.page}_${Date.now().toString(36)}_${i}`,
-        label: row.label.replace(/^\d{1,2}[.)]\s+/, ''),
-        // Single-select: one rating per question. fillOriginalPdf ticks the
-        // chosen option's own cell for this type.
-        type: 'dropdown',
-        required: true,
-        owner: 'requester',
-        options: g.columns.map(c => c.label).join(', '),
-        pdfCoords: {
-          page: g.page,
-          x: left,
-          y: row.y,
-          width: right - left,
-          height: row.h,
-          pageWidth: sample?.pageWidth,
-          pageHeight: sample?.pageHeight,
-          optionMarks: g.columns.map((c, ci) => ({
-            label: c.label,
-            box: {
-              x: row.cells[ci].x + (row.cells[ci].w - markSize) / 2,
-              y: row.y + (row.h - markSize) / 2,
-              width: markSize,
-              height: markSize,
-            },
-          })),
-        },
-      }
-    })
-  })
-
   // A PDF that already carries interactive form fields states every field's
   // name, type and exact rectangle, so nothing needs to be inferred. When one
   // does, that is authoritative and the text/geometry heuristics are skipped.
@@ -641,7 +587,6 @@ export async function parsePdf(file) {
       })
 
     for (const { item: labelItem, idx } of labelIdxs) {
-      if (inRatingGrid(labelItem.page, labelItem.pdfY)) continue
       // Clean label: an embedded label ("Email: ____") uses the part before
       // its own colon; otherwise the normal strip-trailing-colon cleanup.
       const embedded = extractEmbeddedLabel(labelItem.text)
@@ -834,7 +779,6 @@ export async function parsePdf(file) {
     const items = pages[pageIdx] || []
     const sample = items[0]
     const regions = detectInputRegions(geom.rects || [], geom.hlines || [], items)
-      .filter(r => !inRatingCell(pageIdx, r))
     if (!regions.length) return
 
     // Regions sharing a heading are rows of one column, so they are numbered
@@ -898,18 +842,6 @@ export async function parsePdf(file) {
   // (same label text) — the prior "merging produced two fields" problem it
   // was replaced to avoid — while a region the label scan never saw at all
   // still comes through.
-  // Rating rows go where they fall on the page, not after everything else.
-  // fields are in reading order here, so the first one that starts lower than
-  // the grid is where it belongs.
-  for (const g of ratingGrids) {
-    const mine = ratingFields.filter(f => f.pdfCoords.page === g.page &&
-      f.pdfCoords.y >= g.bottom - 2 && f.pdfCoords.y <= g.top)
-    const at = fields.findIndex(f => {
-      const c = f.pdfCoords || {}
-      return c.page > g.page || (c.page === g.page && (c.y + (c.height || 0)) < g.bottom)
-    })
-    fields.splice(at < 0 ? fields.length : at, 0, ...mine)
-  }
   fields.push(...regionFields)
 
   // Deduplicate by label (table structures repeat the same label text, and a
