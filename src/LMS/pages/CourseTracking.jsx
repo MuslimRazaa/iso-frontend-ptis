@@ -335,19 +335,17 @@ function CourseTracking() {
               })}
             </tbody>
           </table>
+          <PaginationBar
+            page={safePage}
+            totalPages={totalPages}
+            totalItems={filtered.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setCurrentPage}
+            itemLabel="records"
+          />
         </div>
       )}
 
-      {!loading && !error && filtered.length > 0 && (
-        <PaginationBar
-          page={safePage}
-          totalPages={totalPages}
-          totalItems={filtered.length}
-          pageSize={PAGE_SIZE}
-          onPageChange={setCurrentPage}
-          itemLabel="records"
-        />
-      )}
     </div>
   )
 }

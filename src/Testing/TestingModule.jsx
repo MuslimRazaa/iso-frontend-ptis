@@ -3752,17 +3752,16 @@ const TestingModule = () => {
                     )})}
                   </tbody>
                 </table>
+                <PaginationBar
+                  page={certificateCurrentPage}
+                  totalPages={totalCertificatePages}
+                  totalItems={filteredResults.length}
+                  pageSize={certificateItemsPerPage}
+                  onPageChange={setCertificateCurrentPage}
+                  itemLabel="candidates"
+                />
               </div>
             )}
-
-            <PaginationBar
-              page={certificateCurrentPage}
-              totalPages={totalCertificatePages}
-              totalItems={filteredResults.length}
-              pageSize={certificateItemsPerPage}
-              onPageChange={setCertificateCurrentPage}
-              itemLabel="candidates"
-            />
           </article>
 
           {/* Vision Examination + Photo modal (opens before certificate generation) */}
@@ -5059,6 +5058,7 @@ const TestingModule = () => {
                         <p style={{ color: '#7f8c8d', fontSize: '1.1em', margin: 0 }}>No test results match your filters.</p>
                       </div>
                     ) : (
+                      <>
                       <table style={commonStyles.table}>
                         <thead>
                           <tr>
@@ -5318,18 +5318,17 @@ const TestingModule = () => {
                           })}
                         </tbody>
                       </table>
+                      <PaginationBar
+                        page={resultsCurrentPage}
+                        totalPages={totalResultPages}
+                        totalItems={filteredResults.length}
+                        pageSize={resultsItemsPerPage}
+                        onPageChange={setResultsCurrentPage}
+                        itemLabel="results"
+                      />
+                      </>
                     )}
                   </div>
-
-                  {/* Pagination Controls */}
-                  <PaginationBar
-                    page={resultsCurrentPage}
-                    totalPages={totalResultPages}
-                    totalItems={filteredResults.length}
-                    pageSize={resultsItemsPerPage}
-                    onPageChange={setResultsCurrentPage}
-                    itemLabel="results"
-                  />
                 </article>
 
                 {/* Add Result Modal */}
@@ -6949,17 +6948,16 @@ const TestingModule = () => {
                   ))}
                 </tbody>
                 </table>
+                <PaginationBar
+                  page={eligibleCurrentPage}
+                  totalPages={totalEligiblePages}
+                  totalItems={eligibleEmployees.length}
+                  pageSize={eligibleItemsPerPage}
+                  onPageChange={setEligibleCurrentPage}
+                  itemLabel="employees"
+                />
               </div>
             )}
-
-            <PaginationBar
-              page={eligibleCurrentPage}
-              totalPages={totalEligiblePages}
-              totalItems={eligibleEmployees.length}
-              pageSize={eligibleItemsPerPage}
-              onPageChange={setEligibleCurrentPage}
-              itemLabel="employees"
-            />
           </article>
         )}
 
@@ -7114,16 +7112,15 @@ const TestingModule = () => {
                 )}
               </tbody>
               </table>
+              <PaginationBar
+                page={practicalCurrentPage}
+                totalPages={totalPracticalPages}
+                totalItems={practicalResults.length}
+                pageSize={practicalItemsPerPage}
+                onPageChange={setPracticalCurrentPage}
+                itemLabel="results"
+              />
             </div>
-
-            <PaginationBar
-              page={practicalCurrentPage}
-              totalPages={totalPracticalPages}
-              totalItems={practicalResults.length}
-              pageSize={practicalItemsPerPage}
-              onPageChange={setPracticalCurrentPage}
-              itemLabel="results"
-            />
           </article>
         )}
 
@@ -7985,8 +7982,6 @@ const TestingModule = () => {
                 )}
               </tbody>
             </table>
-            </div>
-
             <PaginationBar
               page={employeeCurrentPage}
               totalPages={totalEmployeePages}
@@ -7995,6 +7990,7 @@ const TestingModule = () => {
               onPageChange={setEmployeeCurrentPage}
               itemLabel="employees"
             />
+            </div>
           </div>
 
         {showModal && (

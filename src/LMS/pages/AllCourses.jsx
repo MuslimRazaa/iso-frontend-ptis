@@ -440,10 +440,6 @@ function AllCourses() {
             ))}
           </tbody>
         </table>
-        </div>
-      )}
-
-      {!loading && filteredCourses.length > 0 && (
         <PaginationBar
           page={safePage}
           totalPages={totalPages}
@@ -452,7 +448,9 @@ function AllCourses() {
           onPageChange={setCurrentPage}
           itemLabel="courses"
         />
+        </div>
       )}
+
 
       {showModal && (
         <div className="modal-overlay">

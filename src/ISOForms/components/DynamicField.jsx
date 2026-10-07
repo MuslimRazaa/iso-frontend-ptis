@@ -121,6 +121,24 @@ function DynamicField({ field, value, onChange, readOnly, employees = [], signer
         </div>
       )
     }
+    case 'radio':
+      // Checkboxes that behave as one choice: ticking an option replaces the
+      // current one, and ticking the chosen option again clears it, so an
+      // optional field can still be left unanswered.
+      return (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+          {options.map(o => (
+            <label key={o} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={value === o}
+                onChange={() => onChange(value === o ? '' : o)}
+              />
+              {o}
+            </label>
+          ))}
+        </div>
+      )
     case 'employee':
       return (
         <SearchableSelect

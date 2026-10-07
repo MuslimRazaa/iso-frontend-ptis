@@ -1893,18 +1893,16 @@ function JobLogDescription() {
                 )}
               </tbody>
             </table>
+            <PaginationBar
+              page={safePage}
+              totalPages={totalPages}
+              totalItems={totalEntries}
+              pageSize={PAGE_SIZE}
+              onPageChange={setCurrentPage}
+              itemLabel="entries"
+            />
           </div>
         </div>
-
-        {/* Pagination */}
-        <PaginationBar
-          page={safePage}
-          totalPages={totalPages}
-          totalItems={totalEntries}
-          pageSize={PAGE_SIZE}
-          onPageChange={setCurrentPage}
-          itemLabel="entries"
-        />
       </div>
 
       {/* ══ MODAL ════════════════════════════════════════════ */}

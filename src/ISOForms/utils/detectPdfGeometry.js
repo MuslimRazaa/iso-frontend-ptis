@@ -521,6 +521,130 @@ export function cellContaining(item, rects) {
   return inside.reduce((a, b) => (a.w * a.h <= b.w * b.h ? a : b))
 }
 
+// Column headings that name a point on a rating scale. Deliberately a closed
+// list: any table with a few headings and empty rows beneath would otherwise be
+// taken for a rating grid. A column like "Score" is not in it, so it is left
+// alone while the scale columns beside it are picked up.
+const SCALE_WORDS = {
+  excellent: 'Excellent', verygood: 'Very Good', good: 'Good', satisfactory: 'Satisfactory',
+  average: 'Average', fair: 'Fair', poor: 'Poor', verypoor: 'Very Poor',
+  unsatisfactory: 'Unsatisfactory', na: 'NA', 'n/a': 'N/A',
+}
+// A producer splits words arbitrarily ("Excel lent"), so spacing is ignored.
+const scaleKey = (text) => String(text || '').toLowerCase().replace(/[\s.]/g, '')
+
+/**
+ * Finds rating grids: a header line naming the scale ("1 2 3 4 5", or
+ * "Excellent / Good / Poor / NA") over rows of empty cells, each row labelled
+ * by its question at the left.
+ *
+ * Nothing in such a grid is printed next to the question — the choices live
+ * once, in the header — so label-adjacent option detection cannot see them,
+ * and bare numbers are deliberately ignored as row markers elsewhere. Instead
+ * the header defines the columns, and each empty cell stacked beneath one is
+ * that row's box for that rating.
+ *
+ * Returns one entry per grid: { top, bottom, columns: [{ label, x, w }],
+ * rows: [{ y, h, label, cells }] }, all in page space. `cells` is the row's
+ * box for each column, in column order.
+ */
+export function detectRatingMatrices(rects, textItems) {
+  const seen = new Set()
+  const boxes = rects.filter(r => {
+    const key = `${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.w)},${Math.round(r.h)}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+
+  // Candidate heading text grouped by line.
+  const lines = []
+  const heading = textItems
+    .filter(t => /^[1-9]$/.test(t.text.trim()) || SCALE_WORDS[scaleKey(t.text)])
+    .sort((a, b) => b.pdfY - a.pdfY)
+  for (const t of heading) {
+    const line = lines.find(l => Math.abs(l.y - t.pdfY) <= 3)
+    if (line) line.items.push(t)
+    else lines.push({ y: t.pdfY, items: [t] })
+  }
+
+  const matrices = []
+  for (const line of lines) {
+    const items = line.items.sort((a, b) => a.x - b.x)
+
+    // Numbered scale: 1..N in order. Worded scale: the scale words, whatever
+    // else shares the line.
+    let run = []
+    const start = items.findIndex(t => t.text.trim() === '1')
+    if (start >= 0) {
+      run = [items[start]]
+      for (let i = start + 1; i < items.length; i++) {
+        if (Number(items[i].text) === run.length + 1) run.push(items[i])
+        else break
+      }
+    }
+    if (run.length < 3) run = items.filter(t => SCALE_WORDS[scaleKey(t.text)])
+    if (run.length < 3) continue
+
+    const headCells = run.map(t => cellContaining(t, boxes))
+    if (headCells.some(c => !c)) continue
+    if (new Set(headCells.map(c => Math.round(c.x))).size !== run.length) continue
+
+    const columns = run.map((t, i) => ({
+      label: /^\d$/.test(t.text.trim()) ? t.text.trim() : SCALE_WORDS[scaleKey(t.text)],
+      x: headCells[i].x,
+      w: headCells[i].w,
+    }))
+    const col0 = headCells[0]
+    // A data cell belongs to a column when its centre falls under that
+    // column's header cell. Edges and widths are not compared: a producer
+    // routinely strokes the header cell a few points off the cells under it,
+    // and a header can be far wider than the tick boxes beneath.
+    const inCol = (b, col) => {
+      const mid = b.x + b.w / 2
+      return mid >= col.x && mid <= col.x + col.w
+    }
+    const cellAt = (col, y, h) => boxes.find(b =>
+      inCol(b, col) && Math.abs(b.y - y) <= 3 && Math.abs(b.h - h) <= 3)
+
+    const rows = []
+    let bottom = col0.y
+    const below = boxes
+      .filter(b => inCol(b, columns[0]) && b.y + b.h <= col0.y + 3)
+      .sort((a, b) => b.y - a.y)
+    for (const cell of below) {
+      if (bottom - (cell.y + cell.h) > 8) break               // gap: the grid has ended
+      if (textInside(cell, textItems).length) break           // printed text: not an input row
+      const cells = columns.map(col => cellAt(col, cell.y, cell.h))
+      if (cells.some(c => !c)) break
+      rows.push({ y: cell.y, h: cell.h, cells })
+      bottom = cell.y
+    }
+
+    // A row is named by the text to its left. Rows that never get a name at
+    // the end of the grid are spare, not questions.
+    for (const row of rows) {
+      const text = textItems
+        .filter(t =>
+          t.x + t.width <= columns[0].x + 2 &&
+          t.pdfY >= row.y - 1 && t.pdfY <= row.y + row.h + 1 &&
+          !ROW_MARKER.test(t.text.trim()))
+        .sort((a, b) => b.pdfY - a.pdfY || a.x - b.x)
+        .map(t => t.text.trim())
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+      row.label = text
+    }
+    while (rows.length && !rows[rows.length - 1].label) rows.pop()
+    rows.forEach((row, i) => { if (!row.label) row.label = `Question ${i + 1}` })
+    if (rows.length < 2) continue
+
+    matrices.push({ top: col0.y + col0.h, bottom: rows[rows.length - 1].y, columns, rows })
+  }
+  return matrices
+}
+
 /** The cell immediately to the right of `cell` on the same row, if any. */
 export function cellRightOf(cell, rects, { gapTol = 4 } = {})   {
   const candidates = rects.filter(r => {

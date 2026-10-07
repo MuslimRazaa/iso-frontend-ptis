@@ -1140,17 +1140,15 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
               )}
             </tbody>
           </table>
+          <PaginationBar
+            page={currentPage}
+            totalPages={totalPages}
+            totalItems={filteredQuestions.length}
+            pageSize={itemsPerPage}
+            onPageChange={setCurrentPage}
+            itemLabel="questions"
+          />
         </div>
-
-        {/* Pagination Controls */}
-        <PaginationBar
-          page={currentPage}
-          totalPages={totalPages}
-          totalItems={filteredQuestions.length}
-          pageSize={itemsPerPage}
-          onPageChange={setCurrentPage}
-          itemLabel="questions"
-        />
       </article>
 
       {/* Modal for Add/Edit */}
