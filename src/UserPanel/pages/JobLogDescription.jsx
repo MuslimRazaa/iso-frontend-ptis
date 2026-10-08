@@ -34,14 +34,13 @@ const fromDBInspectorChange = c => ({
   createdBy: c.created_by || '',
 })
 
-// "Closed" is now "Completed" and "Incomplete" is now "In Progress". Rows saved
-// under the old wording read as the new one, so the badge, the filter and the
-// counts agree even before (or without) the database rows being rewritten.
+// "Closed" is now "Completed". Rows saved under the old wording read as the new
+// one, so the badge, the filter and the counts agree even before (or without)
+// the database rows being rewritten. "Incomplete" and "In Progress" are two
+// different statuses and are kept apart exactly as stored.
 const canonStatus = (s) => {
   const v = String(s || '').trim()
-  if (/^closed$/i.test(v)) return 'Completed'
-  if (/^incomplete$/i.test(v)) return 'In Progress'
-  return v
+  return /^closed$/i.test(v) ? 'Completed' : v
 }
 
 const fromDB = row => ({
@@ -282,6 +281,7 @@ const REFERENCE_OPTIONS = ['Via Email', 'Via Phone call', 'Via Whatsapp']
 // QHSE compliance dropdowns (Equip C/L, V. Log, REPT) — only these three values.
 const QHSE_OPTIONS = ['Yes', 'No', 'NA']
 const JMP_OPTIONS = ['1', '2', '3', '4', '5', 'NA']
+const STATUS_OPTIONS = ['In Progress', 'Incomplete', 'Completed', 'On Hold']
 
 // ── CSV / Excel export ───────────────────────────────────────
 // Ordered [Column header, camelCase key] pairs. Headers match the backend's
@@ -421,6 +421,8 @@ function StatusBadge({ value }) {
     bg = 'linear-gradient(135deg,#e8fff3,#d4f8e3)'; color = '#1d814c'; border = '1px solid #c3ecd4'; icon = '✓'
   } else if (lower === 'in progress') {
     bg = 'linear-gradient(135deg,#fff8ef,#ffefdb)'; color = '#c87e1c'; border = '1px solid #ffe4c4'; icon = '◐'
+  } else if (lower === 'incomplete') {
+    bg = 'linear-gradient(135deg,#fff1f1,#fde3e3)'; color = '#c62828'; border = '1px solid #f6c9c9'; icon = '✕'
   } else if (lower === 'pending') {
     bg = 'linear-gradient(135deg,#f4f4f7,#ededf2)'; color = '#7a7a8c'; border = '1px solid #dcdce3'; icon = '◌'
   } else {
@@ -922,7 +924,7 @@ function JobLogDescription() {
     total: statsBaseEntries.length,
     completed: statsBaseEntries.filter(e => e.status?.toLowerCase() === 'completed').length,
     inProgress: statsBaseEntries.filter(e => e.status?.toLowerCase() === 'in progress').length,
-    pending: statsBaseEntries.filter(e => ['pending', ''].includes((e.status || '').toLowerCase())).length,
+    incomplete: statsBaseEntries.filter(e => e.status?.toLowerCase() === 'incomplete').length,
   }), [statsBaseEntries])
 
   const statusOptions = useMemo(() => [...new Set(entries.map(e => e.status).filter(Boolean))], [entries])
@@ -1091,6 +1093,13 @@ function JobLogDescription() {
 
   const handleSubmit = async e => {
     e.preventDefault()
+    // Status is compulsory. Only enforced for someone who can actually set it —
+    // another department's user sees the field locked and must not be blocked
+    // from saving their own section.
+    if (canEdit('operations') && !String(modalState.status || '').trim()) {
+      showToast('Please select a Status before saving.', 'error')
+      return
+    }
     const rd = calculateDays(modalState.startDate, modalState.endDate)
     const days = rd ? String(rd) : ''
     const payload = toDB({ ...modalState, days, sNo: modalState.sNo || nextSerial })
@@ -1620,7 +1629,7 @@ function JobLogDescription() {
         <StatCard accent="#595966" Icon={ClipboardList} label="Total Jobs" value={stats.total} filterValue="all" />
         <StatCard accent="#1d814c" Icon={CheckCircle2} label="Completed" value={stats.completed} filterValue={statusValueFor('completed')} />
         <StatCard accent="#c87e1c" Icon={Clock} label="In Progress" value={stats.inProgress} filterValue={statusValueFor('in progress')} />
-        <StatCard accent="#7a7a8c" Icon={CircleDashed} label="Pending" value={stats.pending} filterValue={STATUS_PENDING_ANY} />
+        <StatCard accent="#d32f2f" Icon={CircleDashed} label="Incomplete" value={stats.incomplete} filterValue={statusValueFor('incomplete')} />
       </div>
 
       {/* ══ FILTERS ═══════════════════════════════════════════ */}
@@ -2144,11 +2153,15 @@ function JobLogDescription() {
               </div>
 
               <div className="form-row">
-                <label><span>Status</span>
+                <label><span>Status *</span>
                   <StyledSelect
                     value={modalState.status}
                     disabled={!canEdit('operations')}
-                    options={['In Progress', 'Completed', 'Pending', 'On Hold']}
+                    // An entry still holding the retired "Pending" stays selectable,
+                    // so editing it never silently clears its status.
+                    options={modalState.status && !STATUS_OPTIONS.includes(modalState.status)
+                      ? [...STATUS_OPTIONS, modalState.status]
+                      : STATUS_OPTIONS}
                     emptyOptionLabel="— Select —"
                     style={modalSelectStyle}
                     onChange={v => handleModalChange('status', v)}
