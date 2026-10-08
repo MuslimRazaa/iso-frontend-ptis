@@ -21,7 +21,7 @@ const TILE_BG = '#fdf2f3'   // soft brand tint used for every icon tile
 // rows whose status was never set — the same rows this card counts.
 const STAT_META = [
   { key: 'total',      label: 'Total Jobs',  status: 'all',         helper: 'All entries',       tone: '' },
-  { key: 'closed',     label: 'Closed',      status: 'closed',      helper: 'Completed jobs',    tone: '' },
+  { key: 'completed',  label: 'Completed',   status: 'completed',   helper: 'Completed jobs',    tone: '' },
   { key: 'inProgress', label: 'In Progress', status: 'in_progress', helper: 'Currently active',  tone: '' },
   { key: 'pending',    label: 'Pending',     status: 'pending',     helper: 'Needs action',      tone: 'warning' },
 ]
@@ -66,15 +66,15 @@ function JLRHome() {
     const norm = (s) => (s || '').toString().toLowerCase()
     return {
       total:      entries.length,
-      closed:     entries.filter(e => norm(e.status) === 'closed').length,
-      inProgress: entries.filter(e => norm(e.status) === 'in progress').length,
+      completed:  entries.filter(e => ['completed', 'closed'].includes(norm(e.status))).length,
+      inProgress: entries.filter(e => ['in progress', 'incomplete'].includes(norm(e.status))).length,
       pending:    entries.filter(e => ['pending', ''].includes(norm(e.status))).length,
     }
   }, [entries])
 
   const heroPills = [
     { label: 'Total Entries', value: counts.total },
-    { label: 'Jobs Closed',   value: counts.closed },
+    { label: 'Jobs Completed', value: counts.completed },
     { label: 'In Progress',   value: counts.inProgress },
   ]
 

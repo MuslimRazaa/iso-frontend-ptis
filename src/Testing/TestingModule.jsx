@@ -4064,8 +4064,9 @@ const TestingModule = () => {
               {adminActiveTab === 'auditlog' && (
                 <button
                   type="button"
+                  className="back-link"
                   onClick={() => setAdminActiveTab('dashboard')}
-                  style={{ fontFamily: 'inherit', fontSize: 13, color: '#7a7a8c', textDecoration: 'none', background: 'none', border: 'none', padding: 0, cursor: 'pointer', alignSelf: 'flex-start' }}
+                  style={{ fontFamily: 'inherit', fontSize: 13, textDecoration: 'none', background: 'none', border: 'none', padding: 0, cursor: 'pointer', alignSelf: 'flex-start' }}
                 >← Back</button>
               )}
               <p className="eyebrow">{adminActiveTab === 'auditlog' ? 'ADMIN' : 'PTIS Testing System'}</p>

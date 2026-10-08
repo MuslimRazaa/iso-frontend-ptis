@@ -31,7 +31,7 @@ function AuditLog() {
       title="Audit Log"
       subtitle="Every template and form action — submitted, edited, deleted, approved or rejected."
       actions={ISO_FORMS_ACTIONS}
-      backTo={`${base}/templates`}
+      backTo={base}
     />
   )
 }

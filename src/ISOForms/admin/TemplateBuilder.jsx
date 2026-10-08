@@ -1,5 +1,5 @@
 import React, { useEffect, useState, Suspense, lazy } from 'react'
-import { useNavigate, useParams, useLocation } from 'react-router-dom'
+import { Link, useNavigate, useParams, useLocation } from 'react-router-dom'
 import { API_ENDPOINTS } from '../../config/api'
 import { showToast } from '../../components/Toast'
 import { getActorId, getActorName } from '../../utils/actorIdentity'
@@ -261,6 +261,7 @@ function TemplateBuilder() {
 
   return (
     <div style={{ padding: 'clamp(24px, 4vw, 48px)', maxWidth: 860, margin: '0 auto' }}>
+      <Link to={`${base}/templates`} className="back-link" style={{ display: 'inline-block', marginBottom: 12, fontSize: 13, textDecoration: 'none' }}>← Back</Link>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
         <div>
           <p className="eyebrow" style={{ margin: 0 }}>Form Templates</p>
