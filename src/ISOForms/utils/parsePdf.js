@@ -10,6 +10,7 @@ import {
   valueBoxForLabel,
   detectInputRegions,
   detectRatingMatrices,
+  detectGlyphMatrices,
   labelForRegion,
 } from './detectPdfGeometry'
 import { readAcroFormFields } from './readAcroForm'
@@ -82,6 +83,7 @@ const isLabelLike = (text) => {
   if (t.endsWith(':')) return true
   if (t === t.toUpperCase() && t.length >= 4 && t.length <= 70 && /[A-Z]/.test(t)) return true
   if (/^[A-Z][a-z]/.test(t) && t.split(/\s+/).length <= 7 && !/[.?!]$/.test(t)) return true
+  if (/^[A-Z][a-z]/.test(t) && t.split(/\s+/).length <= 4 && /\bNo\.$/.test(t)) return true
   return false
 }
 
@@ -523,8 +525,16 @@ export async function parsePdf(file) {
   // becomes one single-choice field whose marks are that row's own cells, and
   // the grid's area is then kept out of the generic passes below so its labels
   // and empty cells don't also turn up as stray text fields.
-  const ratingGrids = geometry.flatMap((geom, pageIdx) =>
-    detectRatingMatrices(geom.rects || [], pages[pageIdx] || []).map(m => ({ ...m, page: pageIdx })))
+  const ratingGrids = geometry.flatMap((geom, pageIdx) => {
+    const drawn = detectRatingMatrices(geom.rects || [], pages[pageIdx] || [])
+      .map(m => ({ ...m, page: pageIdx }))
+    // Grids of box glyphs have no drawn cells. One already read from drawn cells
+    // wins where the two overlap.
+    const typeset = detectGlyphMatrices(pages[pageIdx] || [])
+      .filter(m => !drawn.some(d => m.bottom <= d.top && m.top >= d.bottom))
+      .map(m => ({ ...m, page: pageIdx }))
+    return [...drawn, ...typeset]
+  })
   // The header sits above the digit row (a "Poor → Excellent" banner); the
   // band reaches up far enough to take that in too.
   const HEADER_BAND = 16
@@ -539,13 +549,23 @@ export async function parsePdf(file) {
     const right = Math.max(...g.rows.flatMap(r => r.cells.map(c => c.x + c.w)))
     return g.rows.map((row, i) => {
       const markSize = Math.max(6, Math.min(14, row.h - 4, ...row.cells.map(c => c.w - 4)))
+      // Typeset boxes are already the exact square; drawn cells hold a smaller mark.
+      const markBox = (cell) => g.exact
+        ? { x: cell.x, y: cell.y, width: cell.w, height: cell.h }
+        : {
+            x: cell.x + (cell.w - markSize) / 2,
+            y: row.y + (row.h - markSize) / 2,
+            width: markSize,
+            height: markSize,
+          }
       return {
         id: `f_rating_${g.page}_${Date.now().toString(36)}_${i}`,
         label: row.label.replace(/^\d{1,2}[.)]\s+/, ''),
-        // Single-select: one rating per question. fillOriginalPdf ticks the
-        // chosen option's own cell for this type.
-        type: 'radio',
-        required: true,
+        // A rating row is single-select (one box per question); a grid of
+        // interval boxes (km marks) can have several ticked. fillOriginalPdf
+        // ticks each chosen option's own box for either type.
+        type: g.multi ? 'checkbox-group' : 'radio',
+        required: !g.multi,
         owner: 'requester',
         options: g.columns.map(c => c.label).join(', '),
         pdfCoords: {
@@ -558,12 +578,7 @@ export async function parsePdf(file) {
           pageHeight: sample?.pageHeight,
           optionMarks: g.columns.map((c, ci) => ({
             label: c.label,
-            box: {
-              x: row.cells[ci].x + (row.cells[ci].w - markSize) / 2,
-              y: row.y + (row.h - markSize) / 2,
-              width: markSize,
-              height: markSize,
-            },
+            box: markBox(row.cells[ci]),
           })),
         },
       }
@@ -637,7 +652,7 @@ export async function parsePdf(file) {
         // the short Title-Case branch's 7-word cap instead.
         const testText = precededByBareNumber ? `${row[0].text.trim()} ${item.text.trim()}` : item.text
         if (!isLabelLike(testText) && !extractEmbeddedLabel(item.text)) return false
-        return idx === 0 || precededByBareNumber || item.text.trim().endsWith(':') || extractEmbeddedLabel(item.text)
+        return idx === 0 || precededByBareNumber || item.text.trim().endsWith(':') || /\bNo\.$/.test(item.text.trim()) || extractEmbeddedLabel(item.text)
       })
 
     for (const { item: labelItem, idx } of labelIdxs) {
@@ -681,7 +696,8 @@ export async function parsePdf(file) {
       // plain, so a wrapped continuation of this label or the next real
       // field's own label is never mistaken for a choice list.
       let optionsFromNextRow = false
-      if (optionItems.length < 2 && idx === row.length - 1 && i + 1 < rows.length && !consumedRowIdxs.has(i + 1)) {
+      if (optionItems.length < 2 && idx === row.length - 1 && i + 1 < rows.length && !consumedRowIdxs.has(i + 1) &&
+          !rows[i + 1].some(r => inRatingGrid(r.page, r.pdfY))) {
         const nextRow = rows[i + 1]
         const candidates = nextRow.filter(r => {
           const t = r.text.trim()
@@ -705,6 +721,7 @@ export async function parsePdf(file) {
       // field. guessType's "dropdown" wording wins (single-select labels like
       // Category/Priority/Status); anything else becomes a checkbox group.
       if (optionItems.length >= 2 && type !== 'dropdown') type = 'checkbox-group'
+      if (type === 'dropdown' && optionItems.length < 2) type = 'text'
 
       const owner = guessOwner(label, currentSectionOwner)
       const isChoice = type === 'checkbox-group' || type === 'dropdown'
