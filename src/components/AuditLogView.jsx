@@ -273,7 +273,7 @@ const AuditLogView = forwardRef(function AuditLogView(
   return (
     <div style={padded ? { padding: 'clamp(24px, 4vw, 48px)' } : undefined}>
       {backTo && (
-        <Link to={backTo} style={{ fontSize: 13, color: '#7a7a8c', textDecoration: 'none' }}>← Back</Link>
+        <Link to={backTo} className="back-link" style={{ fontSize: 13, textDecoration: 'none' }}>← Back</Link>
       )}
       {showHeader ? (
         <>

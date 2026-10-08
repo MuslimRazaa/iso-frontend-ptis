@@ -645,6 +645,275 @@ export function detectRatingMatrices(rects, textItems) {
   return matrices
 }
 
+/**
+ * Finds grids of tick boxes typeset as characters — a header line of numbers
+ * ("5 10 15 … 100") with a row of box glyphs under it for every service, as a
+ * Wingdings box is in a Word/Excel export. There is no drawn rectangle to find
+ * and nothing printed beside each box, so the header number above a glyph is the
+ * only thing that says which choice it is.
+ *
+ * Same result shape as detectRatingMatrices, plus `multi` (a row may have several
+ * boxes ticked) and `exact` (each cell is already the box itself).
+ */
+// A Wingdings box glyph is drawn inside its text item: measured against the
+// rendered page, the visible square starts 13% in from the item's left edge,
+// sits 3.5% of the item height above the baseline, and is 77% of the width by
+// 70% of the height. Marking the whole item box instead put every tick a couple
+// of points off its square.
+const glyphBox = (t) => {
+  const w = t.width || 8, h = t.height || w
+  return { x: t.x + w * 0.133, y: t.pdfY + h * 0.035, w: w * 0.77, h: h * 0.7 }
+}
+
+const isBoxGlyph = (t) => {
+  const s = String(t.text || '').trim()
+  return s.length > 0 && s.length <= 2 && !/[A-Za-z0-9]/.test(s) &&
+    !/^[ -~]+$/.test(s) && (t.width || 0) > 0 && (t.width || 0) <= 24
+}
+
+export function detectGlyphMatrices(textItems) {
+  const glyphs = textItems.filter(isBoxGlyph)
+  if (glyphs.length < 8) return []
+
+  const lines = []
+  for (const t of textItems.filter(t => /^\d{1,3}$/.test(t.text.trim())).sort((a, b) => b.pdfY - a.pdfY)) {
+    const line = lines.find(l => Math.abs(l.y - t.pdfY) <= 3)
+    if (line) line.items.push(t)
+    else lines.push({ y: t.pdfY, items: [t] })
+  }
+
+  const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)]
+  const matrices = []
+
+  for (const line of lines) {
+    const items = line.items.sort((a, b) => a.x - b.x)
+    // Runs of strictly increasing numbers: the header is one of them.
+    const runs = []
+    let run = [items[0]]
+    for (const t of items.slice(1)) {
+      if (Number(t.text) > Number(run[run.length - 1].text)) run.push(t)
+      else { runs.push(run); run = [t] }
+    }
+    runs.push(run)
+
+    for (const head of runs) {
+      if (head.length < 4) continue
+      const centres = head.map(t => t.x + (t.width || 0) / 2)
+      const pitch = median(centres.slice(1).map((c, i) => c - centres[i]))
+      if (!(pitch > 4)) continue
+
+      // Each glyph below the header belongs to the column it is nearest to.
+      const col = (g) => {
+        const c = g.x + (g.width || 0) / 2
+        let best = -1, bestD = pitch * 0.6
+        centres.forEach((x, i) => { const d = Math.abs(x - c); if (d < bestD) { best = i; bestD = d } })
+        return best
+      }
+      const below = glyphs
+        .filter(g => g.pdfY < line.y - 2 && col(g) >= 0)
+        .sort((a, b) => b.pdfY - a.pdfY)
+      const bands = []
+      for (const g of below) {
+        const band = bands.find(b => Math.abs(b.y - g.pdfY) <= 3)
+        if (band) band.items.push(g)
+        else bands.push({ y: g.pdfY, items: [g] })
+      }
+
+      const rows = []
+      let prevY = null, rowPitch = null
+      for (const band of bands) {
+        const byCol = new Map()
+        for (const g of band.items) if (!byCol.has(col(g))) byCol.set(col(g), g)
+        // A row is only trusted when it has a box under EVERY heading; a partial
+        // line is something else (a legend, a stray symbol), so the grid ends.
+        if (byCol.size !== head.length) { if (rows.length) break; continue }
+        if (prevY !== null) {
+          const gap = prevY - band.y
+          if (rowPitch === null) rowPitch = gap
+          else if (gap > rowPitch * 2.5) break
+        }
+        prevY = band.y
+        const cells = head.map((_, i) => {
+          const b = glyphBox(byCol.get(i))
+          return { x: b.x, y: b.y, w: b.w, h: b.h }
+        })
+        rows.push({ y: cells[0].y, h: cells[0].h, base: band.y, cells })
+      }
+      if (rows.length < 2) continue
+
+      // A row is named by the text in the first column to its left. Later
+      // columns ("Every 4,000 to 6,000KM…") describe it and may wrap onto a
+      // second line, so the band reaches half a row either side.
+      const firstBox = Math.min(...rows.flatMap(r => r.cells.map(c => c.x)))
+      const half = (rowPitch || 20) / 2
+      const left = textItems.filter(t => t.x + (t.width || 0) <= firstBox + 2 && !ROW_MARKER.test(t.text.trim()) && !isBoxGlyph(t))
+      const inRows = left.filter(t => t.pdfY <= rows[0].base + half && t.pdfY >= rows[rows.length - 1].base - half)
+      const starts = [...new Set(inRows.map(t => Math.round(t.x)))].sort((a, b) => a - b)
+      const second = starts.find(x => x > starts[0] + 40)
+      const limit = second !== undefined ? second - 5 : Infinity
+      for (const row of rows) {
+        row.label = left
+          .filter(t => t.x < limit && t.pdfY <= row.base + half && t.pdfY > row.base - half)
+          .sort((a, b) => b.pdfY - a.pdfY || a.x - b.x)
+          .map(t => t.text.trim()).join(' ').replace(/\s+/g, ' ').trim()
+      }
+      while (rows.length && !rows[rows.length - 1].label) rows.pop()
+      rows.forEach((row, i) => { if (!row.label) row.label = `Row ${i + 1}` })
+      if (rows.length < 2) continue
+
+      matrices.push({
+        top: line.y + 8,
+        bottom: rows[rows.length - 1].base - half + 2,
+        columns: head.map((t, i) => ({ label: t.text.trim(), x: centres[i] - pitch / 2, w: pitch })),
+        rows,
+        multi: true,
+        exact: true,
+      })
+    }
+  }
+  return matrices
+}
+
+/**
+ * Finds register tables: a captioned header over rows of EMPTY cells, where every
+ * cell is its own entry (an issue log, a schedule, a visitor book).
+ *
+ * Producers stroke the same cell two or three times a point apart, so the boxes
+ * are first collapsed to one per cell. Data rows are the run of equal-height
+ * bands, rising from the bottom, whose cells hold nothing (bar a printed
+ * "1." in the first column). The header is whatever stacks on top of them,
+ * and a caption is the text in that column's header cell — joined to the
+ * heading of any wider cell above it ("Risk Matrix" over L, S, R, Nature).
+ *
+ * Returns { top, bottom, columns: [{ index, x, w, caption }],
+ * rows: [{ y, h, number, cells }] } with `cells[i]` null for a column that is
+ * printed rather than fillable (the "#" column).
+ */
+export function detectRegisterTables(rects, textItems) {
+  // One box per cell: a box mostly covered by a bigger one is the same cell.
+  const sized = rects.filter(r => r.w >= 8 && r.h >= 8 && r.h <= 80)
+  const area = (r) => r.w * r.h
+  const overlap = (a, b) => {
+    const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)
+    const oy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y)
+    return ox > 0 && oy > 0 ? ox * oy : 0
+  }
+  const boxes = sized.filter((r, i) => !sized.some((o, j) => {
+    if (i === j) return false
+    const cover = overlap(r, o) / area(r)
+    if (cover < 0.7) return false
+    return area(o) > area(r) || (area(o) === area(r) && j < i)
+  }))
+
+  // Row bands, top of page first.
+  const bands = []
+  for (const b of [...boxes].sort((a, c) => c.y - a.y || a.x - c.x)) {
+    const band = bands.find(r => Math.abs(r.y - b.y) <= 2.5 && Math.abs(r.h - b.h) <= 4)
+    if (band) band.cells.push(b)
+    else bands.push({ y: b.y, h: b.h, cells: [b] })
+  }
+  bands.sort((a, b) => b.y - a.y)
+  for (const band of bands) band.cells.sort((a, b) => a.x - b.x)
+
+  const emptyBand = (band) => {
+    const empty = band.cells.filter(c => !textInside(c, textItems).length)
+    return band.cells.length >= 4 && empty.length >= band.cells.length - 1 && empty.length >= 3
+  }
+
+  const tables = []
+  let run = []
+  const flush = () => {
+    if (run.length >= 3) tables.push(run)
+    run = []
+  }
+  for (const band of bands) {
+    const prev = run[run.length - 1]
+    const joins = prev &&
+      Math.abs(prev.h - band.h) <= 4 &&
+      prev.y - (band.y + band.h) <= 4 && prev.y - (band.y + band.h) >= -2 &&
+      band.cells.length === prev.cells.length
+    if (emptyBand(band) && (!prev || joins)) run.push(band)
+    else { flush(); if (emptyBand(band)) run.push(band) }
+  }
+  flush()
+
+  const out = []
+  for (const rows of tables) {
+    const first = rows[0]
+    const cols = first.cells.map(c => ({ x: c.x, w: c.w }))
+    const colOf = (c) => {
+      const mid = c.x + c.w / 2
+      return cols.findIndex(k => mid >= k.x && mid <= k.x + k.w)
+    }
+    // Every row must have its cells in the same columns.
+    if (rows.some(r => r.cells.some(c => colOf(c) < 0))) continue
+
+    // Header: boxes stacked on the data rows, each touching the edge of the
+    // header found so far.
+    const runTop = first.y + first.h
+    const left = cols[0].x - 2, right = cols[cols.length - 1].x + cols[cols.length - 1].w + 2
+    const inside = boxes.filter(b => b.x >= left && b.x + b.w <= right && b.y >= runTop - 1.5)
+    let headerTop = runTop
+    for (let changed = true; changed;) {
+      changed = false
+      for (const b of inside) {
+        if (b.y <= headerTop + 1.5 && b.y + b.h > headerTop + 1.5) { headerTop = b.y + b.h; changed = true }
+      }
+    }
+    if (headerTop - runTop < 8) continue                      // no header: not a captioned table
+    const headerCells = inside.filter(b => b.y + b.h <= headerTop + 1.5)
+
+    // Captions: a text line belongs to the smallest header cell holding it. A
+    // cell across several columns heads all of them; a cell over one column
+    // names it.
+    const spans = (cell) => cols.map((k, i) => ({ k, i }))
+      .filter(({ k }) => k.x + k.w / 2 >= cell.x && k.x + k.w / 2 <= cell.x + cell.w).map(({ i }) => i)
+    const own = cols.map(() => []), group = cols.map(() => [])
+    const headerText = textItems.filter(t => t.pdfY >= runTop - 1 && t.pdfY <= headerTop + 1 &&
+      t.x >= left && t.x + (t.width || 0) <= right)
+    for (const t of headerText.sort((a, b) => b.pdfY - a.pdfY || a.x - b.x)) {
+      const cell = cellContaining(t, headerCells)
+      if (!cell) continue
+      const cover = spans(cell)
+      if (!cover.length) continue
+      for (const i of cover) (cover.length > 1 ? group : own)[i].push(t.text.trim())
+    }
+    const clean = (parts) => parts.join(' ').replace(/\s+/g, ' ').replace(/\/\s+/g, '/').trim()
+    const columns = cols.map((k, i) => {
+      const g = clean(group[i]), o = clean(own[i])
+      return { index: i, x: k.x, w: k.w, caption: [g, o].filter(Boolean).join(' ') }
+    })
+
+    // A column is fillable when its cells are empty on (almost) every row.
+    const fillable = cols.map((_, i) => rows.filter(r => {
+      const c = r.cells.find(cc => colOf(cc) === i)
+      return c && !textInside(c, textItems).length
+    }).length >= Math.max(2, rows.length * 0.8))
+
+    const numberOf = (r, i) => {
+      const c = r.cells.find(cc => colOf(cc) === i)
+      const t = c ? textInside(c, textItems)[0] : null
+      const m = t && /^\(?(\d{1,3})\s*[.)]?$/.exec(t.text.trim())
+      return m ? Number(m[1]) : null
+    }
+    const numberCol = fillable.findIndex(f => !f)
+    const outRows = rows.map((r, ri) => ({
+      y: r.y, h: r.h,
+      number: (numberCol >= 0 && numberOf(r, numberCol)) || ri + 1,
+      cells: cols.map((_, i) => (fillable[i] ? r.cells.find(cc => colOf(cc) === i) : null)),
+    }))
+
+    if (!columns.some((c, i) => fillable[i] && c.caption)) continue
+    out.push({
+      top: headerTop,
+      bottom: rows[rows.length - 1].y,
+      columns: columns.map((c, i) => ({ ...c, fillable: fillable[i] })),
+      rows: outRows,
+    })
+  }
+  return out
+}
+
 /** The cell immediately to the right of `cell` on the same row, if any. */
 export function cellRightOf(cell, rects, { gapTol = 4 } = {})   {
   const candidates = rects.filter(r => {

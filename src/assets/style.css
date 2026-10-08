@@ -5682,3 +5682,15 @@ table thead th {
   position: sticky;
   left: 0;
 }
+
+/* "← Back" links: grey at rest, near-black under the cursor or keyboard focus.
+   The colour is here, not inline, because an inline colour can't have a hover. */
+.back-link {
+  color: #7a7a8c;
+  transition: color 0.15s ease;
+}
+
+.back-link:hover,
+.back-link:focus-visible {
+  color: #14141c;
+}

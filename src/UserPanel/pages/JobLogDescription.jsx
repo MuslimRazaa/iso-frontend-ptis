@@ -34,6 +34,16 @@ const fromDBInspectorChange = c => ({
   createdBy: c.created_by || '',
 })
 
+// "Closed" is now "Completed" and "Incomplete" is now "In Progress". Rows saved
+// under the old wording read as the new one, so the badge, the filter and the
+// counts agree even before (or without) the database rows being rewritten.
+const canonStatus = (s) => {
+  const v = String(s || '').trim()
+  if (/^closed$/i.test(v)) return 'Completed'
+  if (/^incomplete$/i.test(v)) return 'In Progress'
+  return v
+}
+
 const fromDB = row => ({
   id: row.id,
   sNo: row.s_no != null ? String(row.s_no) : '',
@@ -58,7 +68,7 @@ const fromDB = row => ({
   equipCL: row.equip_cl || '',
   vLog: row.v_log || '',
   tbt: row.tbt || '',
-  status: row.status || '',
+  status: canonStatus(row.status),
   completionDate: row.completion_date ? row.completion_date.slice(0, 10) : '',
   rept: row.rept || '',
   exp: row.exp || '',
@@ -271,6 +281,7 @@ const REFERENCE_OPTIONS = ['Via Email', 'Via Phone call', 'Via Whatsapp']
 
 // QHSE compliance dropdowns (Equip C/L, V. Log, REPT) — only these three values.
 const QHSE_OPTIONS = ['Yes', 'No', 'NA']
+const JMP_OPTIONS = ['1', '2', '3', '4', '5', 'NA']
 
 // ── CSV / Excel export ───────────────────────────────────────
 // Ordered [Column header, camelCase key] pairs. Headers match the backend's
@@ -406,7 +417,7 @@ function StatusBadge({ value }) {
   if (!value) return <span style={{ color: '#bbb', fontSize: 13 }}>—</span>
   const lower = value.toLowerCase()
   let bg, color, border, icon
-  if (lower === 'closed') {
+  if (lower === 'completed') {
     bg = 'linear-gradient(135deg,#e8fff3,#d4f8e3)'; color = '#1d814c'; border = '1px solid #c3ecd4'; icon = '✓'
   } else if (lower === 'in progress') {
     bg = 'linear-gradient(135deg,#fff8ef,#ffefdb)'; color = '#c87e1c'; border = '1px solid #ffe4c4'; icon = '◐'
@@ -679,7 +690,7 @@ function JobLogDescription() {
   })
   // Arriving from a dashboard stat card: land already filtered to what it
   // counted, same as the status dropdown would produce by hand. The dashboard
-  // sends a stable token ('closed', 'in_progress', 'pending') rather than a
+  // sends a stable token ('completed', 'in_progress', 'pending'; the old 'closed' still works) rather than a
   // guessed spelling — this page is what knows how a status is actually
   // spelled in the register, and resolves it once statusOptions is ready below.
   const [searchParams, setSearchParams] = useSearchParams()
@@ -909,7 +920,7 @@ function JobLogDescription() {
 
   const stats = useMemo(() => ({
     total: statsBaseEntries.length,
-    closed: statsBaseEntries.filter(e => e.status?.toLowerCase() === 'closed').length,
+    completed: statsBaseEntries.filter(e => e.status?.toLowerCase() === 'completed').length,
     inProgress: statsBaseEntries.filter(e => e.status?.toLowerCase() === 'in progress').length,
     pending: statsBaseEntries.filter(e => ['pending', ''].includes((e.status || '').toLowerCase())).length,
   }), [statsBaseEntries])
@@ -926,7 +937,7 @@ function JobLogDescription() {
     if (!requestedStatusToken) return
     if (requestedStatusToken === 'pending') setStatusFilter(STATUS_PENDING_ANY)
     else if (requestedStatusToken === 'all') setStatusFilter('all')
-    else setStatusFilter(statusValueFor(requestedStatusToken.replace('_', ' ')))
+    else setStatusFilter(statusValueFor(canonStatus(requestedStatusToken.replace('_', ' ')).toLowerCase()))
     // Only on arrival — the admin's own choice from here must not be overridden
     // by a URL that is now stale.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1607,7 +1618,7 @@ function JobLogDescription() {
         borderBottom: T.bannerBorder,
       }}>
         <StatCard accent="#595966" Icon={ClipboardList} label="Total Jobs" value={stats.total} filterValue="all" />
-        <StatCard accent="#1d814c" Icon={CheckCircle2} label="Closed" value={stats.closed} filterValue={statusValueFor('closed')} />
+        <StatCard accent="#1d814c" Icon={CheckCircle2} label="Completed" value={stats.completed} filterValue={statusValueFor('completed')} />
         <StatCard accent="#c87e1c" Icon={Clock} label="In Progress" value={stats.inProgress} filterValue={statusValueFor('in progress')} />
         <StatCard accent="#7a7a8c" Icon={CircleDashed} label="Pending" value={stats.pending} filterValue={STATUS_PENDING_ANY} />
       </div>
@@ -2118,9 +2129,18 @@ function JobLogDescription() {
                     disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('drivenKm', e.target.value)} /></label>
                 <label><span>JMPs</span>
-                  <input type="number" min="0" value={modalState.jmps} placeholder="0"
+                  <StyledSelect
+                    value={modalState.jmps}
                     disabled={!canEdit('operations')}
-                    onChange={e => handleModalChange('jmps', e.target.value.replace(/[^0-9]/g, ''))} /></label>
+                    // An older entry may hold another number (or none) — keep it
+                    // selectable so editing never silently clears it.
+                    options={modalState.jmps && !JMP_OPTIONS.includes(modalState.jmps)
+                      ? [...JMP_OPTIONS, modalState.jmps]
+                      : JMP_OPTIONS}
+                    emptyOptionLabel="— Select —"
+                    style={modalSelectStyle}
+                    onChange={v => handleModalChange('jmps', v)}
+                  /></label>
               </div>
 
               <div className="form-row">
@@ -2128,7 +2148,7 @@ function JobLogDescription() {
                   <StyledSelect
                     value={modalState.status}
                     disabled={!canEdit('operations')}
-                    options={['In Progress', 'Closed', 'Pending', 'On Hold']}
+                    options={['In Progress', 'Completed', 'Pending', 'On Hold']}
                     emptyOptionLabel="— Select —"
                     style={modalSelectStyle}
                     onChange={v => handleModalChange('status', v)}
