@@ -817,7 +817,9 @@ export function detectRegisterTables(rects, textItems) {
 
   const emptyBand = (band) => {
     const empty = band.cells.filter(c => !textInside(c, textItems).length)
-    return band.cells.length >= 4 && empty.length >= band.cells.length - 1 && empty.length >= 3
+    // A row may carry printed text in a column or two (a description beside its
+    // number); what makes it a data row is a block of empty cells to fill.
+    return band.cells.length >= 4 && empty.length >= 3 && empty.length >= band.cells.length * 0.5
   }
 
   const tables = []
@@ -828,10 +830,13 @@ export function detectRegisterTables(rects, textItems) {
   }
   for (const band of bands) {
     const prev = run[run.length - 1]
+    // Rows of one table need not be the same height (a row that fits two lines of
+    // text is taller than its neighbours), so what joins them is that they touch
+    // and their cells sit in the same columns.
     const joins = prev &&
-      Math.abs(prev.h - band.h) <= 4 &&
       prev.y - (band.y + band.h) <= 4 && prev.y - (band.y + band.h) >= -2 &&
-      band.cells.length === prev.cells.length
+      band.cells.length === prev.cells.length &&
+      band.cells.every((c, i) => Math.abs(c.x - prev.cells[i].x) <= 3 && Math.abs(c.w - prev.cells[i].w) <= 4)
     if (emptyBand(band) && (!prev || joins)) run.push(band)
     else { flush(); if (emptyBand(band)) run.push(band) }
   }
@@ -869,11 +874,27 @@ export function detectRegisterTables(rects, textItems) {
     const spans = (cell) => cols.map((k, i) => ({ k, i }))
       .filter(({ k }) => k.x + k.w / 2 >= cell.x && k.x + k.w / 2 <= cell.x + cell.w).map(({ i }) => i)
     const own = cols.map(() => []), group = cols.map(() => [])
+    // A column whose header is split into short side-by-side cells directly above
+    // the data ("Yes | No" over one wide entry cell) is a choice: each sub-heading
+    // is an option, and a tick goes under the one that is picked.
+    const choiceCells = new Set()
+    const choices = cols.map((k) => {
+      const subs = headerCells
+        .filter(b => b.y <= runTop + 1.5 && b.w <= k.w * 0.7 && b.x + b.w / 2 >= k.x && b.x + b.w / 2 <= k.x + k.w)
+        .filter(b => textInside(b, textItems).length)
+        .sort((a, c) => a.x - c.x)
+      if (subs.length < 2) return null
+      subs.forEach(b => choiceCells.add(b))
+      return subs.map(b => ({
+        label: textInside(b, textItems).map(t => t.text.trim()).join(' ').replace(/\s+/g, ' ').trim(),
+        x: b.x, w: b.w,
+      }))
+    })
     const headerText = textItems.filter(t => t.pdfY >= runTop - 1 && t.pdfY <= headerTop + 1 &&
       t.x >= left && t.x + (t.width || 0) <= right)
     for (const t of headerText.sort((a, b) => b.pdfY - a.pdfY || a.x - b.x)) {
       const cell = cellContaining(t, headerCells)
-      if (!cell) continue
+      if (!cell || choiceCells.has(cell)) continue
       const cover = spans(cell)
       if (!cover.length) continue
       for (const i of cover) (cover.length > 1 ? group : own)[i].push(t.text.trim())
@@ -881,8 +902,20 @@ export function detectRegisterTables(rects, textItems) {
     const clean = (parts) => parts.join(' ').replace(/\s+/g, ' ').replace(/\/\s+/g, '/').trim()
     const columns = cols.map((k, i) => {
       const g = clean(group[i]), o = clean(own[i])
-      return { index: i, x: k.x, w: k.w, caption: [g, o].filter(Boolean).join(' ') }
+      return { index: i, x: k.x, w: k.w, caption: [g, o].filter(Boolean).join(' '), choices: choices[i] }
     })
+    // The same heading over several columns ("Location" x 8) would give every one
+    // of them the same name; number them left to right so each stays distinct.
+    const seenCaption = new Map()
+    for (const c of columns) if (c.caption) seenCaption.set(c.caption, (seenCaption.get(c.caption) || 0) + 1)
+    const nth = new Map()
+    for (const c of columns) {
+      if (c.caption && seenCaption.get(c.caption) > 1) {
+        const n = (nth.get(c.caption) || 0) + 1
+        nth.set(c.caption, n)
+        c.caption = `${c.caption} ${n}`
+      }
+    }
 
     // A column is fillable when its cells are empty on (almost) every row.
     const fillable = cols.map((_, i) => rows.filter(r => {

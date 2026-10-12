@@ -507,8 +507,12 @@ export async function parsePdf(file) {
     const vp = page.getViewport({ scale: 1 })
     const content = await page.getTextContent()
 
+    // A template author's own "Input" placeholder marks where a value goes; it is
+    // not form text. Left in, every cell it sits in counts as printed (so an
+    // otherwise empty table is not seen as one) and it merges into the label next
+    // to it ("Additional Remarks Input").
     const rawItems = content.items
-      .filter(item => item.str.trim())
+      .filter(item => item.str.trim() && !/^input$/i.test(item.str.trim()))
       .map(item => {
         const [, , , , tx, ty] = item.transform
         return {
@@ -570,18 +574,70 @@ export async function parsePdf(file) {
   const inRatingCell = (page, r) => inRegisterTable(page, r.y + r.h / 2) || ratingGrids.some(g => g.page === page && g.rows.some(row =>
     row.cells.some(c => r.x + r.w / 2 >= c.x && r.x + r.w / 2 <= c.x + c.w &&
       r.y + r.h / 2 >= c.y && r.y + r.h / 2 <= c.y + c.h)))
+  // A heading that ends in ":" over a numbered list ("1. failure to sound alarm …
+  // 7. Others") is a choose-any question whose answers are the listed lines. The
+  // numbers sit apart from their text and the list may run in two columns.
+  const listChoices = pages.flatMap((items, pageIdx) => items
+    .filter(h => /:$/.test(h.text.trim()) && !/^\d/.test(h.text.trim()))
+    .flatMap(h => {
+      const nums = items.filter(n => /^\d{1,2}[.)]$/.test(n.text.trim()) &&
+        n.x >= h.x - 4 && h.pdfY - n.pdfY >= -2 && h.pdfY - n.pdfY <= 120 &&
+        !inRegisterTable(pageIdx, n.pdfY) && !inRatingGrid(pageIdx, n.pdfY))
+      const options = nums.map(n => {
+        const text = items
+          .filter(t => t !== n && Math.abs(t.pdfY - n.pdfY) <= 2 && t.x > n.x && t.x - (n.x + n.width) < 14)
+          .sort((a, b) => a.x - b.x)[0]
+        return text ? { n: Number(n.text.replace(/\D/g, '')), num: n, text: text.text.replace(/[_:\s]+$/, '').replace(/:.*$/, '').replace(/\s*,\s*/g, ' / ').trim() } : null
+      }).filter(Boolean).sort((a, b) => a.n - b.n)
+      // Must read 1, 2, 3 … without gaps, or it is not a list.
+      if (options.length < 3 || options.some((o, i) => o.n !== i + 1)) return []
+      return [{ page: pageIdx, heading: h, options }]
+    }))
+  const listHeadings = new Set(listChoices.map(l => l.heading))
+  const listFields = listChoices.map((l, i) => {
+    const sample = pages[l.page]?.[0]
+    const ys = l.options.map(o => o.num.pdfY)
+    const xs = l.options.map(o => o.num.x)
+    return {
+      id: `f_list_${l.page}_${i}_${Date.now().toString(36)}`,
+      label: l.heading.text.replace(/:$/, '').trim(),
+      type: 'checkbox-group',
+      required: false,
+      owner: 'requester',
+      options: l.options.map(o => o.text).join(', '),
+      pdfCoords: {
+        page: l.page,
+        x: Math.min(...xs),
+        y: Math.min(...ys) - 2,
+        width: 120,
+        height: l.heading.pdfY - Math.min(...ys) + 4,
+        pageWidth: sample?.pageWidth,
+        pageHeight: sample?.pageHeight,
+        // A tick goes just before the printed number.
+        optionMarks: l.options.map(o => ({
+          label: o.text, x: o.num.x, y: o.num.pdfY, width: o.num.width, height: Math.max(o.num.height, 8), side: 'before',
+        })),
+      },
+    }
+  })
   const registerFields = registerTables.flatMap((t, ti) => {
     const sample = pages[t.page]?.[0]
     return t.rows.flatMap((row, ri) => t.columns.flatMap((col, ci) => {
       const cell = row.cells[ci]
       if (!cell || !col.caption) return []
+      // A column split into Yes | No (or similar) sub-headings is a choice, not
+      // free text, and a tick goes under the heading that is picked.
+      const picks = col.choices && col.choices.length >= 2 ? col.choices : null
+      const tick = Math.max(6, Math.min(10, cell.h - 4))
       return [{
         id: `f_reg_${t.page}_${ti}_${ri}_${ci}_${Date.now().toString(36)}`,
         label: `Row ${row.number} — ${col.caption}`,
-        type: /\bdate\b/i.test(col.caption) ? 'date' : cell.h > LINE_TALL ? 'textarea' : 'text',
+        // Same type down a whole column: a row a little taller than its neighbours
+        // (it fits two lines of the printed caption) is still a one-line entry.
+        type: picks ? 'radio' : /\bdate\b/i.test(col.caption) ? 'date' : cell.h > 60 ? 'textarea' : 'text',
         required: false,
         owner: 'requester',
-        options: '',
+        options: picks ? picks.map(c => c.label).join(', ') : '',
         pdfCoords: {
           page: t.page,
           x: cell.x + 2,
@@ -590,6 +646,12 @@ export async function parsePdf(file) {
           height: Math.max(8, cell.h - 4),
           pageWidth: sample?.pageWidth,
           pageHeight: sample?.pageHeight,
+          ...(picks ? {
+            optionMarks: picks.map(c => ({
+              label: c.label,
+              box: { x: c.x + (c.w - tick) / 2, y: cell.y + (cell.h - tick) / 2, width: tick, height: tick },
+            })),
+          } : null),
         },
       }]
     }))
@@ -709,6 +771,7 @@ export async function parsePdf(file) {
     for (const { item: labelItem, idx } of labelIdxs) {
       if (inRatingGrid(labelItem.page, labelItem.pdfY)) continue
       if (isCaptionUnderRule(labelItem, allItems)) continue
+      if (listHeadings.has(allItems.find(a => a.page === labelItem.page && a.x === labelItem.x && a.pdfY === labelItem.pdfY && a.text === labelItem.text))) continue
       // Clean label: an embedded label ("Email: ____") uses the part before
       // its own colon; otherwise the normal strip-trailing-colon cleanup.
       const embedded = extractEmbeddedLabel(labelItem.text)
@@ -983,6 +1046,13 @@ export async function parsePdf(file) {
       return c.page > g.page || (c.page === g.page && (c.y + (c.height || 0)) < g.bottom)
     })
     fields.splice(at < 0 ? fields.length : at, 0, ...mine)
+  }
+  for (const lf of listFields) {
+    const at = fields.findIndex(f => {
+      const c = f.pdfCoords || {}
+      return c.page > lf.pdfCoords.page || (c.page === lf.pdfCoords.page && c.y + (c.height || 0) < lf.pdfCoords.y)
+    })
+    fields.splice(at < 0 ? fields.length : at, 0, lf)
   }
   for (const t of registerTables) {
     const mine = registerFields.filter(f => f.pdfCoords.page === t.page &&
