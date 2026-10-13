@@ -355,7 +355,8 @@ function TemplatesList() {
                         )}
                       </div>
                       {t.formCode && <div style={{ fontSize: 12, fontWeight: 600, color: '#595966', marginTop: 2 }}>{t.formCode}</div>}
-                      {t.description && <div style={{ fontSize: 13, color: '#7a7a8c', marginTop: 2 }}>{t.description}</div>}
+                      {/* The importer often saves the form code as the description too; showing both repeats it. */}
+                      {t.description && t.description.trim().toLowerCase() !== String(t.formCode || '').trim().toLowerCase() && <div style={{ fontSize: 13, color: '#7a7a8c', marginTop: 2 }}>{t.description}</div>}
                     </td>
                     <td style={{ padding: '16px 20px', color: '#595966' }}>{fieldCount} field{fieldCount === 1 ? '' : 's'}</td>
                     <td style={{ padding: '16px 20px', color: '#595966' }}>{creatorOf(t) || '—'}</td>
