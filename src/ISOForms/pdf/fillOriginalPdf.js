@@ -124,7 +124,8 @@ const drawCheckMark = (page, box) => {
 /** Draws one field's value inside its box. */
 const drawFieldValue = (page, coords, text, font) => {
   const { x, y, width, height, align, legacyAnchor } = coords
-  const maxWidth = Math.max(4, width - PAD_X * 2)
+  // A very narrow cell (one day of a monthly sheet) has no room for side padding.
+  const maxWidth = Math.max(4, width - (width < 20 ? 1 : PAD_X * 2))
 
   // Legacy anchor points carry no measured height, so they stay single-line
   // and truncate exactly as they always did. Wrapping downward into space we
@@ -143,6 +144,11 @@ const drawFieldValue = (page, coords, text, font) => {
 
   // Only auto-shrink when the admin didn't pin a size explicitly.
   if (!coords.fontSize) {
+    // A word wider than the box would be broken mid-word ("AJ" over two lines in
+    // a day cell); make it fit whole before anything is wrapped.
+    const longest = (t, sz) => Math.max(0, ...t.split(/\s+/).map(w => font.widthOfTextAtSize(w, sz)))
+    while (longest(text, size) > maxWidth && size > MIN_FONT_SIZE) size -= 0.5
+    lines = wrapLines(text, font, size, maxWidth)
     while (!fits() && size > MIN_FONT_SIZE) {
       size -= 0.5
       lines = wrapLines(text, font, size, maxWidth)

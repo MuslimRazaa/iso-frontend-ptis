@@ -12,6 +12,7 @@ import {
   detectRatingMatrices,
   detectGlyphMatrices,
   detectRegisterTables,
+  detectSectionedTables,
   labelForRegion,
 } from './detectPdfGeometry'
 import { readAcroFormFields } from './readAcroForm'
@@ -547,6 +548,10 @@ export async function parsePdf(file) {
   // becomes one single-choice field whose marks are that row's own cells, and
   // the grid's area is then kept out of the generic passes below so its labels
   // and empty cells don't also turn up as stray text fields.
+  // Stacked sections of different shapes (daily / weekly / monthly rows) are read
+  // cell by cell first; a plain register inside the same area is then left alone.
+  const sectionedTables = geometry.flatMap((geom, pageIdx) =>
+    detectSectionedTables(geom.rects || [], pages[pageIdx] || []).map(t => ({ ...t, page: pageIdx })))
   const ratingGrids = geometry.flatMap((geom, pageIdx) => {
     const drawn = detectRatingMatrices(geom.rects || [], pages[pageIdx] || [])
       .map(m => ({ ...m, page: pageIdx }))
@@ -556,7 +561,7 @@ export async function parsePdf(file) {
       .filter(m => !drawn.some(d => m.bottom <= d.top && m.top >= d.bottom))
       .map(m => ({ ...m, page: pageIdx }))
     return [...drawn, ...typeset]
-  })
+  }).filter(g => !sectionedTables.some(t => t.page === g.page && g.bottom <= t.top && g.top >= t.bottom))
   // The header sits above the digit row (a "Poor → Excellent" banner); the
   // band reaches up far enough to take that in too.
   const HEADER_BAND = 16
@@ -566,9 +571,11 @@ export async function parsePdf(file) {
   const registerTables = geometry.flatMap((geom, pageIdx) =>
     detectRegisterTables(geom.rects || [], pages[pageIdx] || [])
       .map(t => ({ ...t, page: pageIdx }))
+      .filter(t => !sectionedTables.some(g => g.page === pageIdx && t.bottom <= g.top && t.top >= g.bottom))
       .filter(t => !ratingGrids.some(g => g.page === pageIdx && t.bottom <= g.top + HEADER_BAND && t.top >= g.bottom)))
   const inRegisterTable = (page, y) => registerTables.some(t =>
-    t.page === page && y >= t.bottom - 2 && y <= t.top + 2)
+    t.page === page && y >= t.bottom - 2 && y <= t.top + 2) ||
+    sectionedTables.some(t => t.page === page && y >= t.bottom - 2 && y <= t.top + 2)
   const inRatingGrid = (page, y) => inRegisterTable(page, y) || ratingGrids.some(g =>
     g.page === page && y >= g.bottom - 2 && y <= g.top + HEADER_BAND)
   const inRatingCell = (page, r) => inRegisterTable(page, r.y + r.h / 2) || ratingGrids.some(g => g.page === page && g.rows.some(row =>
@@ -619,6 +626,26 @@ export async function parsePdf(file) {
         })),
       },
     }
+  })
+  const sectionFields = sectionedTables.flatMap((t, ti) => {
+    const sample = pages[t.page]?.[0]
+    return t.entries.map((e, ei) => ({
+      id: `f_sec_${t.page}_${ti}_${ei}_${Date.now().toString(36)}`,
+      label: e.label,
+      type: /\bdate\b/i.test(e.label) ? 'date' : 'text',
+      required: false,
+      owner: 'requester',
+      options: '',
+      pdfCoords: {
+        page: t.page,
+        x: e.cell.x + 1.5,
+        y: e.cell.y + 1.5,
+        width: Math.max(10, e.cell.w - 3),
+        height: Math.max(8, e.cell.h - 3),
+        pageWidth: sample?.pageWidth,
+        pageHeight: sample?.pageHeight,
+      },
+    }))
   })
   const registerFields = registerTables.flatMap((t, ti) => {
     const sample = pages[t.page]?.[0]
@@ -1054,6 +1081,15 @@ export async function parsePdf(file) {
     })
     fields.splice(at < 0 ? fields.length : at, 0, lf)
   }
+  for (const t of sectionedTables) {
+    const mine = sectionFields.filter(f => f.pdfCoords.page === t.page &&
+      f.pdfCoords.y >= t.bottom - 2 && f.pdfCoords.y <= t.top)
+    const at = fields.findIndex(f => {
+      const c = f.pdfCoords || {}
+      return c.page > t.page || (c.page === t.page && (c.y + (c.height || 0)) < t.bottom)
+    })
+    fields.splice(at < 0 ? fields.length : at, 0, ...mine)
+  }
   for (const t of registerTables) {
     const mine = registerFields.filter(f => f.pdfCoords.page === t.page &&
       f.pdfCoords.y >= t.bottom - 2 && f.pdfCoords.y <= t.top)
@@ -1067,11 +1103,21 @@ export async function parsePdf(file) {
 
   // Deduplicate by label (table structures repeat the same label text, and a
   // box both passes independently found carries the same label from each).
-  const seen = new Set()
+  // Two fields with one name but standing in different places are two inputs (a
+  // "Designation" under "Prepared by" and another under "Reviewed"), so a repeat
+  // is dropped only when it sits on the first one; otherwise it is kept and
+  // numbered.
+  const seen = new Map()
   const deduped = fields.filter(f => {
     const key = f.label.toLowerCase()
-    if (seen.has(key)) return false
-    seen.add(key)
+    const c = f.pdfCoords || {}
+    const placed = seen.get(key)
+    if (!placed) { seen.set(key, [{ ...c, n: 1 }]); return true }
+    const same = placed.some(o => o.page === c.page &&
+      Math.abs((o.x || 0) - (c.x || 0)) <= 80 && Math.abs((o.y || 0) - (c.y || 0)) <= 12)
+    if (same) return false
+    placed.push({ ...c, n: placed.length + 1 })
+    f.label = `${f.label} ${placed.length}`
     return true
   })
 

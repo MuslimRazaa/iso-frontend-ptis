@@ -144,12 +144,12 @@ export async function extractPageGeometry(page, OPS) {
     }
   }
 
-  const hlines = boxes.filter(b => b.h <= 2.5 && b.w >= 20)
+  const hlines = boxes.filter(b => b.h <= 2.5 && b.w >= 10)
   // Verticals matter as much as horizontals: plenty of producers stroke a
   // table as individual lines rather than emitting a rectangle per cell, and
   // without these such a grid has no detectable cells at all.
   const vlines = boxes.filter(b => b.w <= 2.5 && b.h >= 10)
-  const drawnRects = boxes.filter(b => b.w > 16 && b.h > 8)
+  const drawnRects = boxes.filter(b => b.w > 8 && b.h > 8)
 
   return {
     hlines,
@@ -945,6 +945,162 @@ export function detectRegisterTables(rects, textItems) {
     })
   }
   return out
+}
+
+/**
+ * Finds a table made of several differently-shaped sections stacked in one
+ * frame — a cleaning sheet whose "Daily" rows have 31 day columns, whose
+ * "Weekly" row has four week boxes and whose "Monthly" row has one wide box,
+ * each under its own heading row and sharing one "Checked by" column.
+ *
+ * A column grid cannot describe that (the columns change from section to
+ * section), so each filled cell is read on its own: its row says WHAT is being
+ * done (the task text beside it, under the section's label) and the nearest
+ * heading above it that sits over the cell says WHEN or WHICH (a day number, a
+ * week, "Checked By").
+ *
+ * Tables of one uniform shape are left to detectRegisterTables.
+ *
+ * Returns { top, bottom, entries: [{ label, cell }] }; `cell` is the drawn box.
+ */
+export function detectSectionedTables(rects, textItems) {
+  // One box per cell: a box mostly covered by a bigger one is the same cell.
+  const sized = rects.filter(r => r.w >= 8 && r.h >= 8 && r.h <= 90)
+  const area = (r) => r.w * r.h
+  const overlap = (a, b) => {
+    const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)
+    const oy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y)
+    return ox > 0 && oy > 0 ? ox * oy : 0
+  }
+  const boxes = sized.filter((r, i) => !sized.some((o, j) => {
+    if (i === j) return false
+    if (overlap(r, o) / area(r) < 0.7) return false
+    return area(o) > area(r) || (area(o) === area(r) && j < i)
+  }))
+
+  const bands = []
+  for (const b of [...boxes].sort((a, c) => c.y - a.y || a.x - c.x)) {
+    const band = bands.find(r => Math.abs(r.y - b.y) <= 2.5 && Math.abs(r.h - b.h) <= 4)
+    if (band) band.cells.push(b)
+    else bands.push({ y: b.y, h: b.h, cells: [b] })
+  }
+  bands.sort((a, b) => b.y - a.y)
+  for (const band of bands) {
+    band.cells.sort((a, b) => a.x - b.x)
+    // Cells of one row share its extent; take the band's own.
+    band.top = Math.max(...band.cells.map(c => c.y + c.h))
+    band.bottom = Math.min(...band.cells.map(c => c.y))
+    for (const c of band.cells) c.text = textInside(c, textItems)
+  }
+
+  // A data row has cells to fill on the right; a heading row does not — its
+  // rightmost cell is printed, or it has more text cells than empty ones.
+  for (const band of bands) {
+    const texts = band.cells.filter(c => c.text.length).length
+    const empties = band.cells.length - texts
+    const last = band.cells[band.cells.length - 1]
+    band.data = empties >= 2 && empties >= texts && last.text.length === 0
+  }
+
+  // Bands that touch form one stack.
+  const stacks = []
+  for (const band of bands) {
+    const stack = stacks[stacks.length - 1]
+    const prev = stack && stack[stack.length - 1]
+    if (prev && prev.bottom - band.top <= 3 && prev.bottom - band.top >= -3) stack.push(band)
+    else stacks.push([band])
+  }
+
+  const tables = []
+  for (const stack of stacks) {
+    const dataBands = stack.filter(b => b.data)
+    if (dataBands.length < 2) continue
+
+    // Only a stack that changes shape belongs here.
+    const sameShape = (a, b) => a.cells.length === b.cells.length &&
+      a.cells.every((c, i) => Math.abs(c.x - b.cells[i].x) <= 3 && Math.abs(c.w - b.cells[i].w) <= 4)
+    const separated = stack.some((b, i) => !b.data && i > 0 && i < stack.length - 1 &&
+      stack.slice(0, i).some(x => x.data) && stack.slice(i + 1).some(x => x.data))
+    if (!separated && dataBands.every(b => sameShape(b, dataBands[0]))) continue
+
+    // Consecutive data rows with no heading between them are one section.
+    const sections = []
+    for (const band of stack) {
+      if (!band.data) { sections.push(null); continue }
+      const last = sections[sections.length - 1]
+      if (last) last.push(band)
+      else sections.push([band])
+    }
+
+    const norm = (t) => t.replace(/(\d)\s+(st|nd|rd|th)\b/gi, '$1$2').replace(/\s+/g, ' ').trim()
+    const textOf = (items) => norm([...items]
+      // A raised "st" / "nd" belongs to the number before it, on the same line.
+      .sort((a, b) => Math.abs(b.pdfY - a.pdfY) > 5 ? b.pdfY - a.pdfY : a.x - b.x)
+      .map(t => t.text.trim()).join(' '))
+
+    const captionFor = (cell, bandIndex) => {
+      const x0 = cell.x - 1, x1 = cell.x + cell.w + 1
+      for (let i = bandIndex - 1; i >= 0; i--) {
+        const head = stack[i]
+        if (head.data) continue
+        const items = textItems.filter(t => {
+          const cx = t.x + (t.width || 0) / 2
+          return cx >= x0 && cx <= x1 && t.pdfY > head.bottom - 1 && t.pdfY < head.top
+        })
+        if (!items.length) continue
+        // Items in one heading cell are one caption; several cells under a
+        // wide box make it ambiguous, so it gets none rather than a wrong one.
+        const groups = new Map()
+        for (const t of items) {
+          const home = head.cells.find(c => t.x >= c.x - 2 && t.x + (t.width || 0) <= c.x + c.w + 2) || t
+          if (!groups.has(home)) groups.set(home, [])
+          groups.get(home).push(t)
+        }
+        if (groups.size !== 1) return ''
+        const text = textOf([...groups.values()][0])
+        const digits = head.cells.length ? textItems.filter(t => /^\d{1,2}$/.test(t.text.trim()) &&
+          t.pdfY > head.bottom - 1 && t.pdfY < head.top).length : 0
+        return /^\d{1,2}$/.test(text) && digits >= 25 ? `Day ${text}` : text
+      }
+      return ''
+    }
+
+    const entriesOut = []
+    for (const group of sections) {
+      if (!group) continue
+      const gTop = Math.max(...group.map(b => b.top)), gBottom = Math.min(...group.map(b => b.bottom))
+      for (const band of group) {
+        const bi = stack.indexOf(band)
+        const textCells = band.cells.filter(c => c.text.length)
+        if (!textCells.length) continue
+        const taskCell = textCells[textCells.length - 1]
+        const entries = band.cells.filter(c => !c.text.length && c.x >= taskCell.x + taskCell.w - 2)
+        if (!entries.length) continue
+
+        // The section's own label sits left of the task cell, and a merged label
+        // may span rows (and have no cell of its own).
+        const labelItems = (lo, hi) => textItems.filter(t =>
+          t.x + (t.width || 0) <= taskCell.x + 2 && t.pdfY > lo - 1 && t.pdfY < hi &&
+          !ROW_MARKER.test(t.text.trim()))
+        // A label of this row's own wins; a merged one is read across the section.
+        const own = labelItems(band.bottom, band.top)
+        const sectionLabel = textOf(own.length ? own : labelItems(gBottom, gTop))
+        const task = textOf(taskCell.text)
+        for (const cell of entries) {
+          const caption = captionFor(cell, bi)
+          const label = [sectionLabel, task, caption].filter(Boolean).join(' — ')
+          if (label) entriesOut.push({ label, cell })
+        }
+      }
+    }
+    if (!entriesOut.length) continue
+    tables.push({
+      top: Math.max(...stack.map(b => b.top)),
+      bottom: Math.min(...dataBands.map(b => b.bottom)),
+      entries: entriesOut,
+    })
+  }
+  return tables
 }
 
 /** The cell immediately to the right of `cell` on the same row, if any. */
