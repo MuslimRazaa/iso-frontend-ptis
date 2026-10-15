@@ -96,6 +96,19 @@ function FieldPositionEditor({ pdfBase64, fields, approvalRoles, onSave, onClose
   const [view, setView] = useState(null)             // { viewport, pageSize }
   const [localFields, setLocalFields] = useState(() => fields.map(f => ({ ...f })))
   const [selectedId, setSelectedId] = useState(null)
+  // Every selected box. `selectedId` stays the one the side panel edits (the last
+  // one picked); this is the whole group that moves and nudges together.
+  const [groupIds, setSelectedIds] = useState([])
+  // A selection made anywhere else (list click, a new field, changing page) is a
+  // single selection; one made here as a group keeps its members.
+  const selectedIds = useMemo(
+    () => (selectedId ? (groupIds.includes(selectedId) ? groupIds : [selectedId]) : []),
+    [selectedId, groupIds])
+  const [marquee, setMarquee] = useState(null)    // { x0, y0, x1, y1 } in surface px
+  const marqueeRef = useRef(null)
+  const [bulkFind, setBulkFind] = useState('')
+  const [bulkReplace, setBulkReplace] = useState('')
+  const [bulkNote, setBulkNote] = useState('')
   const [placingId, setPlacingId] = useState(null)
   const [loadError, setLoadError] = useState('')
   const [draft, setDraft] = useState(null)          // new-field form, null = closed
@@ -160,6 +173,12 @@ function FieldPositionEditor({ pdfBase64, fields, approvalRoles, onSave, onClose
       f.id === fieldId ? { ...f, pdfCoords: { ...(f.pdfCoords || {}), ...patch } } : f))
   }, [])
 
+  // Several boxes at once: `patches` maps a field id to the coords to merge in.
+  const patchMany = useCallback((patches) => {
+    setLocalFields(prev => prev.map(f =>
+      patches[f.id] ? { ...f, pdfCoords: { ...(f.pdfCoords || {}), ...patches[f.id] } } : f))
+  }, [])
+
   // ── Drag / resize ──────────────────────────────────────────────────────────
   useEffect(() => {
     const onMove = (e) => {
@@ -167,6 +186,18 @@ function FieldPositionEditor({ pdfBase64, fields, approvalRoles, onSave, onClose
       if (!drag || !view) return
       const dx = e.clientX - drag.startX
       const dy = e.clientY - drag.startY
+
+      if (drag.group) {
+        const patches = {}
+        for (const g of drag.group) {
+          patches[g.fieldId] = {
+            page: pageIndex,
+            ...screenToPdf({ ...g.box, left: g.box.left + dx, top: g.box.top + dy }, view.viewport, view.pageSize),
+          }
+        }
+        patchMany(patches)
+        return
+      }
 
       let box
       if (drag.mode === 'move') {
@@ -188,7 +219,7 @@ function FieldPositionEditor({ pdfBase64, fields, approvalRoles, onSave, onClose
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
     }
-  }, [view, pageIndex, patchCoords])
+  }, [view, pageIndex, patchCoords, patchMany])
 
   // ── Option ticks (choice fields) ───────────────────────────────────────────
   // A selected choice is ticked on the form's own printed option rather than
@@ -348,9 +379,197 @@ function FieldPositionEditor({ pdfBase64, fields, approvalRoles, onSave, onClose
     e.stopPropagation()
     const box = pdfToScreen(field.pdfCoords, view.viewport)
     if (!box) return
+
+    // Ctrl / Cmd / Shift + click adds a box to the selection or takes it out.
+    if (mode === 'move' && (e.ctrlKey || e.metaKey || e.shiftKey)) {
+      const has = selectedIds.includes(field.id)
+      const next = has ? selectedIds.filter(id => id !== field.id) : [...selectedIds, field.id]
+      setSelectedIds(next)
+      setSelectedId(has ? (next[next.length - 1] || null) : field.id)
+      return
+    }
+
+    // Dragging a box that is part of a group drags the whole group.
+    if (mode === 'move' && selectedIds.length > 1 && selectedIds.includes(field.id)) {
+      const group = localFields
+        .filter(f => selectedIds.includes(f.id) && normalizePdfCoords(f.pdfCoords))
+        .map(f => ({ fieldId: f.id, box: pdfToScreen(f.pdfCoords, view.viewport) }))
+        .filter(g => g.box)
+      setSelectedId(field.id)
+      dragRef.current = { fieldId: field.id, mode, startX: e.clientX, startY: e.clientY, box, group }
+      return
+    }
+
+    setSelectedIds([field.id])
     setSelectedId(field.id)
     dragRef.current = { fieldId: field.id, mode, startX: e.clientX, startY: e.clientY, box }
   }
+
+  // ── Renaming many fields at once ───────────────────────────────────────────
+  // Imported fields from one table share most of their name ("Daily — a. Cleaning
+  // of floor — Day 1", "… Day 2") and only the last words say which input it is.
+  // These work on the selected boxes' names so the shared part goes in one step.
+  const wordsOf = (label) => String(label || '').trim().split(/\s+/).filter(Boolean)
+  // Longest run of whole words every name starts with (or ends with). At least one
+  // word is always left, so no name can be emptied.
+  const commonWords = (labels, fromEnd) => {
+    const lists = labels.map(wordsOf).map(w => (fromEnd ? [...w].reverse() : w))
+    if (lists.length < 2) return ''
+    const max = Math.min(...lists.map(w => w.length)) - 1
+    let n = 0
+    while (n < max && lists.every(w => w[n].toLowerCase() === lists[0][n].toLowerCase())) n++
+    const run = lists[0].slice(0, n)
+    return (fromEnd ? run.reverse() : run).join(' ')
+  }
+  const SEPARATORS = /^[\s—–\-:|,.]+|[\s—–\-:|,.]+$/g
+  const tidy = (label) => label.replace(SEPARATORS, '').replace(/\s+/g, ' ')
+
+  // Names made from a table read "Row 3 — <heading>". The row number differs on
+  // every row, which would stop the shared text at the very first word, so that
+  // part is set aside while the rest is compared and put back afterwards.
+  const ROW_PREFIX = /^(Row\s+\d+\s*[—–-]\s*)/i
+  const selectedLabels = localFields.filter(f => selectedIds.includes(f.id)).map(f => f.label)
+  const allRowNames = selectedLabels.length > 1 && selectedLabels.every(l => ROW_PREFIX.test(l))
+  const bodyOf = (l) => (allRowNames ? l.replace(ROW_PREFIX, '') : l)
+  const sharedStart = commonWords(selectedLabels.map(bodyOf), false)
+  const sharedEnd = commonWords(selectedLabels.map(bodyOf), true)
+
+  const renameSelected = (transform, doneNote) => {
+    let changed = 0, skipped = 0
+    setLocalFields(prev => prev.map(f => {
+      if (!selectedIds.includes(f.id)) return f
+      const prefix = allRowNames ? (f.label.match(ROW_PREFIX)?.[1] || '') : ''
+      const body = tidy(transform(prefix ? f.label.slice(prefix.length) : f.label))
+      if (!body) { skipped++; return f }
+      const next = prefix + body
+      if (next !== f.label) changed++
+      return { ...f, label: next }
+    }))
+    setBulkNote(`${doneNote(changed)}${skipped ? ` ${skipped} left alone (the result would be empty).` : ''} Save to keep this.`)
+  }
+  const stripAt = (words, label, fromEnd) => {
+    const parts = wordsOf(label)
+    const n = wordsOf(words).length
+    return (fromEnd ? parts.slice(0, parts.length - n) : parts.slice(n)).join(' ')
+  }
+  const removeShared = (words, fromEnd) =>
+    renameSelected(l => stripAt(words, l, fromEnd), n => `Removed the shared words from ${n} name(s).`)
+  const replaceInSelected = () => {
+    if (!bulkFind) return
+    // The text is searched for literally, not as a pattern.
+    const re = new RegExp(bulkFind.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')
+    renameSelected(l => l.replace(re, bulkReplace), n => `Changed ${n} name(s).`)
+  }
+  // Picks every field (on any page, placed or not) whose name begins with the same
+  // words as the selected ones, so the whole family can be renamed together.
+  const selectSameStart = () => {
+    const prefix = sharedStart.toLowerCase()
+    if (!prefix) return
+    const ids = localFields
+      .filter(f => (allRowNames && ROW_PREFIX.test(f.label) ? f.label.replace(ROW_PREFIX, '') : f.label).toLowerCase().startsWith(prefix))
+      .map(f => f.id)
+    setSelectedIds(ids)
+    setSelectedId(ids[ids.length - 1] || null)
+    setBulkNote(`Selected ${ids.length} field(s) that start with the same words.`)
+  }
+
+  // ── Rubber-band selection ──────────────────────────────────────────────────
+  // Dragging on an empty part of the page draws a rectangle and selects every
+  // box it touches (with Ctrl / Cmd / Shift held it adds to the selection).
+  const startMarquee = (e) => {
+    if (!view || placingId || placingOption || e.button !== 0) return
+    const rect = surfaceRef.current.getBoundingClientRect()
+    const x = e.clientX - rect.left, y = e.clientY - rect.top
+    marqueeRef.current = { x0: x, y0: y, x1: x, y1: y, moved: false, add: e.ctrlKey || e.metaKey || e.shiftKey, rect }
+  }
+
+  useEffect(() => {
+    const onMove = (e) => {
+      const m = marqueeRef.current
+      if (!m) return
+      m.x1 = e.clientX - m.rect.left
+      m.y1 = e.clientY - m.rect.top
+      if (!m.moved && Math.hypot(m.x1 - m.x0, m.y1 - m.y0) < 4) return
+      m.moved = true
+      setMarquee({ x0: m.x0, y0: m.y0, x1: m.x1, y1: m.y1 })
+    }
+    const onUp = () => {
+      const m = marqueeRef.current
+      marqueeRef.current = null
+      if (!m) return
+      setMarquee(null)
+      if (!m.moved) {
+        // A plain click on the page clears the selection.
+        if (!m.add) { setSelectedIds([]); setSelectedId(null) }
+        return
+      }
+      if (!view) return
+      const l = Math.min(m.x0, m.x1), r = Math.max(m.x0, m.x1)
+      const t = Math.min(m.y0, m.y1), b = Math.max(m.y0, m.y1)
+      const hit = localFields.filter(f => {
+        const c = normalizePdfCoords(f.pdfCoords)
+        if (!c || c.page !== pageIndex) return false
+        const box = pdfToScreen(f.pdfCoords, view.viewport)
+        return box && box.left < r && box.left + box.width > l && box.top < b && box.top + box.height > t
+      }).map(f => f.id)
+      const next = m.add ? [...new Set([...selectedIds, ...hit])] : hit
+      setSelectedIds(next)
+      setSelectedId(next[next.length - 1] || null)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+  }, [view, pageIndex, localFields, selectedIds])
+
+  // ── Keyboard ───────────────────────────────────────────────────────────────
+  // Arrow keys nudge every selected box by 1pt (Shift: 10pt); Alt + arrows resize
+  // them instead. Ctrl/Cmd + A selects every box on the page, Esc clears. Ignored
+  // while typing in a field, so the side panel's inputs keep their own arrows.
+  useEffect(() => {
+    const onKey = (e) => {
+      const tag = (e.target?.tagName || '').toLowerCase()
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.target?.isContentEditable) return
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+        e.preventDefault()
+        const ids = localFields
+          .filter(f => { const c = normalizePdfCoords(f.pdfCoords); return c && c.page === pageIndex })
+          .map(f => f.id)
+        setSelectedIds(ids)
+        setSelectedId(ids[ids.length - 1] || null)
+        return
+      }
+      if (e.key === 'Escape' && selectedIds.length) {
+        setSelectedIds([]); setSelectedId(null)
+        return
+      }
+
+      const dir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[e.key]
+      if (!dir || !selectedIds.length) return
+      e.preventDefault()
+      const step = e.shiftKey ? 10 : 1
+      const patches = {}
+      for (const f of localFields) {
+        if (!selectedIds.includes(f.id)) continue
+        const c = normalizePdfCoords(f.pdfCoords)
+        if (!c) continue
+        patches[f.id] = e.altKey
+          // Right / up grow the box, left / down shrink it. The top edge stays put,
+          // so a box that gets taller grows downward like the drag handle does.
+          ? {
+              width: round2(Math.max(1, c.width + dir[0] * step)),
+              ...(dir[1] ? { height: round2(Math.max(1, c.height + dir[1] * step)), y: round2(c.y - dir[1] * step) } : {}),
+            }
+          : { x: round2(c.x + dir[0] * step), y: round2(c.y + dir[1] * step) }
+      }
+      patchMany(patches)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [localFields, selectedIds, pageIndex, patchMany])
 
   // Click on the page while a field is armed → drop its box there.
   const handleSurfaceClick = (e) => {
@@ -720,6 +939,49 @@ function FieldPositionEditor({ pdfBase64, fields, approvalRoles, onSave, onClose
               </div>
             )}
 
+            {selectedIds.length > 1 && (
+              <div style={{ ...S.panel, background: '#eef4ff', borderColor: '#c9dafc', color: '#274690', fontSize: 12, lineHeight: 1.5 }}>
+                <strong>{selectedIds.length} boxes selected.</strong> Drag any of them to move the group, or use the
+                arrow keys (Shift = 10pt, Alt + arrows = resize). Esc clears.
+              </div>
+            )}
+
+            {selectedIds.length > 1 && (
+              <div style={S.panel}>
+                <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Rename the selected names</div>
+                {sharedStart ? (
+                  <>
+                    <label style={S.label}>They all start with</label>
+                    <div style={{ fontSize: 12, color: '#33333f', background: '#f4f4f8', borderRadius: 6, padding: '6px 8px', wordBreak: 'break-word' }}>{sharedStart}</div>
+                    <button type="button" style={{ ...S.smallGhostBtn, marginTop: 6, width: '100%' }} onClick={() => removeShared(sharedStart, false)}>
+                      Remove it from all {selectedIds.length}
+                    </button>
+                    <button type="button" style={{ ...S.smallGhostBtn, marginTop: 6, width: '100%' }} onClick={selectSameStart}>
+                      Select every field that starts like this
+                    </button>
+                  </>
+                ) : (
+                  <div style={{ fontSize: 12, color: '#7a7a8c' }}>These names do not start with the same words.</div>
+                )}
+                {sharedEnd && (
+                  <>
+                    <label style={S.label}>They all end with</label>
+                    <div style={{ fontSize: 12, color: '#33333f', background: '#f4f4f8', borderRadius: 6, padding: '6px 8px', wordBreak: 'break-word' }}>{sharedEnd}</div>
+                    <button type="button" style={{ ...S.smallGhostBtn, marginTop: 6, width: '100%' }} onClick={() => removeShared(sharedEnd, true)}>
+                      Remove it from all {selectedIds.length}
+                    </button>
+                  </>
+                )}
+                <label style={S.label}>Or find and replace in these names</label>
+                <input style={S.input} value={bulkFind} onChange={(e) => setBulkFind(e.target.value)} placeholder="Find (leave replace empty to delete it)" />
+                <input style={{ ...S.input, marginTop: 6 }} value={bulkReplace} onChange={(e) => setBulkReplace(e.target.value)} placeholder="Replace with" />
+                <button type="button" style={{ ...S.smallGhostBtn, marginTop: 6, width: '100%' }} onClick={replaceInSelected} disabled={!bulkFind}>
+                  Replace in all {selectedIds.length}
+                </button>
+                {bulkNote && <div style={{ fontSize: 12, color: '#1a7f37', marginTop: 8 }}>{bulkNote}</div>}
+              </div>
+            )}
+
             {selected && selectedCoords && (
               <div style={S.panel}>
                 <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>{selected.label}</div>
@@ -946,9 +1208,19 @@ function FieldPositionEditor({ pdfBase64, fields, approvalRoles, onSave, onClose
               <div
                 ref={surfaceRef}
                 onClick={handleSurfaceClick}
-                style={{ ...S.surface, cursor: (placingId || placingOption) ? 'crosshair' : 'default' }}
+                onPointerDown={startMarquee}
+                style={{ ...S.surface, cursor: (placingId || placingOption) ? 'crosshair' : 'default', touchAction: 'none', userSelect: 'none' }}
               >
                 <canvas ref={canvasRef} style={{ display: 'block' }} />
+
+                {marquee && (
+                  <div style={{
+                    position: 'absolute', zIndex: 6, pointerEvents: 'none',
+                    left: Math.min(marquee.x0, marquee.x1), top: Math.min(marquee.y0, marquee.y1),
+                    width: Math.abs(marquee.x1 - marquee.x0), height: Math.abs(marquee.y1 - marquee.y0),
+                    border: '1px dashed #1a73e8', background: 'rgba(26,115,232,0.10)',
+                  }} />
+                )}
 
                 {/* Where each selected option's tick will land. Marks with no box
                     of their own are shown too — dashed, since their spot is
@@ -978,7 +1250,7 @@ function FieldPositionEditor({ pdfBase64, fields, approvalRoles, onSave, onClose
                 {view && onThisPage.map(f => {
                   const box = pdfToScreen(f.pdfCoords, view.viewport)
                   if (!box) return null
-                  const isSel = selectedId === f.id
+                  const isSel = selectedIds.includes(f.id) || selectedId === f.id
                   return (
                     <div
                       key={f.id}
