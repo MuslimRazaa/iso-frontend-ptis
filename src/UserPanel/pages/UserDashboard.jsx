@@ -1,11 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { API_ENDPOINTS } from '../../config/api';
+import { Link, useNavigate } from 'react-router-dom';
+import { API_ENDPOINTS, API_BASE_URL } from '../../config/api';
+import { findExpiringCertificates, certificateLink } from '../../Testing/certificateExpiry';
+import ExpiringCertificatesBanner from '../../components/ExpiringCertificatesBanner';
 import { getCurrentEmployeeId } from '../../ISOForms/utils/currentEmployee';
 import { summarise, averageCompletion } from '../../LMS/utils/courseProgressState';
 
 const UserDashboard = () => {
     const [userPermissions, setUserPermissions] = useState({});
+    const navigate = useNavigate();
+    // Managers are shown the certificates about to run out, the same warning the
+    // admin dashboard carries. A manager is whoever's designation (kept by the ERP's
+    // HR module) reads "Manager" — the department stands in only when no designation
+    // comes through.
+    const isManager = /manager/i.test(String(userPermissions.designation || userPermissions.department || ''));
+    const [expiringCerts, setExpiringCerts] = useState([]);
+    useEffect(() => {
+        if (!isManager) return undefined;
+        let active = true;
+        fetch(`${API_BASE_URL}/api/test-results/legacy`)
+            .then(res => (res.ok ? res.json() : []))
+            .then(rows => { if (active) setExpiringCerts(findExpiringCertificates(Array.isArray(rows) ? rows : [])); })
+            .catch(() => { /* no warning if the results cannot be read */ });
+        return () => { active = false; };
+    }, [isManager]);
     const [quickStats, setQuickStats] = useState([
         { label: "My Courses", value: "8", status: "ok" },
         { label: "Completion Rate", value: "62%", status: "ok" },
@@ -302,6 +320,12 @@ const UserDashboard = () => {
     return (
         <div className="dashboard-shell">
             <main className="dashboard-content">
+                {isManager && (
+                    <ExpiringCertificatesBanner
+                        items={expiringCerts}
+                        onOpenCertificate={userPermissions.testing_admin ? (item) => navigate(certificateLink(item, '/user/testing')) : undefined}
+                    />
+                )}
                 <section className="hero-row">
                     <article className="intro-panel">
                         <p className="eyebrow">Hello {userName}</p>
