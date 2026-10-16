@@ -4,7 +4,7 @@ import API_BASE_URL, { API_ENDPOINTS } from '../../config/api'
 import { showToast } from '../../components/Toast'
 import { getCurrentEmployeeId } from '../utils/currentEmployee'
 import DynamicField from '../components/DynamicField'
-import { isFieldEmpty } from '../utils/fieldHelpers'
+import { isFieldEmpty, signaturesToStamp, nowDateTimeValue } from '../utils/fieldHelpers'
 import { resolveSignerName, stampSignature } from '../utils/signature'
 import { getOfflineEntry, updateOfflineEntry, deleteOfflineEntry, getOfflineTemplate } from '../utils/offlineStore'
 import { downloadFilledPdf } from '../pdf/fillOriginalPdf'
@@ -136,10 +136,17 @@ function FormDetail() {
       let data = {}
       try { data = typeof a.approver_data === 'string' ? JSON.parse(a.approver_data || '{}') : (a.approver_data || {}) }
       catch { data = {} }
+      // A role that has yet to decide gets its "Date & Time" fields set to now, as
+      // a starting point the approver can change.
+      if (a.status === 'pending') {
+        for (const f of (template?.fields || [])) {
+          if (f.owner === a.role_key && f.type === 'datetime' && !data[f.id]) data[f.id] = nowDateTimeValue()
+        }
+      }
       next[a.role_key] = data
     }
     setApproverValuesByRole(next)
-  }, [approvals])
+  }, [approvals, template])
 
   const requesterFields = useMemo(() => (template?.fields || []).filter(f => (f.owner || 'requester') === 'requester'), [template])
   const fieldsForRole = (roleKey) => (template?.fields || []).filter(f => f.owner === roleKey)
@@ -252,8 +259,10 @@ function FormDetail() {
     // of the form carries: the date is set now, and the name is whatever was
     // typed, falling back to whoever is deciding.
     const signedValues = { ...roleValues }
+    // A row left completely empty (by the requester and by every role) is not signed.
+    const toStamp = signaturesToStamp(template?.fields || [], { ...formValues, ...flatApproverValues, ...roleValues })
     for (const field of roleFields) {
-      if (field.type !== 'signature') continue
+      if (field.type !== 'signature' || !toStamp.has(field.id)) continue
       signedValues[field.id] = stampSignature(signedValues[field.id], signerName)
     }
 

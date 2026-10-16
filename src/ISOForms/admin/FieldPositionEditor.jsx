@@ -988,7 +988,12 @@ function FieldPositionEditor({ pdfBase64, fields, approvalRoles, onSave, onClose
                 <label style={S.label}>Type</label>
                 <StyledSelect
                   value={selected.type}
-                  onChange={(v) => setLocalFields(prev => prev.map(f => (f.id === selected.id ? { ...f, type: v } : f)))}
+                  onChange={(v) => setLocalFields(prev => prev.map(f => {
+                    if (f.id !== selected.id) return f
+                    // Choosing Signature centres it, unless an alignment was already set.
+                    const centre = v === 'signature' && f.pdfCoords && !f.pdfCoords.align
+                    return { ...f, type: v, ...(centre ? { pdfCoords: { ...f.pdfCoords, align: 'center' } } : null) }
+                  }))}
                   options={[]}
                   extraOptions={FIELD_TYPES}
                   style={{ ...S.input, maxWidth: '100%', boxSizing: 'border-box' }}

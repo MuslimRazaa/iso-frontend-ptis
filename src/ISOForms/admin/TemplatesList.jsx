@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Eye, Plus, Pencil, Trash2, X, Search, Calendar } from 'lucide-react'
+import { Eye, Plus, Pencil, Trash2, X, Search, Calendar, Download } from 'lucide-react'
 import { API_ENDPOINTS } from '../../config/api'
 import { showToast } from '../../components/Toast'
 import { getActorId, getActorName } from '../../utils/actorIdentity'
 import { SEED_TEMPLATES, SEED_VERSION } from '../seedTemplates'
 import { ensureSeeded, getOfflineTemplates, deleteOfflineTemplate } from '../utils/offlineStore'
+import { base64ToBytes } from '../utils/base64'
 import PaginationBar from '../../components/PaginationBar'
 import ClearFilterButton from '../../components/ClearFilterButton'
 import StyledSelect from '../../components/StyledSelect'
@@ -200,6 +201,27 @@ function TemplatesList() {
     return filteredTemplates.slice(start, start + PAGE_SIZE)
   }, [filteredTemplates, safePage])
 
+  // Saves the template's own blank PDF. The list leaves the (multi-MB) PDF out, so
+  // it is fetched for the one template being downloaded.
+  const handleDownload = async (template) => {
+    try {
+      let base64 = template.originalPdf
+      if (!base64) {
+        const res = await fetch(`${API_ENDPOINTS.ISO_FORMS_TEMPLATES}/${template.id}`)
+        if (res.ok) base64 = (await res.json()).originalPdf
+      }
+      if (!base64) { showToast('This template has no PDF attached to download.', 'error'); return }
+      const url = URL.createObjectURL(new Blob([base64ToBytes(base64)], { type: 'application/pdf' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${String(template.name || 'template').replace(/[\\/:*?"<>|]+/g, '_').trim()}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      showToast('Could not download the template.', 'error')
+    }
+  }
+
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this template? Forms already submitted from it will keep their data.')) return
     const actorId = getActorId()
@@ -383,6 +405,14 @@ function TemplatesList() {
                         {/* Admin-only: edit template structure + delete */}
                         {isAdmin && (
                           <>
+                            <button
+                              type="button"
+                              title="Download template PDF"
+                              className="ghost-btn small"
+                              onClick={() => handleDownload(t)}
+                            >
+                              <Download size={15} />
+                            </button>
                             <Link to={`${base}/templates/${t.id}/edit`} style={{ textDecoration: 'none' }}>
                               <button type="button" title="Edit template" className="ghost-btn small">
                                 <Pencil size={15} />

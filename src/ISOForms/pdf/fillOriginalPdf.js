@@ -1,6 +1,7 @@
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
 import { normalizePdfCoords, optionMarkBox, DEFAULT_FONT_SIZE } from '../utils/pdfCoords'
 import { signatureText } from '../utils/signature'
+import { hasContent, formatDateTimeValue } from '../utils/fieldHelpers'
 import { base64ToBytes } from '../utils/base64'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -54,6 +55,7 @@ const displayValue = (field, value) => {
     if (!Array.isArray(value) || !value.length) return ''
     return value.join(', ')
   }
+  if (field.type === 'datetime') return formatDateTimeValue(value)
   if (field.type === 'date') {
     if (!value) return ''
     try {
@@ -209,6 +211,75 @@ const drawControlledDocumentNotice = (pages, font) => {
 }
 
 /**
+ * Covers the unused rows at the end of a register table.
+ *
+ * A register template prints far more rows than most forms fill. Rows cannot be
+ * taken out of the template's PDF, so each unused one is painted over in white
+ * instead — but only the run of empty rows at the END of a table, since a white
+ * band in the middle would look like a hole. The cover starts just under the last
+ * used row's bottom line, so that line stays and becomes the table's new edge.
+ * A table with nothing filled in at all is left whole.
+ */
+const hideUnusedRows = (pages, fields, allValues) => {
+  const rowMap = new Map()
+  for (const f of fields || []) {
+    const box = f.pdfCoords?.rowBox
+    if (!box || ![box.x, box.y, box.width, box.height].every(Number.isFinite)) continue
+    const page = Number.isFinite(f.pdfCoords.page) ? f.pdfCoords.page : 0
+    const key = `${page}|${Math.round(box.x)}|${Math.round(box.width)}|${Math.round(box.y)}`
+    if (!rowMap.has(key)) rowMap.set(key, { page, box, fields: [] })
+    rowMap.get(key).fields.push(f)
+  }
+
+  // Rows that stack directly on one another, with the same left edge and width,
+  // are one table.
+  const rows = [...rowMap.values()].sort((a, b) => a.page - b.page || b.box.y - a.box.y)
+  const tables = []
+  for (const row of rows) {
+    const table = tables[tables.length - 1]
+    const prev = table && table[table.length - 1]
+    if (prev && prev.page === row.page &&
+        Math.abs(prev.box.x - row.box.x) <= 3 && Math.abs(prev.box.width - row.box.width) <= 3 &&
+        prev.box.y - (row.box.y + row.box.height) <= 4 && prev.box.y - (row.box.y + row.box.height) >= -3) {
+      table.push(row)
+    } else {
+      tables.push([row])
+    }
+  }
+
+  for (const table of tables) {
+    const empty = (row) => row.fields.every(f => !hasContent(allValues[f.id]))
+    let firstUnused = table.length
+    while (firstUnused > 0 && empty(table[firstUnused - 1])) firstUnused--
+    if (firstUnused === 0 || firstUnused === table.length) continue   // all empty, or none to hide
+
+    const page = pages[table[0].page]
+    const top = table[firstUnused].box
+    const bottom = table[table.length - 1].box
+    // The line between the last used row and the first unused one. Where exactly
+    // it was drawn varies by a fraction of a point from table to table, so the
+    // cover starts a little below it and the line is then drawn again over the
+    // top, which keeps the table closed whichever way the edge fell.
+    const edge = top.y + top.height
+    const coverTop = edge - 0.6
+    const coverBottom = bottom.y - 1.2
+    page?.drawRectangle({
+      x: top.x - 1.5,
+      y: coverBottom,
+      width: top.width + 3,
+      height: coverTop - coverBottom,
+      color: rgb(1, 1, 1),
+    })
+    page?.drawLine({
+      start: { x: top.x - 0.3, y: edge },
+      end: { x: top.x + top.width + 0.3, y: edge },
+      thickness: 0.7,
+      color: rgb(0.1, 0.1, 0.1),
+    })
+  }
+}
+
+/**
  * Overlays submitted values onto the original uploaded PDF.
  *
  * Returns { bytes, skipped } — `skipped` lists fields that hold a value but
@@ -229,6 +300,7 @@ export async function fillOriginalPdf(base64, fields, formValues, approverValues
 
   const allValues = { ...formValues, ...approverValues }
   const skipped = []
+  hideUnusedRows(pages, fields, allValues)
 
   // If the template PDF is itself a fillable form, values go into its own
   // fields and the form is then flattened. That uses the appearance the form's
@@ -288,6 +360,9 @@ export async function fillOriginalPdf(base64, fields, formValues, approverValues
     if (setAcroValue(field, rawVal)) { usedAcroFields++; continue }
 
     const coords = normalizePdfCoords(field.pdfCoords)
+    // A signature reads best centred on its line, so that is the default unless
+    // an admin chose an alignment for this field.
+    if (coords && field.type === 'signature' && !field.pdfCoords?.align) coords.align = 'center'
 
     // Choice fields whose printed options have been located get a tick next to
     // each selected option — the form already prints the option text, so

@@ -18,8 +18,19 @@ import {
 import { readAcroFormFields } from './readAcroForm'
 
 // ── Type guesser ─────────────────────────────────────────────────────────────
+// A field named "Signature", "Sign" or "Signed by" is the form's signature line,
+// filled in by the app (name + date) rather than typed. Whole words only, so
+// "Designation" and "Signal" are left alone.
+const isSignatureLabel = (label) => /\bsign(ature|atures|ed)?\b/i.test(String(label || ''))
+
+// "Date & Time", "Date and Time", "Date / Time", "Date-Time" or "DateTime" — a
+// field that takes both a day and a clock time.
+const isDateTimeLabel = (label) => /\bdate\s*(&|and|\/|-)?\s*time\b/i.test(String(label || ''))
+
 const guessType = (label) => {
   const l = label.toLowerCase()
+  if (isSignatureLabel(l)) return 'signature'
+  if (isDateTimeLabel(l)) return 'datetime'
   if (/\bdate\b|tarikh/.test(l)) return 'date'
   if (/\b(name|personnel|by|inspector|assigned|responsible|verified|reported|concerned)\b/.test(l)) return 'employee'
   if (/department|dept\b/.test(l)) return 'text'
@@ -632,7 +643,7 @@ export async function parsePdf(file) {
     return t.entries.map((e, ei) => ({
       id: `f_sec_${t.page}_${ti}_${ei}_${Date.now().toString(36)}`,
       label: e.label,
-      type: /\bdate\b/i.test(e.label) ? 'date' : 'text',
+      type: isSignatureLabel(e.label) ? 'signature' : isDateTimeLabel(e.label) ? 'datetime' : /\bdate\b/i.test(e.label) ? 'date' : 'text',
       required: false,
       owner: 'requester',
       options: '',
@@ -661,7 +672,7 @@ export async function parsePdf(file) {
         label: `Row ${row.number} — ${col.caption}`,
         // Same type down a whole column: a row a little taller than its neighbours
         // (it fits two lines of the printed caption) is still a one-line entry.
-        type: picks ? 'radio' : /\bdate\b/i.test(col.caption) ? 'date' : cell.h > 60 ? 'textarea' : 'text',
+        type: picks ? 'radio' : isSignatureLabel(col.caption) ? 'signature' : isDateTimeLabel(col.caption) ? 'datetime' : /\bdate\b/i.test(col.caption) ? 'date' : cell.h > 60 ? 'textarea' : 'text',
         required: false,
         owner: 'requester',
         options: picks ? picks.map(c => c.label).join(', ') : '',
@@ -673,6 +684,8 @@ export async function parsePdf(file) {
           height: Math.max(8, cell.h - 4),
           pageWidth: sample?.pageWidth,
           pageHeight: sample?.pageHeight,
+          // Where this field's whole row sits, so an unused row can be hidden.
+          rowBox: row.box,
           ...(picks ? {
             optionMarks: picks.map(c => ({
               label: c.label,
@@ -931,6 +944,16 @@ export async function parsePdf(file) {
       // BUT blank", so it needs the strict, whole-string version — the loose
       // one was swallowing a real neighbouring "Label: ____" row as if it
       // were just another continuation line of blank space.
+      // A signature centres on its line, so its box is the line itself — the typed
+      // rule right after the label — not the stretch of page to the right of it.
+      if (type === 'signature' && !embedded) {
+        const rule = allItems
+          .filter(r => r.page === labelItem.page && RULE_RUN.test(r.text) &&
+            Math.abs(r.pdfY - labelItem.pdfY) <= 3 && r.x >= labelItem.x + labelItem.width - 2 && r.width >= 20)
+          .sort((a, b) => a.x - b.x)[0]
+        if (rule) coords = { ...coords, x: rule.x + 1, width: rule.width - 2 }
+      }
+
       const isPureBlank = (t) => /^[_.․‥…\-—–\s]*$/.test(t)
       if (!isChoice && !optionsFromNextRow && between.every(r => isPureBlank(r.text.trim()))) {
         let lastRowIdx = i
@@ -1032,7 +1055,7 @@ export async function parsePdf(file) {
           label: name,
           // Headings are not sentences, so the label heuristics misread them
           // ("Document Name" as a person). Only shape and dates read reliably.
-          type: /\bdate\b/i.test(caption) ? 'date'
+          type: isSignatureLabel(caption) ? 'signature' : isDateTimeLabel(caption) ? 'datetime' : /\bdate\b/i.test(caption) ? 'date'
             : region.h > LINE_TALL ? 'textarea'
             : 'text',
           required: false,
@@ -1136,7 +1159,11 @@ export async function parsePdf(file) {
   return {
     pages,
     // A real form definition beats anything inferred, so it wins outright.
-    fields: acroFields.length ? acroFields : deduped,
+    // A signature is centred on its line by default.
+    fields: (acroFields.length ? acroFields : deduped).map(f =>
+      (f.type === 'signature' && f.pdfCoords && !f.pdfCoords.align
+        ? { ...f, pdfCoords: { ...f.pdfCoords, align: 'center' } }
+        : f)),
     fieldSource: acroFields.length ? 'acroform' : 'detected',
     detectedFormCode,
     detectedAnyCode,

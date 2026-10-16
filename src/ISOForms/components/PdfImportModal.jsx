@@ -9,6 +9,7 @@ const FIELD_TYPES = [
   { value: 'textarea',       label: 'Long Text' },
   { value: 'number',         label: 'Number' },
   { value: 'date',           label: 'Date' },
+  { value: 'datetime',       label: 'Date & Time' },
   { value: 'dropdown',       label: 'Dropdown' },
   { value: 'checkbox-group', label: 'Checkbox Group' },
   { value: 'radio',          label: 'Checkbox (select one only)' },

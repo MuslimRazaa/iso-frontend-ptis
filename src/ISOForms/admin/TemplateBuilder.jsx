@@ -245,7 +245,11 @@ function TemplateBuilder() {
     // the demo store here looked like "nothing happened": the list reloads from
     // the server (which works) and the localStorage copy is never displayed.
     if (!res.ok) {
-      setError(await describeSaveFailure(res, sentBytes))
+      const message = await describeSaveFailure(res, sentBytes)
+      setError(message)
+      // Also a toast: the banner sits at the top of a long page, so on its own the
+      // reason (a name already in use, say) is easy to miss.
+      showToast(message, 'error')
       setSaving(false)
       return
     }

@@ -932,6 +932,13 @@ export function detectRegisterTables(rects, textItems) {
     const numberCol = fillable.findIndex(f => !f)
     const outRows = rows.map((r, ri) => ({
       y: r.y, h: r.h,
+      // The whole row, printed cells included (its number, its description), so a
+      // row nobody filled in can be covered up completely.
+      box: (() => {
+        const x0 = Math.min(...r.cells.map(c => c.x)), x1 = Math.max(...r.cells.map(c => c.x + c.w))
+        const y0 = Math.min(...r.cells.map(c => c.y)), y1 = Math.max(...r.cells.map(c => c.y + c.h))
+        return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 }
+      })(),
       number: (numberCol >= 0 && numberOf(r, numberCol)) || ri + 1,
       cells: cols.map((_, i) => (fillable[i] ? r.cells.find(cc => colOf(cc) === i) : null)),
     }))
