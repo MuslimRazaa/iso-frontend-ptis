@@ -1,5 +1,6 @@
 import React from 'react'
 import { signatureLines } from '../utils/signature'
+import { formatDateTimeValue } from '../utils/fieldHelpers'
 import StyledSelect from '../../components/StyledSelect'
 import SearchableSelect from '../../components/SearchableSelect'
 import StyledDatePicker from '../../components/StyledDatePicker'
@@ -69,6 +70,7 @@ function DynamicField({ field, value, onChange, readOnly, employees = [], signer
       const emp = employees.find(e => String(e.id) === String(value))
       display = emp ? (emp.full_name || emp.name) : (value ? String(value) : '—')
     }
+    else if (field.type === 'datetime') display = formatDateTimeValue(value) || '—'
     else if (value !== undefined && value !== null && value !== '') display = String(value)
     return <div style={{ fontSize: 14, color: '#14141c' }}>{display}</div>
   }
@@ -88,6 +90,30 @@ function DynamicField({ field, value, onChange, readOnly, employees = [], signer
           style={{ ...inputStyle, cursor: 'pointer' }}
         />
       )
+    case 'datetime': {
+      // Stored as "YYYY-MM-DDTHH:mm" (just the date until a time is picked).
+      const [datePart = '', timePart = ''] = String(value || '').split('T')
+      const join = (d, t) => (d ? (t ? `${d}T${t}` : d) : '')
+      return (
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <StyledDatePicker
+              value={datePart}
+              onChange={(d) => onChange(join(d, timePart))}
+              style={{ ...inputStyle, cursor: 'pointer' }}
+            />
+          </div>
+          <input
+            type="time"
+            value={timePart.slice(0, 5)}
+            disabled={!datePart}
+            title={datePart ? 'Time' : 'Pick the date first'}
+            onChange={(e) => onChange(join(datePart, e.target.value))}
+            style={{ ...inputStyle, width: 130, flexShrink: 0 }}
+          />
+        </div>
+      )
+    }
     case 'dropdown':
       return (
         <StyledSelect

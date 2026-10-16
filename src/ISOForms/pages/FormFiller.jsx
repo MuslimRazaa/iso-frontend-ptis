@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useLocation } from 'react-router-dom'
 import API_BASE_URL, { API_ENDPOINTS } from '../../config/api'
 import DynamicField from '../components/DynamicField'
-import { isFieldEmpty } from '../utils/fieldHelpers'
+import { isFieldEmpty, signaturesToStamp, nowDateTimeValue } from '../utils/fieldHelpers'
 import { SEED_TEMPLATES, SEED_VERSION, SEED_EMPLOYEES } from '../seedTemplates'
 import { ensureSeeded, getOfflineTemplates, getOfflineTemplate, addOfflineEntry } from '../utils/offlineStore'
 import { getCurrentEmployeeId } from '../utils/currentEmployee'
@@ -118,8 +118,17 @@ function FormFiller() {
       const fields = Array.isArray(parsedFields) ? parsedFields.map(f => ({ owner: 'requester', ...f })) : []
       // Only the requester fills fields at submission time — approver fields
       // (e.g. Impact Analysis, Closing Details) are filled in at decision time.
-      setTemplate({ ...json, fields: fields.filter(f => (f.owner || 'requester') === 'requester') })
+      const requesterFields = fields.filter(f => (f.owner || 'requester') === 'requester')
+      setTemplate({ ...json, fields: requesterFields })
       setOffline(isOffline)
+      // A new form opens with "Date & Time" fields already set to now. It is only a
+      // starting point — the person can change it — and a form being revised keeps
+      // what it was submitted with.
+      if (!entryId) {
+        const now = nowDateTimeValue()
+        const stamped = requesterFields.filter(f => f.type === 'datetime')
+        if (stamped.length) setValues(prev => ({ ...Object.fromEntries(stamped.map(f => [f.id, now])), ...prev }))
+      }
     }
     fetch(`${API_ENDPOINTS.ISO_FORMS_TEMPLATES}/${schemaId}`)
       .then(res => (res.ok ? res.json() : Promise.reject()))
@@ -130,7 +139,7 @@ function FormFiller() {
       })
       .finally(() => { if (active) setLoadingTemplate(false) })
     return () => { active = false }
-  }, [schemaId])
+  }, [schemaId, entryId])
 
   // Pre-fill a role's picker from the template's saved default employee, once
   // the template is in. This is only a suggestion — never overwrites a value
@@ -214,8 +223,10 @@ function FormFiller() {
     // form corrects what it says, it does not re-sign it under a later date.
     const myName = resolveSignerName({ employees, employeeId: resolvedEmployeeId })
     const signedValues = { ...values }
+    // A row left completely empty is not signed.
+    const toStamp = signaturesToStamp(template.fields, values)
     for (const field of template.fields) {
-      if (field.type !== 'signature') continue
+      if (field.type !== 'signature' || !toStamp.has(field.id)) continue
       signedValues[field.id] = stampSignature(signedValues[field.id], myName)
     }
 

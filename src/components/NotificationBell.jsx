@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { API_BASE_URL } from '../config/api';
 import { showToast } from './Toast';
 
@@ -7,10 +7,43 @@ import { showToast } from './Toast';
 // UserHeader for employees, pulled out here so the admin dashboard can get
 // the exact same notification experience (fetch/read/delete) instead of a
 // second hand-written copy that drifts from it over time.
+// Where a notification should open.
+//
+// The `url` saved with it is used when it is a real page. Some were saved with one
+// that never existed (deadline reminders pointed at /user/task-allocations), and
+// older ones carry none at all, so the destination is also worked out from the
+// kind of notification — otherwise those rows looked clickable and did nothing.
+// Admin and employee sides have different pages for the same thing, so the side
+// the bell is on decides.
+const LEGACY_URLS = { '/user/task-allocations': '/user/learning-management-system/my-courses' };
+
+const resolveNotificationUrl = (notification, isUserSide) => {
+  const data = notification.data || {};
+  const saved = LEGACY_URLS[data.url] || data.url;
+  if (saved) return saved;
+
+  const type = String(data.type || '').toLowerCase();
+  const learner = '/user/learning-management-system/my-courses';
+  if (['task_assigned', 'deadline_reminder', 'course_request_rejected', 'course_request_approved'].includes(type)) {
+    return isUserSide ? learner : '/learning-management-system/task-allocation';
+  }
+  if (type === 'course_request') {
+    return isUserSide ? learner : '/learning-management-system/task-allocation';
+  }
+  // ISO Forms notifications name the entry they are about.
+  const entryId = data.entry_id ?? data.entryId;
+  if (entryId != null && entryId !== '') {
+    return `${isUserSide ? '/user/iso-forms' : '/iso-forms'}/entries/${entryId}`;
+  }
+  return null;
+};
+
 const NotificationBell = ({ email, onOpen, closeSignal }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const navigate = useNavigate();
+  const location = useLocation();
+  const isUserSide = location.pathname.startsWith('/user');
 
   // Lets a sibling control (e.g. the profile menu) close this dropdown when
   // it opens, same as the three dropdowns closing each other used to do
@@ -36,10 +69,16 @@ const NotificationBell = ({ email, onOpen, closeSignal }) => {
           // of an object, which silently broke click-through: `.url` on a
           // string is just undefined, not an error, so nothing looked wrong
           // except that clicking a notification did nothing at all.
-          const normalized = (data.notifications || []).map(n => ({
-            ...n,
-            data: typeof n.data === 'string' ? (() => { try { return JSON.parse(n.data); } catch { return {}; } })() : (n.data || {}),
-          }));
+          // A value that was stringified twice on its way in comes back as a string
+          // even after one parse, so it is parsed until it is an object.
+          const toObject = (raw) => {
+            let value = raw;
+            for (let i = 0; i < 3 && typeof value === 'string'; i++) {
+              try { value = JSON.parse(value); } catch { return {}; }
+            }
+            return value && typeof value === 'object' ? value : {};
+          };
+          const normalized = (data.notifications || []).map(n => ({ ...n, data: toObject(n.data) }));
           setNotifications(normalized);
         }
       } catch (error) {
@@ -121,13 +160,13 @@ const NotificationBell = ({ email, onOpen, closeSignal }) => {
 
   const handleNotificationClick = (notification) => {
     if (!notification.read) markAsRead(notification.id);
-    if (notification.data?.url) {
-      navigate(notification.data.url);
-      setShowNotifications(false);
-    } else if (notification.data?.type === 'task_assigned') {
-      navigate('/user/learning-management-system/my-courses');
-      setShowNotifications(false);
+    const url = resolveNotificationUrl(notification, isUserSide);
+    if (!url) {
+      showToast('This notification has no page to open.', 'info');
+      return;
     }
+    navigate(url);
+    setShowNotifications(false);
   };
 
   return (

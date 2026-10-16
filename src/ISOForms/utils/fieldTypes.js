@@ -9,6 +9,7 @@ export const FIELD_TYPES = [
   { value: 'textarea',       label: 'Long Text' },
   { value: 'number',         label: 'Number' },
   { value: 'date',           label: 'Date' },
+  { value: 'datetime',       label: 'Date & Time' },
   { value: 'dropdown',       label: 'Dropdown (single choice)' },
   { value: 'checkbox-group', label: 'Checkbox Group (multi-select)' },
   // Same look as the group above, but ticking one option clears the others.
