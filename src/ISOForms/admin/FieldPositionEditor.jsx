@@ -181,11 +181,18 @@ function FieldPositionEditor({ pdfBase64, fields, approvalRoles, onSave, onClose
 
   // ── Drag / resize ──────────────────────────────────────────────────────────
   useEffect(() => {
-    const onMove = (e) => {
+    let raf = 0
+
+    // Puts the dragged box (or group) where the pointer is NOW. How far it has
+    // moved counts the page's own scrolling since the drag began, because the page
+    // scrolls under a held pointer; counting only the pointer's travel would leave
+    // the box behind.
+    const apply = () => {
       const drag = dragRef.current
       if (!drag || !view) return
-      const dx = e.clientX - drag.startX
-      const dy = e.clientY - drag.startY
+      const area = canvasScrollRef.current
+      const dx = drag.cx - drag.startX + (area ? area.scrollLeft - drag.scrollLeft : 0)
+      const dy = drag.cy - drag.startY + (area ? area.scrollTop - drag.scrollTop : 0)
 
       if (drag.group) {
         const patches = {}
@@ -211,13 +218,57 @@ function FieldPositionEditor({ pdfBase64, fields, approvalRoles, onSave, onClose
       }
       patchCoords(drag.fieldId, { page: pageIndex, ...screenToPdf(box, view.viewport, view.pageSize) })
     }
-    const onUp = () => { dragRef.current = null }
 
+    // Holding a box near the top, bottom or side of the page area scrolls that
+    // area — faster the closer to the edge — so it can be carried to a spot that
+    // is off screen without letting go.
+    const EDGE = 56
+    const MAX_SPEED = 24
+    const speed = (into) => Math.round(Math.min(1, into / EDGE) * MAX_SPEED)
+    const tick = () => {
+      const drag = dragRef.current
+      const area = canvasScrollRef.current
+      if (!drag) { raf = 0; return }
+      if (area) {
+        const r = area.getBoundingClientRect()
+        let dx = 0, dy = 0
+        if (drag.cy < r.top + EDGE) dy = -speed(r.top + EDGE - drag.cy)
+        else if (drag.cy > r.bottom - EDGE) dy = speed(drag.cy - (r.bottom - EDGE))
+        if (drag.cx < r.left + EDGE) dx = -speed(r.left + EDGE - drag.cx)
+        else if (drag.cx > r.right - EDGE) dx = speed(drag.cx - (r.right - EDGE))
+        if (dx || dy) {
+          area.scrollLeft += dx
+          area.scrollTop += dy
+          apply()
+        }
+      }
+      raf = requestAnimationFrame(tick)
+    }
+
+    const onMove = (e) => {
+      const drag = dragRef.current
+      if (!drag || !view) return
+      drag.cx = e.clientX
+      drag.cy = e.clientY
+      apply()
+      if (!raf) raf = requestAnimationFrame(tick)
+    }
+    // The wheel or the scrollbar moves the page without moving the pointer.
+    const onScroll = () => { if (dragRef.current) apply() }
+    const onUp = () => {
+      dragRef.current = null
+      if (raf) { cancelAnimationFrame(raf); raf = 0 }
+    }
+
+    const area = canvasScrollRef.current
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
+    area?.addEventListener('scroll', onScroll)
     return () => {
+      if (raf) cancelAnimationFrame(raf)
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
+      area?.removeEventListener('scroll', onScroll)
     }
   }, [view, pageIndex, patchCoords, patchMany])
 
@@ -396,13 +447,13 @@ function FieldPositionEditor({ pdfBase64, fields, approvalRoles, onSave, onClose
         .map(f => ({ fieldId: f.id, box: pdfToScreen(f.pdfCoords, view.viewport) }))
         .filter(g => g.box)
       setSelectedId(field.id)
-      dragRef.current = { fieldId: field.id, mode, startX: e.clientX, startY: e.clientY, box, group }
+      dragRef.current = { fieldId: field.id, mode, startX: e.clientX, startY: e.clientY, cx: e.clientX, cy: e.clientY, scrollLeft: canvasScrollRef.current?.scrollLeft || 0, scrollTop: canvasScrollRef.current?.scrollTop || 0, box, group }
       return
     }
 
     setSelectedIds([field.id])
     setSelectedId(field.id)
-    dragRef.current = { fieldId: field.id, mode, startX: e.clientX, startY: e.clientY, box }
+    dragRef.current = { fieldId: field.id, mode, startX: e.clientX, startY: e.clientY, cx: e.clientX, cy: e.clientY, scrollLeft: canvasScrollRef.current?.scrollLeft || 0, scrollTop: canvasScrollRef.current?.scrollTop || 0, box }
   }
 
   // ── Renaming many fields at once ───────────────────────────────────────────
@@ -480,22 +531,72 @@ function FieldPositionEditor({ pdfBase64, fields, approvalRoles, onSave, onClose
     if (!view || placingId || placingOption || e.button !== 0) return
     const rect = surfaceRef.current.getBoundingClientRect()
     const x = e.clientX - rect.left, y = e.clientY - rect.top
-    marqueeRef.current = { x0: x, y0: y, x1: x, y1: y, moved: false, add: e.ctrlKey || e.metaKey || e.shiftKey, rect }
+    marqueeRef.current = {
+      x0: x, y0: y, x1: x, y1: y, cx: e.clientX, cy: e.clientY,
+      moved: false, add: e.ctrlKey || e.metaKey || e.shiftKey,
+    }
   }
 
   useEffect(() => {
-    const onMove = (e) => {
-      const m = marqueeRef.current
-      if (!m) return
-      m.x1 = e.clientX - m.rect.left
-      m.y1 = e.clientY - m.rect.top
+    let raf = 0
+
+    // Where the rectangle's moving corner is, in page coordinates, from where the
+    // pointer is NOW. The page scrolls under a held pointer, so a corner worked
+    // out once at pointer-move time would drift away from the cursor.
+    const syncEnd = (m) => {
+      const rect = surfaceRef.current?.getBoundingClientRect()
+      if (!rect) return
+      m.x1 = m.cx - rect.left
+      m.y1 = m.cy - rect.top
       if (!m.moved && Math.hypot(m.x1 - m.x0, m.y1 - m.y0) < 4) return
       m.moved = true
       setMarquee({ x0: m.x0, y0: m.y0, x1: m.x1, y1: m.y1 })
     }
+
+    // While the button is held and the pointer sits near the top, bottom or sides
+    // of the page area, that area scrolls the way a file list does — faster the
+    // closer to the edge — so a box beyond the screen can still be reached
+    // without letting go.
+    const EDGE = 56
+    const MAX_SPEED = 24
+    const speed = (into) => Math.round(Math.min(1, into / EDGE) * MAX_SPEED)
+    const tick = () => {
+      const m = marqueeRef.current
+      const area = canvasScrollRef.current
+      if (!m) { raf = 0; return }
+      if (m.moved && area) {
+        const r = area.getBoundingClientRect()
+        let dx = 0, dy = 0
+        if (m.cy < r.top + EDGE) dy = -speed(r.top + EDGE - m.cy)
+        else if (m.cy > r.bottom - EDGE) dy = speed(m.cy - (r.bottom - EDGE))
+        if (m.cx < r.left + EDGE) dx = -speed(r.left + EDGE - m.cx)
+        else if (m.cx > r.right - EDGE) dx = speed(m.cx - (r.right - EDGE))
+        if (dx || dy) {
+          area.scrollLeft += dx
+          area.scrollTop += dy
+          syncEnd(m)
+        }
+      }
+      raf = requestAnimationFrame(tick)
+    }
+
+    const onMove = (e) => {
+      const m = marqueeRef.current
+      if (!m) return
+      m.cx = e.clientX
+      m.cy = e.clientY
+      syncEnd(m)
+      if (m.moved && !raf) raf = requestAnimationFrame(tick)
+    }
+    // The wheel (or the scrollbar) moves the page without moving the pointer.
+    const onScroll = () => {
+      const m = marqueeRef.current
+      if (m && m.moved) syncEnd(m)
+    }
     const onUp = () => {
       const m = marqueeRef.current
       marqueeRef.current = null
+      if (raf) { cancelAnimationFrame(raf); raf = 0 }
       if (!m) return
       setMarquee(null)
       if (!m.moved) {
@@ -516,11 +617,15 @@ function FieldPositionEditor({ pdfBase64, fields, approvalRoles, onSave, onClose
       setSelectedIds(next)
       setSelectedId(next[next.length - 1] || null)
     }
+    const area = canvasScrollRef.current
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
+    area?.addEventListener('scroll', onScroll)
     return () => {
+      if (raf) cancelAnimationFrame(raf)
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
+      area?.removeEventListener('scroll', onScroll)
     }
   }, [view, pageIndex, localFields, selectedIds])
 

@@ -50,6 +50,8 @@ import AuditLogView from '../components/AuditLogView';
 import StyledSelect from '../components/StyledSelect';
 import SearchableSelect from '../components/SearchableSelect';
 import MultiSelect from '../components/MultiSelect';
+import { useLinkedEmployeeFilter, employeeMatches } from './useLinkedEmployeeFilter';
+import { certificateValidity } from './certificateExpiry';
 import StyledDatePicker from '../components/StyledDatePicker';
 
 // HomePage Component - Moved outside to prevent re-creation
@@ -337,12 +339,38 @@ const HomePage = React.memo(({
   </div>
 ));
 
+// The filters a link from the expiry warning carries (?certEmp=… & ?certStandard=…).
+const readCertLink = () => {
+  try {
+    const q = new URLSearchParams(window.location.search);
+    return { empId: q.get('certEmp') || '', standard: q.get('certStandard') || '' };
+  } catch { return { empId: '', standard: '' }; }
+};
+
 const TestingModule = () => {
   // Use the host project's shared API base (points at the merged backend).
   const API_BASE_URL = useMemo(() => (HOST_API_BASE_URL || '').replace(/\/$/, ''), []);
   const { theme, isDarkMode, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+
+  // The Certificates tab can be opened narrowed to one employee and standard. The
+  // values are held here, not in the tab, because the tab is rebuilt whenever the
+  // results reload and would otherwise lose them; they are dropped the moment the
+  // person touches a certificate filter (or clears them), and taken off the address
+  // so a later visit starts with everything.
+  const certLinkRef = useRef(null);
+  if (certLinkRef.current === null) certLinkRef.current = readCertLink();
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has('certEmp') || url.searchParams.has('certStandard')) {
+        url.searchParams.delete('certEmp');
+        url.searchParams.delete('certStandard');
+        window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+      }
+    } catch { /* leave the address alone */ }
+  }, []);
 
   // When the user reaches the test directly from a course ("Start Test"),
   // the course passes the standard name + from=course. In that case the
@@ -461,7 +489,12 @@ const TestingModule = () => {
   const [dataLoaded, setDataLoaded] = useState(false);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [activeLoginForm, setActiveLoginForm] = useState('employee'); // 'employee' or 'admin'
-  const [adminActiveTab, setAdminActiveTab] = useState('dashboard'); // 'dashboard', 'results', 'standards', 'questions', 'employees'
+  // `?tab=certificates` (from the dashboard warning and the expiry notification)
+  // opens straight on that tab.
+  const [adminActiveTab, setAdminActiveTab] = useState(() => {
+    const tab = new URLSearchParams(window.location.search).get('tab');
+    return ['dashboard', 'results', 'standards', 'questions', 'certificates', 'employees', 'practical', 'auditlog'].includes(tab) ? tab : 'dashboard';
+  }); // 'dashboard', 'results', 'standards', 'questions', 'employees'
   // Audit Log's Export PDF/Excel buttons live in the page's own header (next
   // to the title) rather than in their own row inside AuditLogView, so they
   // are triggered through this ref instead of AuditLogView rendering them itself.
@@ -3047,10 +3080,33 @@ const TestingModule = () => {
         // A free-text box searches everything at once; the two dropdowns are
         // for narrowing to one specific person once you know their ID/name.
         const [generalSearch, setGeneralSearch] = useState('');
-        const [filterEmpId, setFilterEmpId] = useState('');
-        const [filterEmpName, setFilterEmpName] = useState('');
-        const empIdOptions = useMemo(() => [...new Set(results.map(r => norm(r.ID)).filter(Boolean))].sort(), [results]);
-        const empNameOptions = useMemo(() => [...new Set(results.map(r => norm(r.NAME)).filter(Boolean))].sort(), [results]);
+        // Same Employee ID / Name pickers, and the same rule, as Test Results.
+        const {
+          filterEmpId, filterEmpName, idOptions: empIdOptions, nameOptions: empNameOptions,
+          onIdChange: setFilterEmpId, onNameChange: setFilterEmpName, clearEmployee,
+        } = useLinkedEmployeeFilter(results, certLinkRef.current.empId);
+        // A multi-pick of standards (comma-joined), like the Test Results filter. It
+        // can start narrowed by a link from the expiry warning (see certLinkRef).
+        const dropCertLink = () => { certLinkRef.current = { empId: '', standard: '' }; };
+        const [filterCertStandard, setFilterCertStandard] = useState(certLinkRef.current.standard);
+        // Every standard a certificate can be for, without its General / Specific /
+        // Practical tag; whatever a link picked is always among them.
+        const certStandardOptions = useMemo(() => {
+          const strip = (v) => norm(v)
+            .replace(/\(\s*(general|specific|practical)\s*\)/ig, '')
+            .replace(/\s+(general|specific|practical)\b/ig, '')
+            .trim();
+          const set = new Set();
+          results.forEach(r => { const s = strip(r.STANDARD); if (s) set.add(s); });
+          // A pick from a link may spell the standard slightly differently ("DS 1" for
+          // "DS-1"); it only gets an entry of its own if no listed one is the same.
+          const same = (x, y) => x.toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
+            === y.toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+          toMultiList(filterCertStandard).forEach(v => {
+            if (![...set].some(o => same(o, v))) set.add(v);
+          });
+          return [...set].sort((a, b) => a.localeCompare(b));
+        }, [results, filterCertStandard, norm, toMultiList]);
         const [certificateCurrentPage, setCertificateCurrentPage] = useState(1);
         const [certTypes, setCertTypes] = useState({}); // key: stable certificate row id, value: 'New' or 'Recertification'
         const [previousCertNumbers, setPreviousCertNumbers] = useState({}); // key: stable certificate row id, value: manual previous certificate no
@@ -3273,11 +3329,21 @@ const TestingModule = () => {
             norm(r.STANDARD).toLowerCase().includes(q)
           );
         }
-        if (filterEmpId) {
-          passed = passed.filter(r => norm(r.ID) === filterEmpId);
+        if (filterEmpId || filterEmpName) {
+          passed = passed.filter(r => employeeMatches(r, filterEmpId, filterEmpName));
         }
-        if (filterEmpName) {
-          passed = passed.filter(r => norm(r.NAME) === filterEmpName);
+        // By standard, compared without the General/Specific/Practical tag, so a
+        // pick narrows the pair of tests and any practical of one standard together.
+        if (filterCertStandard) {
+          const key = (v) => norm(v)
+            .replace(/\(\s*(general|specific|practical)\s*\)/ig, '')
+            .replace(/\s+(general|specific|practical)\b/ig, '')
+            .replace(/[_-]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toLowerCase();
+          const wanted = new Set(toMultiList(filterCertStandard).map(key));
+          passed = passed.filter(r => wanted.has(key(r.STANDARD)));
         }
         
         const normalizeCombinedBaseType = (value) => {
@@ -3423,7 +3489,7 @@ const TestingModule = () => {
           .map((r, index) => ({ r, index, at: toSortableTimestamp(r?.DATE) }))
           .sort((a, b) => b.at - a.at || a.index - b.index)
           .map(entry => entry.r);
-      }, [generalSearch, filterEmpId, filterEmpName, isPass, norm, standards, results]);
+      }, [generalSearch, filterEmpId, filterEmpName, filterCertStandard, isPass, norm, standards, results]);
 
       const totalCertificatePages = Math.ceil(filteredResults.length / certificateItemsPerPage);
       const paginatedCertificateResults = filteredResults.slice(
@@ -3436,7 +3502,7 @@ const TestingModule = () => {
 
       useEffect(() => {
         setCertificateCurrentPage(1);
-      }, [generalSearch, filterEmpId, filterEmpName]);
+      }, [generalSearch, filterEmpId, filterEmpName, filterCertStandard]);
 
       useEffect(() => {
         if (totalCertificatePages > 0 && certificateCurrentPage > totalCertificatePages) {
@@ -3500,53 +3566,39 @@ const TestingModule = () => {
               />
             </div>
             <div style={{ minWidth: isMobile ? '100%' : '180px' }}>
-              <SearchableSelect
+              <MultiSelect
                 value={filterEmpId}
-                onChange={setFilterEmpId}
+                onChange={(v) => { dropCertLink(); setFilterEmpId(v); }}
                 options={empIdOptions}
-                emptyOptionLabel="All Employee IDs"
-                placeholder="Type to search ID…"
-                style={{
-                  width: '100%',
-                  padding: '10px 15px',
-                  border: `1px solid ${theme.border.default}`,
-                  borderRadius: '16px',
-                  fontSize: '0.95em',
-                  boxSizing: 'border-box',
-                  outline: 'none',
-                  backgroundColor: theme.bg.input,
-                  color: theme.text.primary,
-                  cursor: 'text'
-                }}
+                placeholder="All Employees"
+                searchPlaceholder="Search employee ID…"
               />
             </div>
             <div style={{ minWidth: isMobile ? '100%' : '200px' }}>
-              <SearchableSelect
+              <MultiSelect
                 value={filterEmpName}
-                onChange={setFilterEmpName}
+                onChange={(v) => { dropCertLink(); setFilterEmpName(v); }}
                 options={empNameOptions}
-                emptyOptionLabel="All Employee Names"
-                placeholder="Type to search name…"
-                style={{
-                  width: '100%',
-                  padding: '10px 15px',
-                  border: `1px solid ${theme.border.default}`,
-                  borderRadius: '16px',
-                  fontSize: '0.95em',
-                  boxSizing: 'border-box',
-                  outline: 'none',
-                  backgroundColor: theme.bg.input,
-                  color: theme.text.primary,
-                  cursor: 'text'
-                }}
+                placeholder="All Names"
+                searchPlaceholder="Search employee name…"
+              />
+            </div>
+            <div style={{ minWidth: isMobile ? '100%' : '200px' }}>
+              <MultiSelect
+                value={filterCertStandard}
+                onChange={(v) => { dropCertLink(); setFilterCertStandard(v); }}
+                options={certStandardOptions}
+                placeholder="All Standards"
+                searchPlaceholder="Search standard…"
               />
             </div>
             <ClearFilterButton
-              visible={Boolean(generalSearch || filterEmpId || filterEmpName)}
+              visible={Boolean(generalSearch || filterEmpId || filterEmpName || filterCertStandard)}
               onClick={() => {
+                dropCertLink();
                 setGeneralSearch('');
-                setFilterEmpId('');
-                setFilterEmpName('');
+                clearEmployee();
+                setFilterCertStandard('');
                 setCertificateCurrentPage(1);
               }}
             />
@@ -3564,17 +3616,18 @@ const TestingModule = () => {
               </div>
             ) : (
               <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <table style={commonStyles.table}>
                   <thead>
                     <tr style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #ececf0' }}>
-                      <th style={{ padding: '18px 20px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>S.No</th>
-                      <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Employee ID</th>
-                      <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Name</th>
-                      <th style={{ padding: '18px 20px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Standard</th>
-                      <th style={{ padding: '18px 20px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Score</th>
-                      <th style={{ padding: '18px 20px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Date</th>
-                      <th style={{ padding: '18px 20px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Cert Type</th>
-                      <th style={{ padding: '18px 20px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Actions</th>
+                      <th style={{ padding: '15px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>S.No</th>
+                      <th style={{ padding: '15px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Employee ID</th>
+                      <th style={{ padding: '15px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Name</th>
+                      <th style={{ padding: '15px', textAlign: 'left', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Standard</th>
+                      <th style={{ padding: '15px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Score</th>
+                      <th style={{ padding: '15px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Date</th>
+                      <th style={{ padding: '15px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Validity</th>
+                      <th style={{ padding: '15px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Cert Type</th>
+                      <th style={{ padding: '15px', textAlign: 'center', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#8a8a95' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3587,19 +3640,29 @@ const TestingModule = () => {
                       const selectedCertType = certTypes[rowKey] || 'New';
                       const previousCertNo = previousCertNumbers[rowKey] || '';
 
+                      // Five-year validity: a coloured edge and a soft tint on a row whose
+                      // certificate is running out (amber) or already has (red).
+                      const validity = certificateValidity(result);
+                      const tone = validity && validity.status !== 'valid'
+                        ? (validity.status === 'expired'
+                          ? { edge: '#d7263d', tint: isDarkMode ? 'rgba(215,38,61,0.14)' : '#fff5f5' }
+                          : { edge: '#f59e0b', tint: isDarkMode ? 'rgba(245,158,11,0.12)' : '#fffaf0' })
+                        : null;
+
                       return (
                       <tr 
                         key={rowRenderKey}
                         style={{ 
                           borderBottom: `1px solid ${colors.border}`,
-                          backgroundColor: isDarkMode ? colors.tableRowBg : 'transparent'
+                          backgroundColor: tone ? tone.tint : (isDarkMode ? colors.tableRowBg : 'transparent'),
+                          boxShadow: tone ? `inset 4px 0 0 ${tone.edge}` : undefined
                         }}
                       >
-                        <td style={{ padding: '16px 20px', color: colors.textMuted, textAlign: 'center' }}>{serialNo}</td>
-                        <td style={{ padding: '16px 20px', color: colors.text, fontWeight: '500' }}>{norm(result.ID)}</td>
-                        <td style={{ padding: '16px 20px', color: colors.text }}>{norm(result.NAME)}</td>
-                        <td style={{ padding: '16px 20px', color: colors.text }}>{norm(result.STANDARD)}</td>
-                        <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                        <td style={{ padding: '15px', color: colors.textMuted, textAlign: 'center' }}>{serialNo}</td>
+                        <td style={{ padding: '15px', color: colors.text, fontWeight: '500' }}>{norm(result.ID)}</td>
+                        <td style={{ padding: '15px', color: colors.text }}>{norm(result.NAME)}</td>
+                        <td style={{ padding: '15px', color: colors.text }}>{norm(result.STANDARD)}</td>
+                        <td style={{ padding: '15px', textAlign: 'center' }}>
                           <span style={{
                             backgroundColor: '#e8f5e9',
                             color: '#27ae60', 
@@ -3611,10 +3674,33 @@ const TestingModule = () => {
                             {toPctNumber(result.PERCENTAGE).toFixed(2)}%
                           </span>
                         </td>
-                        <td style={{ padding: '16px 20px', color: colors.textMuted, textAlign: 'center', fontSize: '0.9em' }}>
+                        <td style={{ padding: '15px', color: colors.textMuted, textAlign: 'center', fontSize: '0.9em' }}>
                           {norm(result.DATE)}
                         </td>
-                        <td style={{ padding: '16px 20px', textAlign: 'center', minWidth: '260px' }}>
+                        <td style={{ padding: '15px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          {validity ? (() => {
+                            const look = {
+                              valid:   { bg: '#e8f5e9', fg: '#1a7f4e', dot: '#27ae60', label: 'Valid' },
+                              soon:    { bg: '#fff4e5', fg: '#b54708', dot: '#f59e0b', label: validity.daysLeft === 0 ? 'Expires today' : `Expires in ${validity.daysLeft} day${validity.daysLeft === 1 ? '' : 's'}` },
+                              expired: { bg: '#fdecea', fg: '#b42318', dot: '#d7263d', label: `Expired ${-validity.daysLeft} day${-validity.daysLeft === 1 ? '' : 's'} ago` },
+                            }[validity.status];
+                            const d = validity.expiry;
+                            const until = `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+                            return (
+                              <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                                <span style={{
+                                  display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px', borderRadius: 999,
+                                  background: look.bg, color: look.fg, fontSize: '0.85em', fontWeight: 700,
+                                }}>
+                                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: look.dot }} />
+                                  {look.label}
+                                </span>
+                                <span style={{ fontSize: '0.78em', color: colors.textMuted }}>Valid until {until}</span>
+                              </div>
+                            );
+                          })() : <span style={{ color: colors.textMuted }}>—</span>}
+                        </td>
+                        <td style={{ padding: '15px', textAlign: 'center', minWidth: '260px' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                             <StyledSelect
                               value={selectedCertType}
@@ -3699,7 +3785,7 @@ const TestingModule = () => {
                             )}
                           </div>
                         </td>
-                        <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                        <td style={{ padding: '15px', textAlign: 'center' }}>
                           <button
                             onClick={() => {
                               const trimmedPreviousCertNo = String(previousCertNo || '').trim();
@@ -3709,6 +3795,27 @@ const TestingModule = () => {
                               }
                               const isGeneralSpecific = !!(result.IS_COMBINED && result.GENERAL_DATA && result.SPECIFIC_DATA);
                               setCertModal({ rowKey, result, selectedCertType, previousCertNo: trimmedPreviousCertNo, isGeneralSpecific });
+                              // The Vision / Training / Education details belong to the
+                              // person, so whatever was used for their last certificate
+                              // is filled in again — only into boxes still empty, so
+                              // nothing already typed here is overwritten.
+                              if (isGeneralSpecific) {
+                                fetch(`${API_BASE_URL}/api/certificates/profile/${encodeURIComponent(norm(result.ID))}`)
+                                  .then(res => (res.ok ? res.json() : null))
+                                  .then(json => {
+                                    const saved = json?.data;
+                                    if (!saved) return;
+                                    setCertExtras(prev => {
+                                      const current = prev[rowKey] || {};
+                                      const next = { ...current };
+                                      ['near_vision', 'color_vision', 'training_hours', 'education'].forEach(k => {
+                                        if (!String(current[k] || '').trim() && saved[k]) next[k] = saved[k];
+                                      });
+                                      return { ...prev, [rowKey]: next };
+                                    });
+                                  })
+                                  .catch(() => { /* no saved details — the boxes just stay empty */ });
+                              }
                             }}
                             style={{
                               padding: '10px 16px',
@@ -3815,7 +3922,7 @@ const TestingModule = () => {
                 {certModal.isGeneralSpecific && (
                   <>
                     <p style={{ color: colors.textMuted, fontSize: '0.9em', marginTop: 0, marginBottom: '20px' }}>
-                      Vision Examination values are not part of the test results — enter them manually. All fields are required.
+                      Vision Examination values are not part of the test results — enter them manually. Details used for this employee’s last certificate are filled in automatically; change anything that is different now. All fields are required.
                     </p>
 
                     <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
@@ -6128,10 +6235,11 @@ const TestingModule = () => {
     // A free-text box searches everything at once; the two dropdowns are
     // for narrowing to one specific person once you know their ID/name.
     const [generalSearch, setGeneralSearch] = useState('');
-    const [filterEmpId, setFilterEmpId] = useState('');
-    const [filterEmpName, setFilterEmpName] = useState('');
-    const empIdOptions = useMemo(() => [...new Set(results.map(r => norm(r.ID)).filter(Boolean))].sort(), [results]);
-    const empNameOptions = useMemo(() => [...new Set(results.map(r => norm(r.NAME)).filter(Boolean))].sort(), [results]);
+    // Same Employee ID / Name pickers, and the same rule, as Test Results.
+    const {
+      filterEmpId, filterEmpName, idOptions: empIdOptions, nameOptions: empNameOptions,
+      onIdChange: setFilterEmpId, onNameChange: setFilterEmpName, clearEmployee,
+    } = useLinkedEmployeeFilter(results);
     const [attachmentFile, setAttachmentFile] = useState(null);
     const attachmentInputRef = useRef(null);
     const [practicalActiveTable, setPracticalActiveTable] = useState('results');
@@ -6347,11 +6455,8 @@ const TestingModule = () => {
           String(result.STANDARD || '').toLowerCase().includes(q)
         );
       }
-      if (filterEmpId) {
-        allPracticalResults = allPracticalResults.filter((result) => norm(result.ID) === filterEmpId);
-      }
-      if (filterEmpName) {
-        allPracticalResults = allPracticalResults.filter((result) => norm(result.NAME) === filterEmpName);
+      if (filterEmpId || filterEmpName) {
+        allPracticalResults = allPracticalResults.filter((result) => employeeMatches(result, filterEmpId, filterEmpName));
       }
 
       // Latest first — the most recently recorded practical result leads,
@@ -6770,50 +6875,26 @@ const TestingModule = () => {
               />
             </div>
             <div style={{ minWidth: isMobile ? '100%' : '180px' }}>
-              <SearchableSelect
+              <MultiSelect
                 value={filterEmpId}
                 onChange={setFilterEmpId}
                 options={empIdOptions}
-                emptyOptionLabel="All Employee IDs"
-                placeholder="Type to search ID…"
-                style={{
-                  width: '100%',
-                  padding: '10px 15px',
-                  border: `2px solid ${colors.inputBorder}`,
-                  borderRadius: '16px',
-                  fontSize: '0.95em',
-                  boxSizing: 'border-box',
-                  outline: 'none',
-                  backgroundColor: colors.inputBg,
-                  color: colors.text,
-                  cursor: 'text'
-                }}
+                placeholder="All Employees"
+                searchPlaceholder="Search employee ID…"
               />
             </div>
             <div style={{ minWidth: isMobile ? '100%' : '200px' }}>
-              <SearchableSelect
+              <MultiSelect
                 value={filterEmpName}
                 onChange={setFilterEmpName}
                 options={empNameOptions}
-                emptyOptionLabel="All Employee Names"
-                placeholder="Type to search name…"
-                style={{
-                  width: '100%',
-                  padding: '10px 15px',
-                  border: `2px solid ${colors.inputBorder}`,
-                  borderRadius: '16px',
-                  fontSize: '0.95em',
-                  boxSizing: 'border-box',
-                  outline: 'none',
-                  backgroundColor: colors.inputBg,
-                  color: colors.text,
-                  cursor: 'text'
-                }}
+                placeholder="All Names"
+                searchPlaceholder="Search employee name…"
               />
             </div>
             <ClearFilterButton
               visible={Boolean(generalSearch || filterEmpId || filterEmpName)}
-              onClick={() => { setGeneralSearch(''); setFilterEmpId(''); setFilterEmpName(''); }}
+              onClick={() => { setGeneralSearch(''); clearEmployee(); }}
             />
           </div>
         </article>

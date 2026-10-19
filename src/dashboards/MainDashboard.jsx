@@ -7,6 +7,8 @@ import NotificationBell from "../components/NotificationBell";
 import HeaderSearchBar from "../components/HeaderSearchBar";
 import { API_ENDPOINTS, API_BASE_URL } from "../config/api";
 import { summarise, averageCompletion } from "../LMS/utils/courseProgressState";
+import { findExpiringCertificates, certificateLink } from "../Testing/certificateExpiry";
+import ExpiringCertificatesBanner from "../components/ExpiringCertificatesBanner";
 
 // Admin isn't a row in `employees` and has no real inbox of its own — it
 // logs in with a shared password, not an individual account (see
@@ -223,6 +225,9 @@ function MainDashboard() {
   // text every tile used to carry regardless of what was actually happening
   // in that module.
   const [tileStatus, setTileStatus] = useState({});
+  // General/Specific certificates at or near their 5-year end — drives the warning
+  // bar at the top of the page.
+  const [expiringCerts, setExpiringCerts] = useState([]);
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
   const [, setSyncTick] = useState(0);
   const [showCustomize, setShowCustomize] = useState(false);
@@ -360,6 +365,7 @@ function MainDashboard() {
 
         const testingRows = testingRes.ok ? await testingRes.json() : [];
         const testingList = Array.isArray(testingRows) ? testingRows : [];
+        setExpiringCerts(findExpiringCertificates(testingList));
         const standardsData = standardsRes.ok ? await standardsRes.json() : [];
         const testingMetric = (Array.isArray(standardsData) ? standardsData.length : 0) || testingList.length
           ? `${Array.isArray(standardsData) ? standardsData.length : 0} standards · ${testingList.length} assessments recorded`
@@ -531,6 +537,7 @@ function MainDashboard() {
       </header>
 
       <main className="dashboard-content">
+        <ExpiringCertificatesBanner items={expiringCerts} onOpenCertificate={(item) => navigate(certificateLink(item, '/testing'))} />
         <section className="hero-row">
           <article className="intro-panel">
             <p className="eyebrow">Welcome back</p>
