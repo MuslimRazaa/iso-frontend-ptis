@@ -104,23 +104,42 @@ const defaultQuickStats = [
   { label: "Active Clients", value: "12", status: "warning" },
 ];
 
+// The map's modules and how they really connect.
+//
+//  - Premier ERP is the hub: its HR module owns the employees table every module
+//    here reads, so each of them is linked to it.
+//  - Testing & Certification is wired to the LMS (a course's "Start Test" opens the
+//    Testing module for its standard, and the result feeds course progress).
+//  - Portal is linked to the Job Log.
+//
+// `check` names the dashboard fetch that proves a module is answering; Premier ERP
+// is a separate app on its own domain and the Portal makes no calls yet, so neither
+// can be checked from here.
 const systemNodes = [
-  { id: "portal", label: "Portal", x: 12, y: 32, tag: "Access" },
-  { id: "lms", label: "LMS", x: 37, y: 18, tag: "Training" },
-  { id: "cv-gen", label: "Job Log Description", x: 64, y: 30, tag: "Delivery" },
-  { id: "iso", label: "ISO Forms", x: 54, y: 65, tag: "Compliance" },
-  { id: "cv-bid", label: "Bid CV Library", x: 28, y: 65, tag: "Bid Desk" },
-  { id: "power-bi", label: "Power BI", x: 80, y: 58, tag: "Insights" },
+  { id: "premier-erp", label: "Premier ERP", x: 50, y: 48, tag: "Core", hub: true },
+  { id: "portal", label: "Portal", x: 29, y: 24, tag: "Access" },
+  { id: "cv-gen", label: "Job Log Description", x: 28, y: 72, tag: "Delivery" },
+  { id: "lms", label: "LMS", x: 71, y: 24, tag: "Training" },
+  { id: "testing", label: "Testing & Certification", x: 72, y: 72, tag: "Certification" },
+  { id: "iso", label: "ISO Forms", x: 50, y: 87, tag: "Compliance" },
 ];
 
-const systemConnections = [
-  { from: "portal", to: "lms", status: "stable" },
-  { from: "lms", to: "cv-gen", status: "stable" },
-  { from: "cv-gen", to: "cv-bid", status: "degraded" },
-  { from: "portal", to: "iso", status: "stable" },
-  { from: "iso", to: "power-bi", status: "stable" },
-  { from: "cv-bid", to: "power-bi", status: "stable" },
+const systemLinks = [
+  { from: "premier-erp", to: "lms", detail: "Employee records owned by the ERP's HR module" },
+  { from: "premier-erp", to: "testing", detail: "Employees and designations behind results and certificates" },
+  { from: "premier-erp", to: "cv-gen", detail: "Job crews and dates read by the ERP's Attendance module" },
+  { from: "premier-erp", to: "iso", detail: "Employees who approve and sign forms" },
+  { from: "premier-erp", to: "portal", detail: "Same company employee directory" },
+  { from: "testing", to: "lms", detail: "A course's Start Test opens Testing; results feed course progress" },
+  { from: "portal", to: "cv-gen", detail: "Connected record flow between Portal and Job Log" },
 ];
+
+// A link is healthy unless an end that CAN be checked failed to load just now.
+const buildConnections = (health) => systemLinks.map(link => {
+  const ends = [link.from, link.to].filter(id => id in health);
+  const down = ends.some(id => health[id] === false);
+  return { ...link, status: down ? "degraded" : "stable" };
+});
 
 const renderTileIcon = (type) => {
   switch (type) {
@@ -229,6 +248,8 @@ function MainDashboard() {
   // bar at the top of the page.
   const [expiringCerts, setExpiringCerts] = useState([]);
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
+  // Did each module's data load just now? Only modules with something to check are in here.
+  const [moduleHealth, setModuleHealth] = useState({});
   const [, setSyncTick] = useState(0);
   const [showCustomize, setShowCustomize] = useState(false);
   const [tileOrder, setTileOrder] = useState(loadTileOrder);
@@ -343,6 +364,13 @@ function MainDashboard() {
           fetch(API_ENDPOINTS.COURSE_REQUESTS).catch(() => null),
         ]);
 
+        setModuleHealth({
+          lms: Boolean(progressRes.ok),
+          testing: Boolean(testingRes.ok && standardsRes.ok),
+          "cv-gen": Boolean(jobLogRes.ok),
+          iso: Boolean(isoTemplatesRes.ok),
+        });
+
         const progressJson = progressRes.ok ? await progressRes.json() : null;
         const progressRows = Array.isArray(progressJson?.data) ? progressJson.data : [];
         const progress = summarise(progressRows);
@@ -402,6 +430,8 @@ function MainDashboard() {
         });
       } catch (error) {
         console.error('Error fetching tile metrics:', error);
+        // Nothing answered at all — most likely the backend itself is down.
+        setModuleHealth({ lms: false, testing: false, "cv-gen": false, iso: false });
       }
     };
 
@@ -772,7 +802,9 @@ function MainDashboard() {
       {showSystemMap && (
         <SystemMap
           modules={systemNodes}
-          connections={systemConnections}
+          connections={buildConnections(moduleHealth)}
+          health={moduleHealth}
+          syncedAt={lastSyncedAt}
           onClose={handleSystemMapToggle}
         />
       )}

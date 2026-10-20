@@ -3,7 +3,15 @@ import React from "react";
 const canvasWidth = 900;
 const canvasHeight = 420;
 
-function SystemMap({ modules = [], connections = [], onClose }) {
+// "Checked just now / 3 min ago" — from when the dashboard's data actually loaded.
+const checkedAgo = (date) => {
+  if (!date) return "Checking…";
+  const mins = Math.floor((Date.now() - date.getTime()) / 60000);
+  if (mins < 1) return "Checked just now";
+  return `Checked ${mins} min${mins === 1 ? "" : "s"} ago`;
+};
+
+function SystemMap({ modules = [], connections = [], health = {}, syncedAt = null, onClose }) {
   const getCoords = (nodeId) => {
     const node = modules.find((item) => item.id === nodeId);
     if (!node) return { x: 0, y: 0 };
@@ -46,11 +54,14 @@ function SystemMap({ modules = [], connections = [], onClose }) {
             preserveAspectRatio="none"
           >
             <defs>
-              <linearGradient id="mapLine" x1="0%" y1="0%" x2="100%" y2="0%">
+              {/* In map coordinates, not per line: a gradient measured against a line's own
+                box vanishes for a perfectly vertical one (Portal ↔ Job Log); the glow
+                filter has the same problem, so it is measured on the whole map too. */}
+              <linearGradient id="mapLine" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2={canvasWidth} y2="0">
                 <stop offset="0%" stopColor="#ff5d5d" stopOpacity="0.35" />
                 <stop offset="100%" stopColor="#ffb347" stopOpacity="0.85" />
               </linearGradient>
-              <filter id="glow">
+              <filter id="glow" filterUnits="userSpaceOnUse" x="0" y="0" width={canvasWidth} height={canvasHeight}>
                 <feGaussianBlur stdDeviation="4" result="coloredBlur" />
                 <feMerge>
                   <feMergeNode in="coloredBlur" />
@@ -61,9 +72,10 @@ function SystemMap({ modules = [], connections = [], onClose }) {
             {connections.map((conn) => {
               const start = getCoords(conn.from);
               const end = getCoords(conn.to);
+              const key = `${conn.from}-${conn.to}`;
               return (
                 <line
-                  key={`${conn.from}-${conn.to}`}
+                  key={key}
                   x1={start.x}
                   y1={start.y}
                   x2={end.x}
@@ -81,10 +93,10 @@ function SystemMap({ modules = [], connections = [], onClose }) {
           {modules.map((module) => (
             <div
               key={module.id}
-              className="map-node"
+              className={`map-node${module.hub ? " hub" : ""}`}
               style={{ left: `${module.x}%`, top: `${module.y}%` }}
             >
-              <span className="node-pulse" />
+              <span className={`node-pulse${health[module.id] === false ? " down" : ""}`} />
               <div className="node-chip">{module.tag}</div>
               <h3>{module.label}</h3>
             </div>
@@ -96,11 +108,11 @@ function SystemMap({ modules = [], connections = [], onClose }) {
         <div className="system-map-footer">
           <div className="legend-group">
             <span className="legend-dot stable" /> Stable
-            <span className="legend-dot degraded" /> Degraded
+            <span className="legend-dot degraded" /> Needs attention
           </div>
           <div className="sync-indicator">
             <span className="pulse" />
-            Synced 58 seconds ago
+            {checkedAgo(syncedAt)}
           </div>
         </div>
 
@@ -111,12 +123,12 @@ function SystemMap({ modules = [], connections = [], onClose }) {
             return (
               <div key={`${conn.from}-${conn.to}`} className="connection-card">
                 <p className="connection-title">
-                  {start?.label} → {end?.label}
+                  {start?.label} ↔ {end?.label}
                 </p>
                 <span className={`status-chip ${conn.status}`}>
                   {conn.status === "stable" ? "Healthy" : "Needs attention"}
                 </span>
-                <p className="connection-meta">Throughput 1.8k events / min</p>
+                <p className="connection-meta">{conn.detail}</p>
               </div>
             );
           })}
