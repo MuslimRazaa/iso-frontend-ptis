@@ -10,9 +10,10 @@ const UserDashboard = () => {
     const [userPermissions, setUserPermissions] = useState({});
     const navigate = useNavigate();
     // Managers are shown the certificates about to run out, the same warning the
-    // admin dashboard carries. The backend says who is a manager, from the
-    // designation the ERP's HR module keeps ("Manager <department>").
-    const isManager = userPermissions.is_manager === true;
+    // admin dashboard carries. A manager is whoever's designation (kept by the ERP's
+    // HR module) reads "Manager" — the department stands in only when no designation
+    // comes through.
+    const isManager = /manager/i.test(String(userPermissions.designation || userPermissions.department || ''));
     const [expiringCerts, setExpiringCerts] = useState([]);
     useEffect(() => {
         if (!isManager) return undefined;
