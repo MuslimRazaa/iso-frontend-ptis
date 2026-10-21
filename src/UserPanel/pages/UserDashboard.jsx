@@ -200,6 +200,19 @@ const UserDashboard = () => {
             badge: isoPendingCount > 0 ? isoPendingCount : null
         },
         {
+            id: "testing-certification",
+            title: "Testing & Certification",
+            link: "/user/testing",
+            description: "Conduct standard-based tests and issue certificates.",
+            status: "online",
+            statusLabel: "Live",
+            metric: userPermissions.testing_admin
+                ? "Manage results, practicals and certificates"
+                : "Take your assigned tests",
+            permission: userPermissions.testing || userPermissions.testing_admin,
+            icon: "certificates"
+        },
+        {
             id: "bid-cv-library",
             title: "Bid CV Library",
             link: "/user/bid-cv-library",

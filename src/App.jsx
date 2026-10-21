@@ -66,6 +66,14 @@ const FormDetail = lazy(() => import('./ISOForms/pages/FormDetail'))
 const TestingModule = lazy(() => import('./Testing/TestingModule'))
 import { ThemeProvider as TestingThemeProvider } from './Testing/contexts/ThemeContext'
 
+// The admin home. An employee who lands on it (a module's "back to dashboard" link
+// points here) is sent to their own dashboard instead of being shown the admin one.
+// It is a component, not a check made while the routes are built, so who is signed in
+// is read when the page is actually opened — after login, not before it.
+const AdminHome = () => (
+  localStorage.getItem('userType') === 'user' ? <Navigate to="/user/dashboard" replace /> : <MainDashboard />
+)
+
 // Wraps the testing module in its own ThemeProvider so it can mount as a route.
 const TestingModulePage = () => (
   <TestingThemeProvider>
@@ -157,7 +165,10 @@ function App() {
             {/* ============================================ */}
             {/* ADMIN ROUTES                                */}
             {/* ============================================ */}
-            <Route path="/dashboard" element={<MainDashboard />} />
+            {/* The admin home. An employee who ends up here (a module's "back to
+                dashboard" link points at it) goes to their own dashboard instead of
+                being shown the admin one. */}
+            <Route path="/dashboard" element={<AdminHome />} />
 
             {/* Admin — Learning Management System */}
             <Route path="/learning-management-system/*" element={<LearningManagementSystem />}>
