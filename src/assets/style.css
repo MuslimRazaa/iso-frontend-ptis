@@ -4281,7 +4281,7 @@ body {
   border-radius: 24px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   padding: 28px;
-  min-height: 360px;
+  min-height: 340px;
   overflow: hidden;
   background: rgba(8, 10, 18, 0.8);
 }
@@ -4296,7 +4296,9 @@ body {
 .map-node {
   position: absolute;
   transform: translate(-50%, -50%);
-  background: rgba(17, 21, 32, 0.9);
+  /* Solid, so a link runs behind the box and stops at its edge instead of showing
+     through it. */
+  background: #111520;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 18px;
   padding: 14px 18px;
@@ -4330,6 +4332,12 @@ body {
   animation: pulseGlow 1.8s infinite;
 }
 
+.node-pulse.down {
+  background: #ffab40;
+  box-shadow: 0 0 10px rgba(255, 171, 64, 0.9);
+  animation: none;
+}
+
 .map-gradient {
   position: absolute;
   inset: 0;
@@ -4338,14 +4346,35 @@ body {
   mix-blend-mode: screen;
 }
 
-.map-connection.stable {
-  opacity: 0.8;
+.map-connection {
+  /* Every link is a broken line that streams along its length, the way a live
+     connection reads on a map. */
+  stroke-dasharray: 10 8;
+  animation: dashFlow 1.4s linear infinite;
 }
 
+.map-connection.stable {
+  opacity: 0.85;
+}
+
+/* A link whose module is not answering turns amber and slows right down. */
 .map-connection.degraded {
-  opacity: 0.7;
-  stroke-dasharray: 12;
-  animation: dashFlow 1.4s linear infinite;
+  stroke: #ffab40;
+  opacity: 0.85;
+  animation-duration: 3.2s;
+}
+
+/* The ERP is the hub every other module hangs off, so it is drawn larger. */
+.map-node.hub {
+  min-width: 190px;
+  padding: 18px 22px;
+  border-color: rgba(255, 93, 93, 0.55);
+  background: radial-gradient(circle at 20% 0%, rgba(255, 93, 93, 0.22), transparent 70%), #111520;
+  box-shadow: 0 0 0 1px rgba(255, 93, 93, 0.25), 0 0 36px rgba(255, 93, 93, 0.28), 0 15px 35px rgba(0, 0, 0, 0.5);
+}
+
+.map-node.hub h3 {
+  font-size: 19px;
 }
 
 .system-map-footer {
@@ -5340,9 +5369,12 @@ body {
   }
 }
 
+/* The dashed links use a 10 + 8 pattern (18 long), and the flow must travel a
+   whole number of those (36 = two) before it repeats. Ending anywhere else made the
+   line jump back each cycle — the little stall that read as it "stopping". */
 @keyframes dashFlow {
   to {
-    stroke-dashoffset: -40;
+    stroke-dashoffset: -36;
   }
 }
 
