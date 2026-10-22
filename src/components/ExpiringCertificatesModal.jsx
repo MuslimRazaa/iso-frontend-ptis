@@ -1,4 +1,5 @@
 import React from 'react'
+import { X } from 'lucide-react'
 
 const pad = (n) => String(n).padStart(2, '0')
 const formatDate = (d) => `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`
@@ -38,11 +39,15 @@ function ExpiringCertificatesModal({ items, onClose, onOpenCertificate }) {
               These employees should take the General and Specific tests again. A certificate drops off this list as soon as the tests are retaken and passed.
             </div>
           </div>
+          {/* The site's own close button, as on the Add Result modal. */}
           <button
-            type="button" onClick={onClose} aria-label="Close"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7a7a8c', fontSize: 22, lineHeight: 1 }}
+            type="button"
+            className="close-modal-btn"
+            onClick={onClose}
+            aria-label="Close"
+            style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}
           >
-            ✕
+            <X size={18} />
           </button>
         </div>
 

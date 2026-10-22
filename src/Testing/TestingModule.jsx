@@ -343,8 +343,10 @@ const HomePage = React.memo(({
 const readCertLink = () => {
   try {
     const q = new URLSearchParams(window.location.search);
-    return { empId: q.get('certEmp') || '', standard: q.get('certStandard') || '' };
-  } catch { return { empId: '', standard: '' }; }
+    // certKeys: the exact certificates a notification e-mail listed, as
+    // "employeeId|standard" pairs separated by ";".
+    return { empId: q.get('certEmp') || '', standard: q.get('certStandard') || '', keys: q.get('certKeys') || '' };
+  } catch { return { empId: '', standard: '', keys: '' }; }
 };
 
 const TestingModule = () => {
@@ -364,9 +366,10 @@ const TestingModule = () => {
   useEffect(() => {
     try {
       const url = new URL(window.location.href);
-      if (url.searchParams.has('certEmp') || url.searchParams.has('certStandard')) {
+      if (url.searchParams.has('certEmp') || url.searchParams.has('certStandard') || url.searchParams.has('certKeys')) {
         url.searchParams.delete('certEmp');
         url.searchParams.delete('certStandard');
+        url.searchParams.delete('certKeys');
         window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
       }
     } catch { /* leave the address alone */ }
@@ -3087,7 +3090,10 @@ const TestingModule = () => {
         } = useLinkedEmployeeFilter(results, certLinkRef.current.empId);
         // A multi-pick of standards (comma-joined), like the Test Results filter. It
         // can start narrowed by a link from the expiry warning (see certLinkRef).
-        const dropCertLink = () => { certLinkRef.current = { empId: '', standard: '' }; };
+        // The exact certificates an e-mail listed. Held in state so clearing it shows
+        // everything again straight away.
+        const [linkKeys, setLinkKeys] = useState(certLinkRef.current.keys);
+        const dropCertLink = () => { certLinkRef.current = { empId: '', standard: '', keys: '' }; setLinkKeys(''); };
         const [filterCertStandard, setFilterCertStandard] = useState(certLinkRef.current.standard);
         // Every standard a certificate can be for, without its General / Specific /
         // Practical tag; whatever a link picked is always among them.
@@ -3332,18 +3338,26 @@ const TestingModule = () => {
         if (filterEmpId || filterEmpName) {
           passed = passed.filter(r => employeeMatches(r, filterEmpId, filterEmpName));
         }
-        // By standard, compared without the General/Specific/Practical tag, so a
-        // pick narrows the pair of tests and any practical of one standard together.
+        // A standard name without its General/Specific/Practical tag, so a pick (or
+        // an e-mail link) narrows the pair of tests and any practical together.
+        const standardKey = (v) => norm(v)
+          .replace(/\(\s*(general|specific|practical)\s*\)/ig, '')
+          .replace(/\s+(general|specific|practical)\b/ig, '')
+          .replace(/[_-]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .toLowerCase();
         if (filterCertStandard) {
-          const key = (v) => norm(v)
-            .replace(/\(\s*(general|specific|practical)\s*\)/ig, '')
-            .replace(/\s+(general|specific|practical)\b/ig, '')
-            .replace(/[_-]+/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim()
-            .toLowerCase();
-          const wanted = new Set(toMultiList(filterCertStandard).map(key));
-          passed = passed.filter(r => wanted.has(key(r.STANDARD)));
+          const wanted = new Set(toMultiList(filterCertStandard).map(standardKey));
+          passed = passed.filter(r => wanted.has(standardKey(r.STANDARD)));
+        }
+        // From an e-mail: exactly the employee + standard pairs it listed, nothing else.
+        if (linkKeys) {
+          const wanted = new Set(linkKeys.split(';').filter(Boolean).map(pair => {
+            const [id, ...rest] = pair.split('|');
+            return `${id.trim()}|${standardKey(rest.join('|'))}`;
+          }));
+          passed = passed.filter(r => wanted.has(`${norm(r.ID)}|${standardKey(r.STANDARD)}`));
         }
         
         const normalizeCombinedBaseType = (value) => {
@@ -3489,7 +3503,7 @@ const TestingModule = () => {
           .map((r, index) => ({ r, index, at: toSortableTimestamp(r?.DATE) }))
           .sort((a, b) => b.at - a.at || a.index - b.index)
           .map(entry => entry.r);
-      }, [generalSearch, filterEmpId, filterEmpName, filterCertStandard, isPass, norm, standards, results]);
+      }, [generalSearch, filterEmpId, filterEmpName, filterCertStandard, linkKeys, isPass, norm, standards, results]);
 
       const totalCertificatePages = Math.ceil(filteredResults.length / certificateItemsPerPage);
       const paginatedCertificateResults = filteredResults.slice(
@@ -3502,7 +3516,7 @@ const TestingModule = () => {
 
       useEffect(() => {
         setCertificateCurrentPage(1);
-      }, [generalSearch, filterEmpId, filterEmpName, filterCertStandard]);
+      }, [generalSearch, filterEmpId, filterEmpName, filterCertStandard, linkKeys]);
 
       useEffect(() => {
         if (totalCertificatePages > 0 && certificateCurrentPage > totalCertificatePages) {
@@ -3605,13 +3619,25 @@ const TestingModule = () => {
             </div>
           </article>
 
+          {linkKeys && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 14,
+              padding: '12px 16px', borderRadius: 14, background: '#fff4e5', border: '1px solid #ffd8a8', color: '#8a4b0a',
+            }}>
+              <span style={{ flex: 1, minWidth: 220, fontSize: 14 }}>
+                Showing only the certificates listed in the e-mail.
+              </span>
+              <button type="button" className="ghost-btn small" onClick={dropCertLink}>Show all certificates</button>
+            </div>
+          )}
+
           {/* Table Card */}
           <article className="panel" style={{ padding: 0, overflow: 'hidden' }}>
             {filteredResults.length === 0 ? (
               <div style={{ padding: '40px', textAlign: 'center' }}>
                 <AlertCircle size={48} color="#95a5a6" style={{ marginBottom: '15px' }} />
                 <p style={{ color: '#7f8c8d', fontSize: '1.1em' }}>
-                  {(generalSearch || filterEmpId || filterEmpName) ? 'No matching candidates found' : 'No passed candidates available'}
+                  {(generalSearch || filterEmpId || filterEmpName || linkKeys) ? 'No matching candidates found' : 'No passed candidates available'}
                 </p>
               </div>
             ) : (
@@ -4103,7 +4129,7 @@ const TestingModule = () => {
         >
           <div className="sidebar-brand">
             <div className="brand-logo" aria-hidden="true">
-              <span onClick={() => navigate('/dashboard')} title="Back to Dashboard" style={{ cursor: 'pointer' }}>
+              <span onClick={() => navigate(window.location.pathname.startsWith('/user') ? '/user/dashboard' : '/dashboard')} title="Back to Dashboard" style={{ cursor: 'pointer' }}>
                 <img src={ptisLogo} alt="PTIS" />
               </span>
             </div>
