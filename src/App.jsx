@@ -1,8 +1,8 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import Login from './mainScreens/Login'
 import VideoLoader from './components/VideoLoader'
-import { ToastHost } from './components/Toast'
+import { ToastHost, showToast } from './components/Toast'
 import { initModalScrollLock } from './utils/modalScrollLock'
 import RequireAuth from './components/RequireAuth'
 import './assets/style.css'
@@ -65,6 +65,19 @@ const FormDetail = lazy(() => import('./ISOForms/pages/FormDetail'))
 // context, so it stays a normal import; the heavy module itself is lazy.
 const TestingModule = lazy(() => import('./Testing/TestingModule'))
 import { ThemeProvider as TestingThemeProvider } from './Testing/contexts/ThemeContext'
+
+// Shows the "Welcome back" toast queued by the login screen, but only once the app
+// has moved off the login page — so it appears on the main page, not before it.
+function WelcomeToast() {
+  const { pathname } = useLocation()
+  useEffect(() => {
+    if (pathname === '/') return
+    let message = null
+    try { message = sessionStorage.getItem('pendingWelcome'); sessionStorage.removeItem('pendingWelcome') } catch { /* no storage */ }
+    if (message) showToast(message, 'success')
+  }, [pathname])
+  return null
+}
 
 // The admin home. An employee who lands on it (a module's "back to dashboard" link
 // points here) is sent to their own dashboard instead of being shown the admin one.
@@ -155,6 +168,7 @@ function App() {
         <VideoLoader onLoadingComplete={handleLoadingComplete} />
       ) : (
         <Router>
+          <WelcomeToast />
           <Suspense fallback={<RouteFallback />}>
           <Routes>
             {/* ============================================ */}

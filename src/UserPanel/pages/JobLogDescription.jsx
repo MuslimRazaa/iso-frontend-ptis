@@ -5,6 +5,8 @@ import PaginationBar from '../../components/PaginationBar'
 import ClearFilterButton from '../../components/ClearFilterButton'
 import StyledSelect from '../../components/StyledSelect'
 import MultiSelect from '../../components/MultiSelect'
+import WorkOrderTagInput from '../../components/WorkOrderTagInput'
+import WorkOrderCell from '../../components/WorkOrderCell'
 import StyledDatePicker from '../../components/StyledDatePicker'
 import InfoTooltip from '../../components/InfoTooltip'
 import { showToast } from '../../components/Toast'
@@ -690,6 +692,26 @@ function JobLogDescription() {
     if (next.has(id)) next.delete(id); else next.add(id)
     return next
   })
+  // Entries whose extra work-order rows are open in the View table.
+  const [expandedWo, setExpandedWo] = useState(() => new Set())
+  const toggleWoExpanded = (id) => setExpandedWo(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
+  // Clicking anywhere outside the table closes the open work-order rows (and Escape too).
+  const tableShellRef = useRef(null)
+  useEffect(() => {
+    if (!expandedWo.size) return undefined
+    const onDown = (e) => { if (!tableShellRef.current?.contains(e.target)) setExpandedWo(new Set()) }
+    const onKey = (e) => { if (e.key === 'Escape') setExpandedWo(new Set()) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [expandedWo])
   // Arriving from a dashboard stat card: land already filtered to what it
   // counted, same as the status dropdown would produce by hand. The dashboard
   // sends a stable token ('completed', 'in_progress', 'pending'; the old 'closed' still works) rather than a
@@ -1096,6 +1118,10 @@ function JobLogDescription() {
     // Status is compulsory. Only enforced for someone who can actually set it —
     // another department's user sees the field locked and must not be blocked
     // from saving their own section.
+    if (canEdit('operations') && !String(modalState.workOrder || '').trim()) {
+      showToast('Please enter at least one Work Order number.', 'error')
+      return
+    }
     if (canEdit('operations') && !String(modalState.status || '').trim()) {
       showToast('Please select a Status before saving.', 'error')
       return
@@ -1705,7 +1731,7 @@ function JobLogDescription() {
       </div>
 
       {/* ══ TABLE SHELL ════════════════════════════════════════ */}
-      <div className="job-log-table-shell">
+      <div className="job-log-table-shell" ref={tableShellRef}>
         <div className="all-records-table-container">
           <div className="all-records-table-scroll">
             <table className="all-records-table">
@@ -1792,11 +1818,14 @@ function JobLogDescription() {
                       .map(c => `${c.oldValue} → ${c.newValue} (${c.startDate} – ${c.endDate})\n${c.reason || ''}`.trim())
                       .join('\n\n')
                     const isExpanded = expandedRows.has(entry.id)
-                    return (
-                      <React.Fragment key={entry.id}>
-                      <tr>
+                    const woTags = String(entry.workOrder || '').split(',').map(t => t.trim()).filter(Boolean)
+                    const woOpen = woTags.length > 1 && expandedWo.has(entry.id)
+                    // One full table row per work order: the entry's own row carries the first,
+                    // and opening the dropdown shows the same row again for each of the others.
+                    const renderRow = (rowKey, wo, main) => (
+                      <tr key={rowKey} style={main ? undefined : { background: '#fafcff' }}>
                         <td style={{ textAlign: 'center' }}>
-                          {changes.length > 0 && (
+                          {main && changes.length > 0 && (
                             <button type="button" onClick={() => toggleRowExpanded(entry.id)}
                               style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7a7a8c', display: 'flex', alignItems: 'center' }}
                               title="Show inspector/team change history">
@@ -1808,11 +1837,12 @@ function JobLogDescription() {
                         <td className="all-records-cell-date">{rv(entry.entryDate)}</td>
                         <td className="all-records-cell-text" style={{ fontWeight: 600 }}>{rv(entry.client)}</td>
                         <td className="all-records-cell-text">
-                          <span style={{
-                            display: 'inline-block', padding: '2px 8px', borderRadius: 6,
-                            background: '#f0f7ff', color: '#2f74bf', fontSize: 12, fontWeight: 700
-                          }}>
-                            {rv(entry.workOrder)}</span>
+                          <WorkOrderCell
+                            value={wo}
+                            count={main ? woTags.length : 1}
+                            open={woOpen}
+                            onToggle={() => toggleWoExpanded(entry.id)}
+                          />
                         </td>
                         <td className="all-records-cell-text">
                           {rv(entry.inspectorName)}
@@ -1881,15 +1911,17 @@ function JobLogDescription() {
                           </div>
                         </td>
                       </tr>
+                    )
+                    return (
+                      <React.Fragment key={entry.id}>
+                      {renderRow(entry.id, woTags[0] || '', true)}
+                      {woOpen && woTags.slice(1).map(tag => renderRow(`${entry.id}-wo-${tag}`, tag, false))}
                       {isExpanded && changes.map(c => (
                         <tr key={`${entry.id}-change-${c.id}`} style={{ background: '#fafafd' }}>
                           <td></td>
                           <td colSpan={36} style={{ padding: '8px 16px', fontSize: 12.5 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                              <span style={{
-                                padding: '2px 8px', borderRadius: 6,
-                                background: '#f0f7ff', color: '#2f74bf', fontWeight: 700
-                              }}>{rv(entry.workOrder)}</span>
+                              <WorkOrderCell value={entry.workOrder} />
                               <span style={{ color: '#7a7a8c', fontWeight: 700, textTransform: 'uppercase', fontSize: 10.5 }}>
                                 {c.fieldType === 'team' ? 'Inspector Team' : 'Inspector Name'}
                               </span>
@@ -2006,10 +2038,13 @@ function JobLogDescription() {
                         style={{ padding: '0 12px', whiteSpace: 'nowrap', flexShrink: 0, height: 42 }}>+ Add</button>
                     )}
                   </div></div>
-                <label><span>Work Order *</span>
-                  <input type="text" value={modalState.workOrder} placeholder="WO-XXXX" required
+                <div className="field-col"><span>Work Order *</span>
+                  {/* Numbers only; a space makes each one a tag of its own. */}
+                  <WorkOrderTagInput
+                    value={modalState.workOrder}
                     disabled={!canEdit('operations')}
-                    onChange={e => handleModalChange('workOrder', e.target.value)} /></label>
+                    onChange={v => handleModalChange('workOrder', v)} />
+                </div>
                 <label><span>Reference</span>
                   <StyledSelect
                     value={refChoice}

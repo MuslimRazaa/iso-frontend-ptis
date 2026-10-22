@@ -14,6 +14,7 @@ const FIELD_TYPES = [
   { value: 'checkbox-group', label: 'Checkbox Group' },
   { value: 'radio',          label: 'Checkbox (select one only)' },
   { value: 'employee',       label: 'Employee Picker' },
+  { value: 'employee-multi', label: 'Employee Picker (multiple)' },
 ]
 
 // Map known form codes to their seed template

@@ -355,6 +355,7 @@ export async function fillOriginalPdf(base64, fields, formValues, approverValues
   for (const field of fields || []) {
     let rawVal = allValues[field.id]
     if (field.type === 'employee') rawVal = resolveEmployeeName(rawVal)
+    else if (field.type === 'employee-multi') rawVal = (Array.isArray(rawVal) ? rawVal : []).map(resolveEmployeeName).join(', ')
 
     // The PDF's own field, when it has one, is always the better target.
     if (setAcroValue(field, rawVal)) { usedAcroFields++; continue }

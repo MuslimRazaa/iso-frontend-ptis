@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { API_ENDPOINTS } from '../../config/api'
 import { getOfflineEntries } from '../utils/offlineStore'
+import { getCurrentEmployeeId } from '../utils/currentEmployee'
 
 const BRAND  = '#d7263d'
 const INK    = '#14141c'
@@ -33,26 +34,65 @@ function ISOFormsHome() {
   const isUser = location.pathname.startsWith('/user')
   const base = isUser ? '/user/iso-forms' : '/iso-forms'
 
+  // `entries` is what the totals count: the viewer's own forms (everyone's, for an
+  // admin). `awaiting` is forms of others waiting on their decision — listed under
+  // Recent, but never counted in the totals.
   const [entries, setEntries] = useState([])
+  const [awaiting, setAwaiting] = useState([])
   const [loading, setLoading] = useState(true)
   const [offline, setOffline] = useState(false)
 
+  // The same rule as the Forms register: an ISO Forms admin sees every form, anyone
+  // else only the forms they submitted. This page used to fetch every entry for
+  // everyone, so each employee saw the others' forms (and totals) on it.
+  const isAdmin = !isUser || (() => {
+    try { return JSON.parse(localStorage.getItem('userPermissions') || '{}').iso_forms_admin === true } catch { return false }
+  })()
+  const myEmail = localStorage.getItem('userEmail') || ''
+  const [myEmployeeId, setMyEmployeeId] = useState(null)
+  useEffect(() => { getCurrentEmployeeId().then(setMyEmployeeId) }, [])
+  const identityReady = isAdmin || Boolean(myEmployeeId) || Boolean(myEmail)
+
   useEffect(() => {
+    if (!identityReady) return undefined   // never flash the unscoped list while the identity resolves
     let active = true
-    fetch(API_ENDPOINTS.ISO_FORMS_ENTRIES)
+    const params = new URLSearchParams()
+    if (!isAdmin) {
+      if (myEmployeeId) params.set('employeeId', myEmployeeId)
+      if (myEmail) params.set('email', myEmail)
+    }
+    const load = (query) => fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}?${query}`)
       .then(res => (res.ok ? res.json() : Promise.reject()))
       .then(json => {
         const rows = json?.data ?? json
         if (!Array.isArray(rows)) throw new Error('bad response')
-        if (active) { setEntries(rows); setOffline(false) }
+        return rows
+      })
+    // Besides the forms they submitted, an approver also sees the forms waiting on
+    // their decision (submitted by others), so those show up in the counts and the
+    // recent list. A failure of that second list must not hide the first.
+    const awaitingMe = (!isAdmin && myEmployeeId)
+      ? load(new URLSearchParams({ relatedEmployeeId: myEmployeeId }).toString()).catch(() => [])
+      : Promise.resolve([])
+    Promise.all([load(params.toString()), awaitingMe])
+      .then(([own, pending]) => {
+        const seen = new Set(own.map(e => e.id))
+        if (active) { setEntries(own); setAwaiting(pending.filter(e => !seen.has(e.id))); setOffline(false) }
       })
       .catch(() => {
         // No backend yet — show whatever has been submitted into the local demo store.
-        if (active) { setEntries(getOfflineEntries()); setOffline(true) }
+        if (active) {
+          const mine = [myEmployeeId, myEmail].filter(Boolean).map(String)
+          const all = getOfflineEntries()
+          const own = isAdmin ? all : all.filter(e => mine.includes(String(e.created_by || '')))
+          setEntries(own)
+          setAwaiting(isAdmin || !myEmployeeId ? [] : all.filter(e => !own.includes(e) && (e.status || 'pending') === 'pending' && String(e.related_employee_id) === String(myEmployeeId)))
+          setOffline(true)
+        }
       })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [])
+  }, [identityReady, isAdmin, myEmployeeId, myEmail])
 
   const counts = useMemo(() => ({
     total:    entries.length,
@@ -62,10 +102,10 @@ function ISOFormsHome() {
   }), [entries])
 
   const recent = useMemo(() => (
-    [...entries]
+    [...entries, ...awaiting]
       .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
       .slice(0, 8)
-  ), [entries])
+  ), [entries, awaiting])
 
   const STAT_META = [
     { key: 'total',    label: 'Total Forms', status: null,       helper: 'All submissions', tone: '' },
