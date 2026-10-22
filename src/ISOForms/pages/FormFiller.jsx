@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useLocation } from 'react-router-dom'
 import API_BASE_URL, { API_ENDPOINTS } from '../../config/api'
+import { Eye } from 'lucide-react'
 import DynamicField from '../components/DynamicField'
+import TemplatePreviewModal from '../components/TemplatePreviewModal'
 import { isFieldEmpty, signaturesToStamp, nowDateTimeValue } from '../utils/fieldHelpers'
 import { SEED_TEMPLATES, SEED_VERSION, SEED_EMPLOYEES } from '../seedTemplates'
 import { ensureSeeded, getOfflineTemplates, getOfflineTemplate, addOfflineEntry } from '../utils/offlineStore'
@@ -16,7 +18,7 @@ import { getActorId, getActorName } from '../../utils/actorIdentity'
 // column on a laptop-narrow pane and four across on a wide monitor.
 const FIELD_COLUMNS = 'repeat(auto-fit, minmax(340px, 1fr))'
 
-const isWideField = (field) => field.type === 'textarea' || field.type === 'checkbox-group' || field.type === 'radio'
+const isWideField = (field) => field.type === 'textarea' || field.type === 'checkbox-group' || field.type === 'radio' || field.type === 'employee-multi'
 
 function FormFiller() {
   // The same screen fills a new form (`new/:templateId`) and revises a
@@ -35,6 +37,8 @@ function FormFiller() {
 
   const [templates, setTemplates] = useState([])
   const [templateSearch, setTemplateSearch] = useState('')
+  // The blank template PDF being looked at (from the picker or from the form itself).
+  const [previewTemplate, setPreviewTemplate] = useState(null)
   const [template, setTemplate] = useState(null)
   const [loadingTemplates, setLoadingTemplates] = useState(!templateId && !entryId)
   const [loadingTemplate, setLoadingTemplate] = useState(Boolean(templateId))
@@ -366,16 +370,21 @@ function FormFiller() {
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
               {filteredTemplates.map(t => (
-                <Link key={t.id} to={`${base}/new/${t.id}`} style={{ textDecoration: 'none' }}>
-                  <div className="panel form-template-card" style={{ padding: 20, cursor: 'pointer', height: '100%' }}>
+                <div key={t.id} className="panel form-template-card" style={{ padding: 20, height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <Link to={`${base}/new/${t.id}`} style={{ textDecoration: 'none', flex: 1 }}>
                     <div style={{ fontWeight: 700, color: '#14141c', marginBottom: 6 }}>{t.name}</div>
                     <div style={{ fontSize: 13, color: '#7a7a8c' }}>{t.description || 'No description'}</div>
-                  </div>
-                </Link>
+                  </Link>
+                  <button type="button" className="ghost-btn small" onClick={() => setPreviewTemplate(t)}
+                    style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <Eye size={14} /> View template
+                  </button>
+                </div>
               ))}
             </div>
           )
         })()}
+        {previewTemplate && <TemplatePreviewModal template={previewTemplate} onClose={() => setPreviewTemplate(null)} />}
       </div>
     )
   }
@@ -389,7 +398,14 @@ function FormFiller() {
     // screen affords and the page gets shorter instead of narrower.
     <div style={{ padding: 'clamp(20px, 3vw, 40px)', width: '100%', boxSizing: 'border-box' }}>
       <p className="eyebrow" style={{ margin: 0 }}>ISO Forms{isEdit ? ' — Editing' : ''}</p>
-      <h1 style={{ margin: '4px 0 8px', fontSize: 26, fontWeight: 800, color: '#14141c' }}>{template.name}</h1>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', margin: '4px 0 8px' }}>
+        <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: '#14141c' }}>{template.name}</h1>
+        <button type="button" className="ghost-btn small" onClick={() => setPreviewTemplate(template)}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <Eye size={14} /> View template
+        </button>
+      </div>
+      {previewTemplate && <TemplatePreviewModal template={previewTemplate} onClose={() => setPreviewTemplate(null)} />}
       {isEdit && entry && entry.status !== 'pending' && (
         <div style={{ background: '#fff7e6', border: '1px solid #ffe1a8', color: '#92660a', borderRadius: 12, padding: '12px 16px', marginBottom: 16, fontSize: 14 }}>
           This form was already {entry.status}. Editing it changes the record that was decided on.

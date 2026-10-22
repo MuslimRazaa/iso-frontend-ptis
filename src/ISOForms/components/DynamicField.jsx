@@ -70,6 +70,13 @@ function DynamicField({ field, value, onChange, readOnly, employees = [], signer
       const emp = employees.find(e => String(e.id) === String(value))
       display = emp ? (emp.full_name || emp.name) : (value ? String(value) : '—')
     }
+    else if (field.type === 'employee-multi') {
+      const names = (Array.isArray(value) ? value : []).map(id => {
+        const emp = employees.find(e => String(e.id) === String(id))
+        return emp ? (emp.full_name || emp.name) : String(id)
+      })
+      display = names.length ? names.join(', ') : '—'
+    }
     else if (field.type === 'datetime') display = formatDateTimeValue(value) || '—'
     else if (value !== undefined && value !== null && value !== '') display = String(value)
     return <div style={{ fontSize: 14, color: '#14141c' }}>{display}</div>
@@ -179,6 +186,41 @@ function DynamicField({ field, value, onChange, readOnly, employees = [], signer
           style={{ ...inputStyle, cursor: 'text' }}
         />
       )
+    case 'employee-multi': {
+      const picked = Array.isArray(value) ? value.map(String) : []
+      const nameOf = (id) => {
+        const emp = employees.find(e => String(e.id) === id)
+        return emp ? (emp.full_name || emp.name) : id
+      }
+      return (
+        <div>
+          {picked.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+              {picked.map(id => (
+                <span key={id} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6, background: '#fdf2f3', color: '#d7263d',
+                  border: '1px solid #ffd1d8', borderRadius: 6, padding: '3px 8px', fontSize: 12.5, fontWeight: 600,
+                }}>
+                  {nameOf(id)}
+                  <span onClick={() => onChange(picked.filter(p => p !== id))} title="Remove" style={{ cursor: 'pointer', fontWeight: 700, lineHeight: 1 }}>×</span>
+                </span>
+              ))}
+            </div>
+          )}
+          <SearchableSelect
+            value=""
+            onChange={(id) => { if (id && !picked.includes(String(id))) onChange([...picked, String(id)]) }}
+            options={employees.filter(emp => !picked.includes(String(emp.id))).map(emp => ({
+              value: String(emp.id),
+              label: `${emp.full_name || emp.name}${(emp.department_name || emp.department) ? ` — ${emp.department_name || emp.department}` : ''}`,
+            }))}
+            emptyOptionLabel={picked.length ? 'Add another employee…' : 'Select employees…'}
+            placeholder="Type to search…"
+            style={{ ...inputStyle, cursor: 'text' }}
+          />
+        </div>
+      )
+    }
     default:
       return <input type="text" {...common} />
   }

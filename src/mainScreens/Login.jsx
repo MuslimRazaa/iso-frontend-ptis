@@ -34,6 +34,18 @@ function Login() {
     return target && target.startsWith('/') && !target.startsWith('//') ? target : fallback;
   };
 
+  // The welcome toast is queued, not shown here: WelcomeToast (App.jsx) raises it once
+  // the route has actually changed, so it never sits on the login screen. The dashboard
+  // code is fetched first so the switch happens straight away.
+  const goTo = async (target, message) => {
+    try {
+      if (target === '/dashboard') await import('../dashboards/MainDashboard');
+      else if (target === '/user/dashboard') await Promise.all([import('../UserPanel/UserPanel'), import('../UserPanel/pages/UserDashboard')]);
+    } catch { /* the route loads it itself */ }
+    sessionStorage.setItem('pendingWelcome', message);
+    navigate(target);
+  };
+
   const featureHighlights = [
     // { title: "Inspection Ops", detail: "07 live projects" },
     // { title: "Compliance", detail: "ISO 17020 aligned" },
@@ -69,8 +81,7 @@ function Login() {
         localStorage.setItem('userType', 'admin');
         localStorage.setItem('adminPassword', formData.password);
         setIsLoading(false);
-        showToast("Welcome back!", "success");
-        navigate(getRedirectTarget("/dashboard"));
+        goTo(getRedirectTarget("/dashboard"), "Welcome back!");
         return;
       }
       setShowError(true);
@@ -124,8 +135,7 @@ function Login() {
         }
 
         setIsLoading(false);
-        showToast(`Welcome back, ${employee.full_name}!`, "success");
-        navigate(getRedirectTarget("/user/dashboard"));
+        goTo(getRedirectTarget("/user/dashboard"), `Welcome back, ${employee.full_name}!`);
       } else {
         const errorData = await response.json();
         setShowError(true);
