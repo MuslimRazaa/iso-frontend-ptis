@@ -59,6 +59,8 @@ function FormFiller() {
   // can't be changed here (the backend leaves a decided role's row alone on
   // resync, so letting the picker imply otherwise would be misleading).
   const [decidedRoles, setDecidedRoles] = useState({})
+  // A form any approver has already approved or rejected can no longer be edited, by anyone.
+  const editLocked = isEdit && Boolean(entry) && ((entry.status || 'pending') !== 'pending' || (Array.isArray(entry.approvals) && entry.approvals.some(a => a.status && a.status !== 'pending')))
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -239,6 +241,7 @@ function FormFiller() {
     // failed save must be reported rather than written to the demo store where
     // the entries list — which reloads from the server — would never show it.
     if (isEdit) {
+      if (editLocked) { setError('This form has already been approved or rejected, so it can no longer be edited.'); return }
       try {
         const body = new FormData()
         body.append('form_data', JSON.stringify(signedValues))
@@ -406,9 +409,9 @@ function FormFiller() {
         </button>
       </div>
       {previewTemplate && <TemplatePreviewModal template={previewTemplate} onClose={() => setPreviewTemplate(null)} />}
-      {isEdit && entry && entry.status !== 'pending' && (
-        <div style={{ background: '#fff7e6', border: '1px solid #ffe1a8', color: '#92660a', borderRadius: 12, padding: '12px 16px', marginBottom: 16, fontSize: 14 }}>
-          This form was already {entry.status}. Editing it changes the record that was decided on.
+      {isEdit && entry && editLocked && (
+        <div style={{ background: '#fdecea', border: '1px solid #f5c2c0', color: '#b42318', borderRadius: 12, padding: '12px 16px', marginBottom: 16, fontSize: 14 }}>
+          This form has already been approved or rejected, so it can no longer be edited.
         </div>
       )}
       {template.description && <p style={{ margin: '0 0 24px', color: '#7a7a8c' }}>{template.description}</p>}
