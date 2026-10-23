@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
+import { layoutFields } from '../utils/formLayout'
 import { Link, useNavigate, useParams, useLocation } from 'react-router-dom'
 import API_BASE_URL, { API_ENDPOINTS } from '../../config/api'
 import { Eye } from 'lucide-react'
@@ -61,6 +62,10 @@ function FormFiller() {
   const [decidedRoles, setDecidedRoles] = useState({})
   // A form any approver has already approved or rejected can no longer be edited, by anyone.
   const editLocked = isEdit && Boolean(entry) && ((entry.status || 'pending') !== 'pending' || (Array.isArray(entry.approvals) && entry.approvals.some(a => a.status && a.status !== 'pending')))
+
+  // The fields are laid out like the printed form: rows as they sit on the PDF.
+  // Any field without a position on it follows in a group of its own.
+  const formLayout = useMemo(() => layoutFields(template?.fields), [template])
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -392,6 +397,21 @@ function FormFiller() {
     )
   }
 
+  const renderField = (field) => (
+    <>
+      <label style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13.5 }}>
+        {field.label}{field.required && <span style={{ color: '#d7263d' }}> *</span>}
+      </label>
+      <DynamicField
+        field={field}
+        value={values[field.id]}
+        onChange={(val) => setFieldValue(field.id, val)}
+        employees={employees}
+        signerName={signerName}
+      />
+    </>
+  )
+
   if (loadingEntry || loadingTemplate) return <div style={{ padding: 40 }}>Loading form…</div>
   if (!template) return <div style={{ padding: 40, color: '#b42318' }}>Could not load this form template.</div>
 
@@ -423,24 +443,35 @@ function FormFiller() {
       )}
 
       <form onSubmit={handleSubmit}>
-        <article className="panel" style={{ padding: 24, marginBottom: 20, display: 'grid', gridTemplateColumns: FIELD_COLUMNS, gap: '18px 24px', alignItems: 'start' }}>
-          {template.fields.map(field => (
-            // Long Text and multi-select choices need the full row; everything
-            // else is a single control that reads fine beside its neighbour.
-            <div key={field.id} style={isWideField(field) ? { gridColumn: '1 / -1' } : undefined}>
-              <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, fontSize: 14 }}>
-                {field.label}{field.required && <span style={{ color: '#d7263d' }}> *</span>}
-              </label>
-              <DynamicField
-                field={field}
-                value={values[field.id]}
-                onChange={(val) => setFieldValue(field.id, val)}
-                employees={employees}
-                signerName={signerName}
-              />
-            </div>
-          ))}
-        </article>
+        {(
+          <>
+            {formLayout.pages.map(({ page, rows }) => (
+              <article key={page} className="panel" style={{ padding: 'clamp(16px, 2.5vw, 32px)', marginBottom: 20, border: '1px solid #d9d9e0', background: '#fff', boxShadow: '0 2px 10px rgba(20,20,28,0.06)' }}>
+                {formLayout.pages.length > 1 && (
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#9a9aa8', marginBottom: 14 }}>
+                    Page {page + 1}
+                  </div>
+                )}
+                {rows.map((row, i) => (
+                  <div key={i} style={{ display: 'flex', flexWrap: 'wrap', gap: '12px 16px', padding: '12px 0', borderTop: i ? '1px solid #efeff3' : 'none' }}>
+                    {row.map(({ field, weight }) => (
+                      <div key={field.id} style={{ flex: `${weight} 1 ${isWideField(field) ? 280 : 150}px`, minWidth: 0 }}>
+                        {renderField(field)}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </article>
+            ))}
+            {formLayout.loose.length > 0 && (
+              <article className="panel" style={{ padding: 24, marginBottom: 20, display: 'grid', gridTemplateColumns: FIELD_COLUMNS, gap: '18px 24px', alignItems: 'start' }}>
+                {formLayout.loose.map(field => (
+                  <div key={field.id} style={isWideField(field) ? { gridColumn: '1 / -1' } : undefined}>{renderField(field)}</div>
+                ))}
+              </article>
+            )}
+          </>
+        )}
 
         <div style={{ display: 'grid', gridTemplateColumns: FIELD_COLUMNS, gap: 20, marginBottom: 20, alignItems: 'start' }}>
           {(template.approvalRoles?.length ? template.approvalRoles : [{ key: 'approver', label: 'Approver' }]).map(role => {
