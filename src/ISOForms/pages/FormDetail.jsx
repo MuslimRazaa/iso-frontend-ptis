@@ -27,15 +27,10 @@ const StatusBadge = ({ status }) => {
   )
 }
 
-// Labels of the employee fields that name who approved/checked the form.
-const APPROVER_FIELD = /approv|review|verif|check|clos|sign|authori|decid/i
-
 function FormDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
-  // Opened from the Pending Approvals queue: that view is for deciding, so no Edit button.
-  const fromPending = new URLSearchParams(location.search).get('from') === 'pending'
   const isUserSide = location.pathname.startsWith('/user')
   const base = isUserSide ? '/user/iso-forms' : '/iso-forms'
 
@@ -146,12 +141,6 @@ function FormDetail() {
       if (a.status === 'pending') {
         for (const f of (template?.fields || [])) {
           if (f.owner === a.role_key && f.type === 'datetime' && !data[f.id]) data[f.id] = nowDateTimeValue()
-          // The approver was already picked when the form was filled, so an
-          // "Approved by"-style employee field starts as that person.
-          if (f.owner === a.role_key && f.type === 'employee' && !data[f.id] && a.approver_employee_id
-              && APPROVER_FIELD.test(f.label || '')) {
-            data[f.id] = String(a.approver_employee_id)
-          }
         }
       }
       next[a.role_key] = data
@@ -184,12 +173,10 @@ function FormDetail() {
   // Who may revise this form: its author while it is still pending, and an ISO
   // Forms admin at any time. A decided form is the record that was signed off,
   // so changing it is deliberately an admin-only act.
-  // A form that any approver has already approved or rejected is locked for
-  // everyone, admins included.
-  const isDecided = entry ? ((entry.status || 'pending') !== 'pending' || approvals.some(a => a.status && a.status !== 'pending')) : false
   const canEdit = (() => {
-    if (!entry || isDecided || fromPending) return false
+    if (!entry) return false
     if (isAdminOverride) return true
+    if (entry.status !== 'pending') return false
     const me = myEmployeeId || localStorage.getItem('userEmail')
     return Boolean(me) && String(entry.created_by || '') === String(me)
   })()
@@ -464,12 +451,7 @@ function FormDetail() {
                       field={field}
                       value={roleValues[field.id]}
                       onChange={(val) => setApproverValue(approval.role_key, field.id, val)}
-                      // An "Approved by"-style employee field already set to the approver
-                      // chosen when the form was filled is fixed: the approver cannot swap it.
-                      readOnly={!(iAmDecider && approval.status === 'pending')
-                        || (field.type === 'employee' && APPROVER_FIELD.test(field.label || '')
-                          && approval.approver_employee_id != null
-                          && String(roleValues[field.id] || '') === String(approval.approver_employee_id))}
+                      readOnly={!(iAmDecider && approval.status === 'pending')}
                       employees={employees}
                       signerName={signerName}
                     />
