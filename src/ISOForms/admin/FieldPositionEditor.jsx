@@ -946,6 +946,55 @@ function FieldPositionEditor({ pdfBase64, fields, approvalRoles, onSave, onClose
     }))
     setSelectedId(null); setSelectedIds([])
   }
+  // Lines the selected boxes up with each other. Sizes follow the box last clicked
+  // (the one highlighted), the edges and centres follow the group as a whole, and
+  // "spread" keeps the outermost two where they are and evens out the gaps between.
+  // Every patch writes the whole box, so a box with no stored size gains one.
+  const alignSelected = (mode) => {
+    const items = localFields
+      .filter(fl => selectedIds.includes(fl.id))
+      .map(fl => ({ id: fl.id, c: normalizePdfCoords(fl.pdfCoords) }))
+      .filter(i => i.c)
+    if (items.length < 2) return
+    const lead = (items.find(i => i.id === selectedId) || items[0]).c
+    const left = Math.min(...items.map(i => i.c.x))
+    const right = Math.max(...items.map(i => i.c.x + i.c.width))
+    const bottom = Math.min(...items.map(i => i.c.y))
+    const top = Math.max(...items.map(i => i.c.y + i.c.height))
+    const patches = {}
+    const put = (i, next) => {
+      patches[i.id] = {
+        page: i.c.page, x: i.c.x, y: i.c.y, width: i.c.width, height: i.c.height,
+        ...Object.fromEntries(Object.entries(next).map(([k, v]) => [k, round2(v)])),
+      }
+    }
+    if (mode === 'spreadH' || mode === 'spreadV') {
+      const horizontal = mode === 'spreadH'
+      const sorted = [...items].sort((a, b) => horizontal ? a.c.x - b.c.x : b.c.y - a.c.y)
+      const size = (i) => horizontal ? i.c.width : i.c.height
+      const span = horizontal ? right - left : top - bottom
+      const gap = (span - sorted.reduce((sum, i) => sum + size(i), 0)) / (sorted.length - 1)
+      let cursor = horizontal ? left : top
+      for (const i of sorted) {
+        if (horizontal) { put(i, { x: cursor }); cursor += i.c.width + gap }
+        else { put(i, { y: cursor - i.c.height }); cursor -= i.c.height + gap }
+      }
+    } else {
+      for (const i of items) {
+        const { c } = i
+        if (mode === 'left') put(i, { x: left })
+        else if (mode === 'right') put(i, { x: right - c.width })
+        else if (mode === 'centerH') put(i, { x: (left + right) / 2 - c.width / 2 })
+        else if (mode === 'top') put(i, { y: top - c.height })
+        else if (mode === 'bottom') put(i, { y: bottom })
+        else if (mode === 'middleV') put(i, { y: (bottom + top) / 2 - c.height / 2 })
+        else if (mode === 'sameWidth') put(i, { width: lead.width })
+        else if (mode === 'sameHeight') put(i, { height: lead.height, y: c.y + c.height - lead.height })   // top edge stays put
+      }
+    }
+    patchMany(patches)
+  }
+
   const deleteSelectedFields = () => {
     if (!window.confirm(`Delete ${selectedIds.length} selected fields? They go from the template when you save.`)) return
     const ids = new Set(selectedIds)
@@ -1172,6 +1221,27 @@ function FieldPositionEditor({ pdfBase64, fields, approvalRoles, onSave, onClose
               <div style={{ ...S.panel, background: '#eef4ff', borderColor: '#c9dafc', color: '#274690', fontSize: 12, lineHeight: 1.5 }}>
                 <strong>{selectedIds.length} boxes selected.</strong> Drag any of them to move the group, or use the
                 arrow keys (Shift = 10pt, Alt + arrows = resize). Esc clears.
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontWeight: 700, marginBottom: 6 }}>Align</div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {[
+                      ['left', 'Left edges'], ['centerH', 'Centre (horizontal)'], ['right', 'Right edges'],
+                      ['top', 'Top edges'], ['middleV', 'Middle (vertical)'], ['bottom', 'Bottom edges'],
+                    ].map(([mode, label]) => (
+                      <button key={mode} type="button" onClick={() => alignSelected(mode)} style={S.smallGhostBtn}>{label}</button>
+                    ))}
+                  </div>
+                  <div style={{ fontWeight: 700, margin: '10px 0 6px' }}>Same size / spacing</div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {[
+                      ['sameWidth', 'Same width'], ['sameHeight', 'Same height'],
+                      ['spreadH', 'Even gaps →'], ['spreadV', 'Even gaps ↓'],
+                    ].map(([mode, label]) => (
+                      <button key={mode} type="button" onClick={() => alignSelected(mode)} style={S.smallGhostBtn}>{label}</button>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: 6, color: '#5a6fa8' }}>Same width / height copies the box you clicked last.</div>
+                </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
                   <button type="button" onClick={clearSelectedPositions} style={S.removeBtn}>
                     <Trash2 size={13} /> Remove {selectedIds.length} positions
