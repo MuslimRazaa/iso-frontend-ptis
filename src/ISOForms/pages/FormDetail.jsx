@@ -27,10 +27,15 @@ const StatusBadge = ({ status }) => {
   )
 }
 
+// Labels of the employee fields that name who approved/checked the form.
+const APPROVER_FIELD = /approv|review|verif|check|clos|sign|authori|decid/i
+
 function FormDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
+  // Opened from the Pending Approvals queue: that view is for deciding, so no Edit button.
+  const fromPending = new URLSearchParams(location.search).get('from') === 'pending'
   const isUserSide = location.pathname.startsWith('/user')
   const base = isUserSide ? '/user/iso-forms' : '/iso-forms'
 
@@ -141,6 +146,12 @@ function FormDetail() {
       if (a.status === 'pending') {
         for (const f of (template?.fields || [])) {
           if (f.owner === a.role_key && f.type === 'datetime' && !data[f.id]) data[f.id] = nowDateTimeValue()
+          // The approver was already picked when the form was filled, so an
+          // "Approved by"-style employee field starts as that person.
+          if (f.owner === a.role_key && f.type === 'employee' && !data[f.id] && a.approver_employee_id
+              && APPROVER_FIELD.test(f.label || '')) {
+            data[f.id] = String(a.approver_employee_id)
+          }
         }
       }
       next[a.role_key] = data
@@ -173,10 +184,12 @@ function FormDetail() {
   // Who may revise this form: its author while it is still pending, and an ISO
   // Forms admin at any time. A decided form is the record that was signed off,
   // so changing it is deliberately an admin-only act.
+  // A form that any approver has already approved or rejected is locked for
+  // everyone, admins included.
+  const isDecided = entry ? ((entry.status || 'pending') !== 'pending' || approvals.some(a => a.status && a.status !== 'pending')) : false
   const canEdit = (() => {
-    if (!entry) return false
+    if (!entry || isDecided || fromPending) return false
     if (isAdminOverride) return true
-    if (entry.status !== 'pending') return false
     const me = myEmployeeId || localStorage.getItem('userEmail')
     return Boolean(me) && String(entry.created_by || '') === String(me)
   })()
@@ -325,7 +338,7 @@ function FormDetail() {
   if (entry && !canView) {
     return (
       <div style={{ padding: 40 }}>
-        <Link to={`${base}/entries`} style={{ fontSize: 13, color: '#7a7a8c', textDecoration: 'none' }}>← Back to All Forms</Link>
+        <Link to={`${base}/entries`} className="back-link" style={{ display: 'inline-block', fontSize: 13, textDecoration: 'none' }}>← Back to All Forms</Link>
         <div style={{ background: '#fdecea', border: '1px solid #f5c2c0', color: '#b42318', borderRadius: 12, padding: '14px 16px', marginTop: 16, fontSize: 14 }}>
           This form belongs to someone else. You can only open forms you submitted or have to approve.
         </div>
@@ -337,7 +350,7 @@ function FormDetail() {
 
   return (
     <div style={{ padding: 'clamp(24px, 4vw, 48px)', maxWidth: 860, margin: '0 auto' }}>
-      <Link to={`${base}/entries`} style={{ fontSize: 13, color: '#7a7a8c', textDecoration: 'none' }}>← Back to All Forms</Link>
+      <Link to={`${base}/entries`} className="back-link" style={{ display: 'inline-block', fontSize: 13, textDecoration: 'none' }}>← Back to All Forms</Link>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16, margin: '12px 0 24px' }}>
         <div>
@@ -451,7 +464,12 @@ function FormDetail() {
                       field={field}
                       value={roleValues[field.id]}
                       onChange={(val) => setApproverValue(approval.role_key, field.id, val)}
-                      readOnly={!(iAmDecider && approval.status === 'pending')}
+                      // An "Approved by"-style employee field already set to the approver
+                      // chosen when the form was filled is fixed: the approver cannot swap it.
+                      readOnly={!(iAmDecider && approval.status === 'pending')
+                        || (field.type === 'employee' && APPROVER_FIELD.test(field.label || '')
+                          && approval.approver_employee_id != null
+                          && String(roleValues[field.id] || '') === String(approval.approver_employee_id))}
                       employees={employees}
                       signerName={signerName}
                     />

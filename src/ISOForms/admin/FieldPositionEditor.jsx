@@ -416,12 +416,79 @@ function FieldPositionEditor({ pdfBase64, fields, approvalRoles, onSave, onClose
     setAutoNote(`Removed ${removed} overlapping field(s) and renumbered the rows. Save to keep this.`)
   }
 
-  const placeOptionMark = (field, label, box) => {
+  const placeOptionMark = (field, label, clicked) => {
+    let box = clicked
+    const layout = field.pdfCoords?.markLayout || {}
     const rest = marksOf(field).filter(m => String(m.label).trim().toLowerCase() !== label.trim().toLowerCase())
+    // A box added by hand takes after the ones already there: the same width and
+    // height (kept centred where it was clicked), and the same row / column when
+    // the others all share one — so a missed tick lines up with the rest.
+    const others = rest.map(m => m.box).filter(Boolean)
+    if (others.length) {
+      const { width, height } = others[0]
+      const cx = box.x + box.width / 2
+      const cy = box.y + box.height / 2
+      box = { x: round2(cx - width / 2), y: round2(cy - height / 2), width, height }
+      const same = (key) => others.length > 1 && others.every(o => Math.abs(o[key] - others[0][key]) <= 1.5)
+      if (same('y')) box.y = others[0].y
+      if (same('x')) box.x = others[0].x
+    }
+    // Values typed into the "all boxes" inputs win over what was clicked, so a box
+    // placed anywhere lands on the typed row / column and at the typed size.
+    if (layout.width || layout.height) {
+      const w = layout.width || box.width
+      const h = layout.height || box.height
+      box = { x: round2(box.x + box.width / 2 - w / 2), y: round2(box.y + box.height / 2 - h / 2), width: w, height: h }
+    }
+    if (Number.isFinite(layout.y)) box = { ...box, y: layout.y }
+    if (Number.isFinite(layout.x)) box = { ...box, x: layout.x }
     patchCoords(field.id, {
       page: Number.isFinite(field.pdfCoords?.page) ? field.pdfCoords.page : pageIndex,
       // Tagged as hand-placed so the automatic pass never overwrites it.
       optionMarks: [...rest, { label, box, manual: true }],
+    })
+  }
+
+  // One size for every tick box of a field, set from a single input. Each box keeps
+  // its own centre, so they grow/shrink in place rather than drifting.
+  // Moves every tick box of a field together by the same amount, so the gaps
+  // between them stay exactly as they are. dx right, dy up (PDF y runs upward).
+  const [markStep, setMarkStep] = useState(1)
+  const shiftMarks = (field, dx, dy) => {
+    patchCoords(field.id, {
+      optionMarks: marksOf(field).map(m => (m.box
+        ? { ...m, box: { ...m.box, x: round2(m.box.x + dx), y: round2(m.box.y + dy) }, manual: true }
+        : m)),
+    })
+  }
+
+  // What the "all boxes" inputs show: the value typed for this field, else the first
+  // placed box's, else blank.
+  const markVal = (field, key) => {
+    const typed = field?.pdfCoords?.markLayout?.[key]
+    if (Number.isFinite(typed)) return typed
+    const first = marksOf(field).find(m => m.box)
+    return first ? round2(first.box[key]) : ''
+  }
+
+  const resizeMarks = (field, dim, value) => {
+    const n = dim === 'x' || dim === 'y' ? (Number(value) || 0) : Math.max(1, Number(value) || 1)
+    const layout = { ...(field.pdfCoords?.markLayout || {}) }
+    if (dim === 'both') { layout.width = round2(n); layout.height = round2(n) } else layout[dim] = round2(n)
+    patchCoords(field.id, {
+      markLayout: layout,
+      optionMarks: marksOf(field).map(m => {
+        if (!m.box) return m
+        const b = m.box
+        // 'x' / 'y' put every box on the same line (a column / a row); 'both' makes
+        // each a square of that size; width / height change one side only.
+        let next = b
+        if (dim === 'height' || dim === 'both') next = { ...next, height: round2(n), y: round2(b.y + b.height / 2 - n / 2) }
+        if (dim === 'width' || dim === 'both') next = { ...next, width: round2(n), x: round2(b.x + b.width / 2 - n / 2) }
+        if (dim === 'x') next = { ...b, x: round2(n) }
+        if (dim === 'y') next = { ...b, y: round2(n) }
+        return { ...m, box: next, manual: true }
+      }),
     })
   }
 
@@ -869,6 +936,24 @@ function FieldPositionEditor({ pdfBase64, fields, approvalRoles, onSave, onClose
     if (selectedId === fieldId) setSelectedId(null)
   }
 
+  // The whole selected group at once. Nothing is written until the editor is saved.
+  const clearSelectedPositions = () => {
+    const ids = new Set(selectedIds)
+    setLocalFields(prev => prev.map(f => {
+      if (!ids.has(f.id)) return f
+      const { pdfCoords, ...rest } = f    // eslint-disable-line no-unused-vars
+      return rest
+    }))
+    setSelectedId(null); setSelectedIds([])
+  }
+  const deleteSelectedFields = () => {
+    if (!window.confirm(`Delete ${selectedIds.length} selected fields? They go from the template when you save.`)) return
+    const ids = new Set(selectedIds)
+    setLocalFields(prev => prev.filter(f => !ids.has(f.id)))
+    if (placingId && ids.has(placingId)) setPlacingId(null)
+    setSelectedId(null); setSelectedIds([])
+  }
+
   const placed = localFields.filter(f => normalizePdfCoords(f.pdfCoords))
   const unplaced = localFields.filter(f => !normalizePdfCoords(f.pdfCoords))
   const onThisPage = placed.filter(f => normalizePdfCoords(f.pdfCoords).page === pageIndex)
@@ -1019,6 +1104,45 @@ function FieldPositionEditor({ pdfBase64, fields, approvalRoles, onSave, onClose
                     </button>
                   )}
                 </div>
+                {(
+                  <div style={{ margin: '0 0 8px' }}>
+                    <div style={S.muted}>Set once for every box of this field, even before any is placed: boxes you place later follow these values. Size grows each box in place; X / Y line them all up.</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 6 }}>
+                    <div>
+                      <span style={S.geomTag}>Width</span>
+                      <NumInput value={markVal(selected, 'width')} step={1} onCommit={(n) => resizeMarks(selected, 'width', n)} />
+                    </div>
+                    <div>
+                      <span style={S.geomTag}>Height</span>
+                      <NumInput value={markVal(selected, 'height')} step={1} onCommit={(n) => resizeMarks(selected, 'height', n)} />
+                    </div>
+                    <div>
+                      <span style={S.geomTag}>Width + Height (square)</span>
+                      <NumInput value={markVal(selected, 'height')} step={1} onCommit={(n) => resizeMarks(selected, 'both', n)} />
+                    </div>
+                    <div>
+                      <span style={S.geomTag}>X (same column)</span>
+                      <NumInput value={markVal(selected, 'x')} step={1} onCommit={(n) => resizeMarks(selected, 'x', n)} />
+                    </div>
+                    <div>
+                      <span style={S.geomTag}>Y (same row, from bottom)</span>
+                      <NumInput value={markVal(selected, 'y')} step={1} onCommit={(n) => resizeMarks(selected, 'y', n)} />
+                    </div>
+                    </div>
+                    <div style={{ marginTop: 10 }}>
+                      <span style={S.geomTag}>Move all together (keeps the gaps)</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <button type="button" title="Left" style={S.smallGhostBtn} onClick={() => shiftMarks(selected, -markStep, 0)}>←</button>
+                        <button type="button" title="Right" style={S.smallGhostBtn} onClick={() => shiftMarks(selected, markStep, 0)}>→</button>
+                        <button type="button" title="Up" style={S.smallGhostBtn} onClick={() => shiftMarks(selected, 0, markStep)}>↑</button>
+                        <button type="button" title="Down" style={S.smallGhostBtn} onClick={() => shiftMarks(selected, 0, -markStep)}>↓</button>
+                        <span style={{ fontSize: 11, color: '#7a7a8c' }}>by</span>
+                        <div style={{ width: 64 }}><NumInput value={markStep} min={0.1} step={0.5} onCommit={(n) => setMarkStep(Math.max(0.1, n))} /></div>
+                        <span style={{ fontSize: 11, color: '#7a7a8c' }}>pt</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {markNote && <div style={{ ...S.muted, marginBottom: 6 }}>{markNote}</div>}
                 {optionsOf(selected).map(opt => {
                   const mark = markFor(selected, opt)
@@ -1048,6 +1172,14 @@ function FieldPositionEditor({ pdfBase64, fields, approvalRoles, onSave, onClose
               <div style={{ ...S.panel, background: '#eef4ff', borderColor: '#c9dafc', color: '#274690', fontSize: 12, lineHeight: 1.5 }}>
                 <strong>{selectedIds.length} boxes selected.</strong> Drag any of them to move the group, or use the
                 arrow keys (Shift = 10pt, Alt + arrows = resize). Esc clears.
+                <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                  <button type="button" onClick={clearSelectedPositions} style={S.removeBtn}>
+                    <Trash2 size={13} /> Remove {selectedIds.length} positions
+                  </button>
+                  <button type="button" onClick={deleteSelectedFields} style={S.removeBtn}>
+                    <Trash2 size={13} /> Delete {selectedIds.length} fields
+                  </button>
+                </div>
               </div>
             )}
 
