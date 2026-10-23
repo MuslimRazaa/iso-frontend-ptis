@@ -204,6 +204,9 @@ function FormEntriesList() {
   // form is the record that was signed off, so removing it is deliberately an
   // admin-only act.
   const canDelete = (entry) => {
+    // Employees never get a delete button on their side (All Forms or Pending
+    // Approvals); removing a form is done from the admin panel.
+    if (isUserSide) return false
     if (isAdmin) return true
     if (entry.status !== 'pending') return false
     const me = myEmployeeId || localStorage.getItem('userEmail')
