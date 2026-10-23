@@ -158,9 +158,13 @@ function FormEntriesList() {
   // Who may revise a submitted form: its author while it is still pending, and
   // an ISO Forms admin at any time. A decided form is the record that was
   // signed off, so changing it is deliberately an admin-only act.
+  // Once any approver has approved or rejected, the form is locked for everyone
+  // (admins included) — and the Pending Approvals queue is for deciding, not editing.
+  const isDecided = (entry) => (entry.status || 'pending') !== 'pending'
+    || (Array.isArray(entry.approvals) && entry.approvals.some(a => a.status && a.status !== 'pending'))
   const canEdit = (entry) => {
+    if (pendingMine || isDecided(entry)) return false
     if (isAdmin) return true
-    if (entry.status !== 'pending') return false
     const me = myEmployeeId || localStorage.getItem('userEmail')
     return Boolean(me) && String(entry.created_by || '') === String(me)
   }
@@ -408,7 +412,7 @@ function FormEntriesList() {
                   </td>
                   <td style={{ padding: '16px 20px', textAlign: 'right' }}>
                     <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
-                      <Link to={`${base}/entries/${entry.id}`} style={{ textDecoration: 'none' }}>
+                      <Link to={`${base}/entries/${entry.id}${pendingMine ? "?from=pending" : ""}`} style={{ textDecoration: 'none' }}>
                         <button type="button" className="ghost-btn small">View</button>
                       </Link>
                       {canEdit(entry) && (
