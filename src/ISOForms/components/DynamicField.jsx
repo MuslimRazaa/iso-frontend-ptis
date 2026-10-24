@@ -5,7 +5,7 @@ import StyledSelect from '../../components/StyledSelect'
 import SearchableSelect from '../../components/SearchableSelect'
 import StyledDatePicker from '../../components/StyledDatePicker'
 
-const inputStyle = {
+const BASE_INPUT = {
   width: '100%', padding: '12px 15px', border: '2px solid #e0e0e6',
   borderRadius: 12, fontSize: 14, boxSizing: 'border-box',
 }
@@ -17,7 +17,21 @@ const inputStyle = {
 // from Employee Management), to resolve a stored employee id to a name.
 // `signerName` is who a signature field signs as when its name is left blank —
 // the logged-in user, resolved by the page that owns the form.
-function DynamicField({ field, value, onChange, readOnly, employees = [], signerName = '' }) {
+function DynamicField({ field, value, onChange, readOnly, employees = [], signerName = '', compact = false }) {
+  // Inside a table cell the boxes are drawn small, like the cells of the printed form.
+  const inputStyle = compact
+    ? { ...BASE_INPUT, padding: '5px 7px', border: '1px solid #d6d6de', borderRadius: 6, fontSize: 13 }
+    : BASE_INPUT
+  // An employee picker can be limited, in the template, to some departments and/or some
+  // named people. Whoever is already chosen stays in the list so their name still shows.
+  const allPeople = employees
+  const depts = new Set((field.allowedDepartments || []).map(d => String(d).trim().toLowerCase()))
+  const ids = new Set((field.allowedEmployeeIds || []).map(String))
+  const chosen = new Set((Array.isArray(value) ? value : [value]).filter(Boolean).map(String))
+  employees = (depts.size || ids.size)
+    ? allPeople.filter(e => ids.has(String(e.id)) || chosen.has(String(e.id))
+      || depts.has(String(e.department_name || e.department || '').trim().toLowerCase()))
+    : allPeople
   const options = (field.options || '').split(',').map(o => o.trim()).filter(Boolean)
 
   if (field.type === 'signature') {

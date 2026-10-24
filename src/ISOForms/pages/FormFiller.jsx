@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { layoutFields } from '../utils/formLayout'
+import React, { useEffect, useState } from 'react'
+import FormLayoutView from '../components/FormLayoutView'
 import { Link, useNavigate, useParams, useLocation } from 'react-router-dom'
 import API_BASE_URL, { API_ENDPOINTS } from '../../config/api'
 import { Eye } from 'lucide-react'
@@ -11,7 +11,7 @@ import { ensureSeeded, getOfflineTemplates, getOfflineTemplate, addOfflineEntry 
 import { getCurrentEmployeeId } from '../utils/currentEmployee'
 import { resolveSignerName, stampSignature } from '../utils/signature'
 import { fileToDataUrl } from '../utils/fileToDataUrl'
-import SearchableSelect from '../../components/SearchableSelect'
+import EmployeeMultiPicker from '../components/EmployeeMultiPicker'
 import { showToast } from '../../components/Toast'
 import { getActorId, getActorName } from '../../utils/actorIdentity'
 
@@ -19,7 +19,6 @@ import { getActorId, getActorName } from '../../utils/actorIdentity'
 // column on a laptop-narrow pane and four across on a wide monitor.
 const FIELD_COLUMNS = 'repeat(auto-fit, minmax(340px, 1fr))'
 
-const isWideField = (field) => field.type === 'textarea' || field.type === 'checkbox-group' || field.type === 'radio' || field.type === 'employee-multi'
 
 function FormFiller() {
   // The same screen fills a new form (`new/:templateId`) and revises a
@@ -61,11 +60,8 @@ function FormFiller() {
   // resync, so letting the picker imply otherwise would be misleading).
   const [decidedRoles, setDecidedRoles] = useState({})
   // A form any approver has already approved or rejected can no longer be edited, by anyone.
-  const editLocked = isEdit && Boolean(entry) && ((entry.status || 'pending') !== 'pending' || (Array.isArray(entry.approvals) && entry.approvals.some(a => a.status && a.status !== 'pending')))
+  const editLocked = isEdit && Boolean(entry) && (!['pending', 'submitted'].includes(entry.status || 'pending') || (Array.isArray(entry.approvals) && entry.approvals.some(a => a.status && a.status !== 'pending')))
 
-  // The fields are laid out like the printed form: rows as they sit on the PDF.
-  // Any field without a position on it follows in a group of its own.
-  const formLayout = useMemo(() => layoutFields(template?.fields), [template])
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -210,7 +206,8 @@ function FormFiller() {
     }
     const missing = template.fields.filter(f => f.required && isFieldEmpty(f, values[f.id]))
     if (missing.length) { setError(`Please fill: ${missing.map(f => f.label).join(', ')}`); return }
-    const roles = template.approvalRoles?.length ? template.approvalRoles : [{ key: 'approver', label: 'Approver' }]
+    // A template that needs no approval asks for no approver at all.
+    const roles = template.requiresApproval === false ? [] : (template.approvalRoles?.length ? template.approvalRoles : [{ key: 'approver', label: 'Approver' }])
     const missingRole = roles.find(r => !roleApprovers[r.key])
     if (missingRole) { setError(`Please select who fills the "${missingRole.label || missingRole.key}" role.`); return }
 
@@ -218,12 +215,13 @@ function FormFiller() {
     // One row per role — who it's assigned to, by name (the backend has no
     // auth session, so names are sent explicitly rather than looked up there).
     const approvals = roles.map(r => {
-      const emp = employees.find(e => String(e.id) === String(roleApprovers[r.key]))
+      const ids = String(roleApprovers[r.key] || '').split(',').filter(Boolean)
+      const names = ids.map(id => { const emp = employees.find(e => String(e.id) === id); return emp?.full_name || emp?.name || id })
       return {
         role_key: r.key,
         role_label: r.label || r.key,
         approver_employee_id: roleApprovers[r.key],
-        approver_employee_name: emp?.full_name || emp?.name || '',
+        approver_employee_name: names.join(', '),
       }
     })
     const resolvedEmployeeId = await getCurrentEmployeeId()
@@ -314,7 +312,7 @@ function FormFiller() {
         approvals: approvals.map(a => ({ ...a, status: 'pending' })),
         created_by: resolvedEmployeeId || getActorId(),
         created_by_name: getActorName(),
-        status: 'pending',
+        status: approvals.length ? 'pending' : 'submitted',
         remarks: '',
         attachments: JSON.stringify(storedAttachments),
         created_at: new Date().toISOString(),
@@ -397,6 +395,18 @@ function FormFiller() {
     )
   }
 
+  // The people this role may be given to: everyone, unless the template limited it to
+  // some departments and/or some named people. Anyone already picked (say on an
+  // older form) stays in the list so their name still shows.
+  const pickableFor = (role) => {
+    const depts = new Set((role.allowedDepartments || []).map(d => String(d).trim().toLowerCase()))
+    const ids = new Set((role.allowedEmployeeIds || []).map(String))
+    if (!depts.size && !ids.size) return employees
+    const already = new Set(String(roleApprovers[role.key] || '').split(',').filter(Boolean))
+    return employees.filter(e => ids.has(String(e.id)) || already.has(String(e.id))
+      || depts.has(String(e.department_name || e.department || '').trim().toLowerCase()))
+  }
+
   const renderField = (field) => (
     <>
       <label style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13.5 }}>
@@ -419,7 +429,15 @@ function FormFiller() {
     // Full bleed on purpose: a long form in a 860px column is mostly scrolling
     // past empty margins, so the fields flow into however many columns the
     // screen affords and the page gets shorter instead of narrower.
-    <div style={{ padding: 'clamp(20px, 3vw, 40px)', width: '100%', boxSizing: 'border-box' }}>
+    <div style={{ padding: 'clamp(14px, 2vw, 28px)', width: '100%', boxSizing: 'border-box' }}>
+      {/* Back to the list of forms to fill (or, when revising, to the form itself). */}
+      <Link
+        to={isEdit ? `${base}/entries/${entryId}` : `${base}/new`}
+        className="back-link"
+        style={{ display: 'inline-block', marginBottom: 12, fontSize: 13, textDecoration: 'none' }}
+      >
+        ← Back
+      </Link>
       <p className="eyebrow" style={{ margin: 0 }}>ISO Forms{isEdit ? ' — Editing' : ''}</p>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', margin: '4px 0 8px' }}>
         <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: '#14141c' }}>{template.name}</h1>
@@ -443,40 +461,27 @@ function FormFiller() {
       )}
 
       <form onSubmit={handleSubmit}>
-        {(
-          <>
-            {formLayout.pages.map(({ page, rows }) => (
-              <article key={page} className="panel" style={{ padding: 'clamp(16px, 2.5vw, 32px)', marginBottom: 20, border: '1px solid #d9d9e0', background: '#fff', boxShadow: '0 2px 10px rgba(20,20,28,0.06)' }}>
-                {formLayout.pages.length > 1 && (
-                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#9a9aa8', marginBottom: 14 }}>
-                    Page {page + 1}
-                  </div>
-                )}
-                {rows.map((row, i) => (
-                  <div key={i} style={{ display: 'flex', flexWrap: 'wrap', gap: '12px 16px', padding: '12px 0', borderTop: i ? '1px solid #efeff3' : 'none' }}>
-                    {row.map(({ field, weight }) => (
-                      <div key={field.id} style={{ flex: `${weight} 1 ${isWideField(field) ? 280 : 150}px`, minWidth: 0 }}>
-                        {renderField(field)}
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </article>
-            ))}
-            {formLayout.loose.length > 0 && (
-              <article className="panel" style={{ padding: 24, marginBottom: 20, display: 'grid', gridTemplateColumns: FIELD_COLUMNS, gap: '18px 24px', alignItems: 'start' }}>
-                {formLayout.loose.map(field => (
-                  <div key={field.id} style={isWideField(field) ? { gridColumn: '1 / -1' } : undefined}>{renderField(field)}</div>
-                ))}
-              </article>
-            )}
-          </>
-        )}
+        <FormLayoutView
+          fields={template.fields}
+          renderField={renderField}
+          renderCell={(field) => (
+            <DynamicField
+              field={field}
+              value={values[field.id]}
+              onChange={(val) => setFieldValue(field.id, val)}
+              employees={employees}
+              signerName={signerName}
+              compact
+            />
+          )}
+        />
 
         <div style={{ display: 'grid', gridTemplateColumns: FIELD_COLUMNS, gap: 20, marginBottom: 20, alignItems: 'start' }}>
-          {(template.approvalRoles?.length ? template.approvalRoles : [{ key: 'approver', label: 'Approver' }]).map(role => {
+          {(template.requiresApproval === false ? [] : (template.approvalRoles?.length ? template.approvalRoles : [{ key: 'approver', label: 'Approver' }])).map(role => {
             const locked = Boolean(decidedRoles[role.key])
-            const assignedEmp = locked ? employees.find(e => String(e.id) === String(roleApprovers[role.key])) : null
+            const assignedNames = locked
+              ? String(roleApprovers[role.key] || '').split(',').filter(Boolean).map(id => { const emp = employees.find(e => String(e.id) === id); return emp?.full_name || emp?.name || id }).join(', ')
+              : ''
             return (
               <article className="panel" style={{ padding: 24 }} key={role.key}>
                 <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, fontSize: 14 }}>
@@ -484,23 +489,20 @@ function FormFiller() {
                 </label>
                 {locked ? (
                   <p style={{ margin: 0, padding: '12px 15px', background: '#f4f4f7', borderRadius: 12, fontSize: 14, color: '#595966' }}>
-                    {assignedEmp?.full_name || assignedEmp?.name || roleApprovers[role.key]} — already decided, can't be reassigned.
+                    {assignedNames || roleApprovers[role.key]} — already decided, can't be reassigned.
                   </p>
                 ) : (
-                  <SearchableSelect
-                    value={roleApprovers[role.key] || ''}
-                    onChange={(v) => setRoleApprovers(prev => ({ ...prev, [role.key]: v }))}
-                    options={employees.map(emp => ({
-                      value: String(emp.id),
-                      label: `${emp.full_name || emp.name}${emp.department_name ? ` — ${emp.department_name}` : ''}`,
-                    }))}
-                    emptyOptionLabel="Select an employee…"
-                    placeholder="Type to search…"
+                  // Several people can be picked; the role is decided by whichever of
+                  // them approves or rejects first. Stored as "12,45".
+                  <EmployeeMultiPicker
+                    value={String(roleApprovers[role.key] || '').split(',').filter(Boolean)}
+                    onChange={(ids) => setRoleApprovers(prev => ({ ...prev, [role.key]: ids.join(',') }))}
+                    employees={pickableFor(role)}
                     style={{ width: '100%', padding: '12px 15px', border: '2px solid #e0e0e6', borderRadius: 12, fontSize: 14, cursor: 'text', boxSizing: 'border-box' }}
                   />
                 )}
                 <p style={{ margin: '8px 0 0', fontSize: 12, color: '#7a7a8c' }}>
-                  This person will need to approve or reject the form once submitted.
+                  The people picked here are all told, and any one of them can approve or reject the form once submitted.
                 </p>
               </article>
             )
@@ -580,7 +582,7 @@ function FormFiller() {
         </div>
 
         <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-          <Link to={isEdit ? `${base}/entries/${entryId}` : `${base}/entries`} style={{ textDecoration: 'none' }}>
+          <Link to={isEdit ? `${base}/entries/${entryId}` : `${base}/new`} style={{ textDecoration: 'none' }}>
             <button type="button" className="ghost-btn">Cancel</button>
           </Link>
           <button type="submit" className="primary-btn" disabled={submitting}>

@@ -14,6 +14,7 @@ const STATUS_COLORS = {
   pending:  { bg: '#fff7e6', color: '#b54708' },
   approved: { bg: '#e7f6ec', color: '#1a7f4e' },
   rejected: { bg: '#fdecea', color: '#b42318' },
+  submitted: { bg: '#eef4ff', color: '#2c4f86' },
 }
 
 const StatusBadge = ({ status }) => {

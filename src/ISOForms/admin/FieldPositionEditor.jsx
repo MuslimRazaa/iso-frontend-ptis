@@ -1222,7 +1222,22 @@ function FieldPositionEditor({ pdfBase64, fields, approvalRoles, onSave, onClose
                 <strong>{selectedIds.length} boxes selected.</strong> Drag any of them to move the group, or use the
                 arrow keys (Shift = 10pt, Alt + arrows = resize). Esc clears.
                 <div style={{ marginTop: 10 }}>
-                  <div style={{ fontWeight: 700, marginBottom: 6 }}>Align</div>
+                  {/* Where the written value sits inside each box — the same setting as a
+                      single field's "Alignment", given to all the selected ones at once. */}
+                  <div style={{ fontWeight: 700, marginBottom: 6 }}>Text alignment inside the boxes</div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                    {[['left', 'Left'], ['center', 'Center'], ['right', 'Right']].map(([value, label]) => {
+                      const on = localFields.filter(f => selectedIds.includes(f.id)).every(f => (f.pdfCoords?.align || 'left') === value)
+                      return (
+                        <button key={value} type="button"
+                          onClick={() => patchMany(Object.fromEntries(selectedIds.map(id => [id, { align: value }])))}
+                          style={{ ...S.smallGhostBtn, ...(on ? { background: '#274690', color: '#fff', borderColor: '#274690' } : null) }}>
+                          {label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div style={{ fontWeight: 700, marginBottom: 6 }}>Line up the boxes</div>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {[
                       ['left', 'Left edges'], ['centerH', 'Centre (horizontal)'], ['right', 'Right edges'],
