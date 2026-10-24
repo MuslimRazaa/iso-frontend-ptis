@@ -48,21 +48,21 @@ function ISOFormsSidebar() {
       if (!active) return
       if (!employeeId) {
         const pending = getOfflineEntries().filter(e => (e.status || 'pending') === 'pending')
-        setPendingCount(isAdminUser ? pending.length : 0)
+        setPendingCount(!isUserSide ? pending.length : 0)
         return
       }
-      fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}/pending-count?employeeId=${employeeId}${isAdminUser ? '&admin=1' : ''}`)
+      fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}/pending-count?employeeId=${employeeId}${!isUserSide ? '&admin=1' : ''}`)
         .then(res => (res.ok ? res.json() : Promise.reject()))
         .then(json => { if (active) setPendingCount(json?.count ?? 0) })
         .catch(() => {
           const pending = getOfflineEntries().filter(e =>
             (e.status || 'pending') === 'pending' &&
-            (isAdminUser || String(e.related_employee_id) === String(employeeId)))
+            (!isUserSide || String(e.related_employee_id) === String(employeeId)))
           if (active) setPendingCount(pending.length)
         })
     })
     return () => { active = false }
-  }, [isAdminUser])
+  }, [isUserSide])
 
   return (
     <aside

@@ -210,7 +210,7 @@ export function cellsFromRules(hlines, vlines) {
 
     for (let c = 0; c < colsHere.length - 1; c++) {
       const x0 = colsHere[c], x1 = colsHere[c + 1]
-      if (x1 - x0 < 16) continue
+      if (x1 - x0 < 10) continue           // narrow tick columns (~14pt) are cells too
       if (spans(hlines, y0, 'y', x0, x1, 'x', 'w') &&
           spans(hlines, y1, 'y', x0, x1, 'x', 'w')) {
         cells.push({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 })
@@ -789,6 +789,9 @@ export function detectGlyphMatrices(textItems) {
  * rows: [{ y, h, number, cells }] } with `cells[i]` null for a column that is
  * printed rather than fillable (the "#" column).
  */
+// Words that only ever appear in a PTIS letterhead block.
+const LETTERHEAD = /^(title|code|issue|issue date|rev(ision)?|page \d|premier tubular|ptis\b|fm-\d{3}|\d{1,2}-[a-z]{3}-\d{2,4}$)/i
+
 export function detectRegisterTables(rects, textItems) {
   // One box per cell: a box mostly covered by a bigger one is the same cell.
   const sized = rects.filter(r => r.w >= 8 && r.h >= 8 && r.h <= 80)
@@ -802,8 +805,12 @@ export function detectRegisterTables(rects, textItems) {
     if (i === j) return false
     const cover = overlap(r, o) / area(r)
     if (cover < 0.7) return false
+    // A shaded band behind a whole row (both tables, the gap between) is not that
+    // cell: only a box of about the same size is the same cell drawn again.
+    if (area(o) > area(r) * 2.5) return false
     return area(o) > area(r) || (area(o) === area(r) && j < i)
-  }))
+  })).filter((o, _, all) => all.filter(r => r !== o && Math.abs(r.y - o.y) <= 2.5 && Math.abs(r.h - o.h) <= 3 && overlap(r, o) / area(r) >= 0.7).length < 3)
+  // (a band laid over a whole row of cells -- shading behind it -- is not a cell itself)
 
   // Row bands, top of page first.
   const bands = []
@@ -814,33 +821,50 @@ export function detectRegisterTables(rects, textItems) {
   }
   bands.sort((a, b) => b.y - a.y)
   for (const band of bands) band.cells.sort((a, b) => a.x - b.x)
+  // Two tables side by side share their row heights, so one band can hold the
+  // rows of both. A gap between neighbouring cells is where one table ends; each
+  // run of touching cells is a band of its own.
+  for (let i = 0; i < bands.length; i++) {
+    const cells = bands[i].cells
+    const cut = cells.findIndex((c, k) => k > 0 && c.x - (cells[k - 1].x + cells[k - 1].w) > 3)
+    if (cut > 0) {
+      bands.splice(i + 1, 0, { ...bands[i], cells: cells.slice(cut) })
+      bands[i] = { ...bands[i], cells: cells.slice(0, cut) }
+    }
+  }
+  bands.sort((a, b) => b.y - a.y || a.cells[0].x - b.cells[0].x)
 
   const emptyBand = (band) => {
     const empty = band.cells.filter(c => !textInside(c, textItems).length)
     // A row may carry printed text in a column or two (a description beside its
     // number); what makes it a data row is a block of empty cells to fill.
-    return band.cells.length >= 4 && empty.length >= 3 && empty.length >= band.cells.length * 0.5
+    return band.cells.length >= 4 && empty.length >= 2 && empty.length >= band.cells.length * 0.5
   }
 
+  // Rows of one table need not be the same height (a row that fits two lines of
+  // text is taller than its neighbours), so what joins them is that they touch
+  // and their cells sit in the same columns. Tables side by side are followed as
+  // runs of their own, each ended by a non-row band across its own columns.
   const tables = []
-  let run = []
-  const flush = () => {
+  const runs = []
+  const joins = (prev, band) =>
+    prev.y - (band.y + band.h) <= 4 && prev.y - (band.y + band.h) >= -2 &&
+    band.cells.length === prev.cells.length &&
+    band.cells.every((c, i) => Math.abs(c.x - prev.cells[i].x) <= 3 && Math.abs(c.w - prev.cells[i].w) <= 4)
+  const spanX = (b) => [b.cells[0].x, b.cells[b.cells.length - 1].x + b.cells[b.cells.length - 1].w]
+  const overlapsX = (a, b) => { const [a0, a1] = spanX(a), [b0, b1] = spanX(b); return a0 < b1 && b0 < a1 }
+  const close = (run) => {
+    runs.splice(runs.indexOf(run), 1)
     if (run.length >= 3) tables.push(run)
-    run = []
   }
   for (const band of bands) {
-    const prev = run[run.length - 1]
-    // Rows of one table need not be the same height (a row that fits two lines of
-    // text is taller than its neighbours), so what joins them is that they touch
-    // and their cells sit in the same columns.
-    const joins = prev &&
-      prev.y - (band.y + band.h) <= 4 && prev.y - (band.y + band.h) >= -2 &&
-      band.cells.length === prev.cells.length &&
-      band.cells.every((c, i) => Math.abs(c.x - prev.cells[i].x) <= 3 && Math.abs(c.w - prev.cells[i].w) <= 4)
-    if (emptyBand(band) && (!prev || joins)) run.push(band)
-    else { flush(); if (emptyBand(band)) run.push(band) }
+    const open = runs.find(r => joins(r[r.length - 1], band))
+    if (open && emptyBand(band)) { open.push(band); continue }
+    for (const r of runs.filter(r => overlapsX(r[r.length - 1], band))) close(r)
+    if (emptyBand(band)) runs.push([band])
   }
-  flush()
+  for (const r of [...runs]) close(r)
+  tables.sort((a, b) => b[0].y - a[0].y || a[0].cells[0].x - b[0].cells[0].x)
 
   const out = []
   for (const rows of tables) {
@@ -858,15 +882,63 @@ export function detectRegisterTables(rects, textItems) {
     const runTop = first.y + first.h
     const left = cols[0].x - 2, right = cols[cols.length - 1].x + cols[cols.length - 1].w + 2
     const inside = boxes.filter(b => b.x >= left && b.x + b.w <= right && b.y >= runTop - 1.5)
-    let headerTop = runTop
-    for (let changed = true; changed;) {
-      changed = false
-      for (const b of inside) {
-        if (b.y <= headerTop + 1.5 && b.y + b.h > headerTop + 1.5) { headerTop = b.y + b.h; changed = true }
-      }
+
+    // A cell over several columns is a group heading ("Risk Matrix" over L, S, R) only
+    // when its text is centred over them. The title block a sheet carries above its
+    // table ("Title", "Code", "Issue Date" beside their values, the company name) is
+    // drawn on the same column grid and touches the header, but its text sits at the
+    // left of each cell or spans the whole table — reading it in as part of the
+    // header put "Premier Tubular Inspection Services Title Issue" in front of every
+    // column's name.
+    const colsUnder = (cell) => cols.filter(k => k.x + k.w / 2 >= cell.x && k.x + k.w / 2 <= cell.x + cell.w).length
+    const headingLike = (b) => {
+      if (b.y <= runTop + 1.5) return true                       // the row of headings right above the data
+      const n = colsUnder(b)
+      if (n <= 1) return true
+      if (n >= cols.length * 0.6) return false                    // a title bar across (nearly) the whole table
+      const text = textInside(b, textItems)
+      if (!text.length) return false
+      const x0 = Math.min(...text.map(t => t.x)), x1 = Math.max(...text.map(t => t.x + (t.width || 0)))
+      return Math.abs((x0 + x1) / 2 - (b.x + b.w / 2)) <= b.w * 0.2
     }
-    if (headerTop - runTop < 8) continue                      // no header: not a captioned table
-    const headerCells = inside.filter(b => b.y + b.h <= headerTop + 1.5)
+    // The boxes that rise past `top`: the next layer of whatever is stacked above.
+    const layerAbove = (top, keep) => inside.filter(b => b.y <= top + 1.5 && b.y + b.h > top + 1.5 && keep(b))
+    // A layer of mostly empty cells is the rows of another table stacked on this
+    // one (a second table drawn directly above), never part of this one's header.
+    const rowLike = (layer) => emptyBand({ cells: layer })
+    let headerTop = runTop
+    for (;;) {
+      const layer = layerAbove(headerTop, headingLike)
+      if (!layer.length || (headerTop > runTop + 1.5 && rowLike(layer))) break
+      headerTop = Math.max(...layer.map(b => b.y + b.h))
+    }
+    // Everything stacked above the data, title block included: the area no loose field
+    // should be read from, even though only the headings count as the table's header.
+    // It stops at another table's rows and at a "Label:" cell (Date:, Client Name:),
+    // which is a field of the form, not printed letterhead.
+    // A title bar drawn a point or two wider than the table still belongs to it.
+    const around = boxes.filter(b => b.x >= left - 4 && b.x + b.w <= right + 4 && b.y >= runTop - 1.5)
+    let blockTop = headerTop
+    // Nothing drawn on top of it: a bare caption printed over the table ("POWER
+    // TOOLS/GENERAL EQUIPMENTS") is its title, so the strip just above is its too.
+    let openAbove = false
+    for (;;) {
+      const layer = around.filter(b => b.y <= blockTop + 1.5 && b.y + b.h > blockTop + 1.5)
+      if (!layer.length) { openAbove = true; break }
+      if (rowLike(layer)) break
+      // Only printed matter goes: the letterhead (Title, Code, Issue, the company
+      // name, the form code) or a title bar over the table. A layer of the form's own
+      // fields ("Main Location", "Client Name:") stops it.
+      const words = layer.flatMap(b => textInside(b, textItems)).map(t => t.text.trim())
+      const letterhead = words.some(w => LETTERHEAD.test(w))
+      const titleBar = layer.every(b => colsUnder(b) >= cols.length * 0.6 && textInside(b, textItems).length)
+      if (!letterhead && !titleBar) break
+      blockTop = Math.max(...layer.map(b => b.y + b.h))
+    }
+    // No header of its own: the rest of a table begun on an earlier page. It is
+    // returned with no captions, for the caller to match to that table.
+    const headerless = headerTop - runTop < 8
+    const headerCells = headerless ? [] : inside.filter(b => b.y + b.h <= headerTop + 1.5)
 
     // Captions: a text line belongs to the smallest header cell holding it. A
     // cell across several columns heads all of them; a cell over one column
@@ -930,22 +1002,58 @@ export function detectRegisterTables(rects, textItems) {
       return m ? Number(m[1]) : null
     }
     const numberCol = fillable.findIndex(f => !f)
-    const outRows = rows.map((r, ri) => ({
-      y: r.y, h: r.h,
-      // The whole row, printed cells included (its number, its description), so a
-      // row nobody filled in can be covered up completely.
-      box: (() => {
-        const x0 = Math.min(...r.cells.map(c => c.x)), x1 = Math.max(...r.cells.map(c => c.x + c.w))
-        const y0 = Math.min(...r.cells.map(c => c.y)), y1 = Math.max(...r.cells.map(c => c.y + c.h))
-        return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 }
-      })(),
-      number: (numberCol >= 0 && numberOf(r, numberCol)) || ri + 1,
-      cells: cols.map((_, i) => (fillable[i] ? r.cells.find(cc => colOf(cc) === i) : null)),
-    }))
+    const cellText = (r, i) => {
+      const c = r.cells.find(cc => colOf(cc) === i)
+      return c ? textInside(c, textItems).sort((a, b) => b.pdfY - a.pdfY || a.x - b.x).map(t => t.text.trim()).join(' ').replace(/\s+/g, ' ').trim() : ''
+    }
+    let lastNumber = 0
+    const outRows = rows.map((r, ri) => {
+      // A row's printed number, or the one after the row above (blank rows added at
+      // the foot of a numbered list carry on from it).
+      const number = (numberCol >= 0 && numberOf(r, numberCol)) || (lastNumber ? lastNumber + 1 : ri + 1)
+      lastNumber = number
+      // What the row is about, as printed in it ("ANGLE GRINDER 4" #1", "Is MSDS
+      // available?"), so its entries are named after it rather than "Row 7".
+      const printed = cols.map((_, i) => i).filter(i => !fillable[i] && !(i === numberCol && numberOf(r, i)))
+      const title = printed.map(i => cellText(r, i)).filter(Boolean).join(' — ')
+      return {
+        y: r.y, h: r.h,
+        // The whole row, printed cells included (its number, its description), so a
+        // row nobody filled in can be covered up completely.
+        box: (() => {
+          const x0 = Math.min(...r.cells.map(c => c.x)), x1 = Math.max(...r.cells.map(c => c.x + c.w))
+          const y0 = Math.min(...r.cells.map(c => c.y)), y1 = Math.max(...r.cells.map(c => c.y + c.h))
+          return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 }
+        })(),
+        number,
+        title: title ? (numberCol >= 0 && numberOf(r, numberCol) ? number + ". " + title : title) : null,
+        // A printed column left blank on this row (the spare rows under a checklist)
+        // is written in like any other entry; the number column is not.
+        cells: cols.map((_, i) => {
+          if (fillable[i]) return r.cells.find(cc => colOf(cc) === i)
+          if (i === numberCol || cellText(r, i)) return null
+          return r.cells.find(cc => colOf(cc) === i) || null
+        }),
+      }
+    })
 
-    if (!columns.some((c, i) => fillable[i] && c.caption)) continue
+    // Two rows printed with the same name ("ANGLE GRINDER 7" #2" twice) stay apart.
+    const titleCount = new Map()
+    for (const r of outRows) if (r.title) titleCount.set(r.title, (titleCount.get(r.title) || 0) + 1)
+    const titleSeen = new Map()
+    for (const r of outRows) {
+      if (!r.title || titleCount.get(r.title) < 2) continue
+      const n = (titleSeen.get(r.title) || 0) + 1
+      titleSeen.set(r.title, n)
+      if (n > 1) r.title = `${r.title} (${n})`
+    }
+
+    if (!headerless && !columns.some((c, i) => fillable[i] && c.caption)) continue
     out.push({
-      top: headerTop,
+      headerless,
+      top: headerless ? runTop : headerTop,
+      blockTop,
+      openAbove,
       bottom: rows[rows.length - 1].y,
       columns: columns.map((c, i) => ({ ...c, fillable: fillable[i] })),
       rows: outRows,

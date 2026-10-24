@@ -4,10 +4,12 @@ import API_BASE_URL, { API_ENDPOINTS } from '../../config/api'
 import { showToast } from '../../components/Toast'
 import { getCurrentEmployeeId } from '../utils/currentEmployee'
 import DynamicField from '../components/DynamicField'
+import FormLayoutView from '../components/FormLayoutView'
 import { isFieldEmpty, signaturesToStamp, nowDateTimeValue } from '../utils/fieldHelpers'
 import { resolveSignerName, stampSignature } from '../utils/signature'
 import { getOfflineEntry, updateOfflineEntry, deleteOfflineEntry, getOfflineTemplate } from '../utils/offlineStore'
-import { downloadFilledPdf } from '../pdf/fillOriginalPdf'
+import { downloadFilledPdf, fillOriginalPdf } from '../pdf/fillOriginalPdf'
+import { X } from 'lucide-react'
 import { SEED_EMPLOYEES } from '../seedTemplates'
 
 const STATUS_COLORS = {
@@ -26,6 +28,9 @@ const StatusBadge = ({ status }) => {
     }}>{status || 'pending'}</span>
   )
 }
+
+// A role can be assigned to several people; their ids are stored as "12,45".
+const idsOf = (a) => String(a?.approver_employee_id || '').split(',').map(x => x.trim()).filter(Boolean)
 
 // Labels of the employee fields that name who approved/checked the form.
 const APPROVER_FIELD = /approv|review|verif|check|clos|sign|authori|decid/i
@@ -53,6 +58,9 @@ function FormDetail() {
   const [decidingRole, setDecidingRole] = useState(null)
   const [approverValuesByRole, setApproverValuesByRole] = useState({})
   const [downloading, setDownloading] = useState(false)
+  // The filled PDF shown in the page (a blob URL), and whether it is being made.
+  const [pdfView, setPdfView] = useState(null)
+  const [preparingView, setPreparingView] = useState(false)
   const [employees, setEmployees] = useState([])
 
   let isAdminOverride = !isUserSide
@@ -150,23 +158,59 @@ function FormDetail() {
           // "Approved by"-style employee field starts as that person.
           if (f.owner === a.role_key && f.type === 'employee' && !data[f.id] && a.approver_employee_id
               && APPROVER_FIELD.test(f.label || '')) {
-            data[f.id] = String(a.approver_employee_id)
+            // With several approvers, the viewer's own id when they are one of them.
+            const ids = idsOf(a)
+            data[f.id] = ids.includes(String(myEmployeeId)) ? String(myEmployeeId) : ids[0]
           }
         }
       }
       next[a.role_key] = data
     }
     setApproverValuesByRole(next)
-  }, [approvals, template])
+  }, [approvals, template, myEmployeeId])
 
-  const requesterFields = useMemo(() => (template?.fields || []).filter(f => (f.owner || 'requester') === 'requester'), [template])
   const fieldsForRole = (roleKey) => (template?.fields || []).filter(f => f.owner === roleKey)
 
   // The roles I (or an admin, for any role) can actually decide right now —
   // still pending, and assigned to me unless I'm overriding as admin.
   const decidableApprovals = approvals.filter(a => a.status === 'pending'
-    && (isAdminOverride || (myEmployeeId && String(a.approver_employee_id) === String(myEmployeeId))))
+    && (isAdminOverride || (myEmployeeId && idsOf(a).includes(String(myEmployeeId)))))
   const canDecideRole = (roleKey) => decidableApprovals.some(a => a.role_key === roleKey)
+
+  // Every field that belongs on this form: the requester's, and those of each
+  // approval role this entry actually has.
+  const layoutFieldList = useMemo(() => (template?.fields || []).filter(f =>
+    (f.owner || 'requester') === 'requester' || approvals.some(a => a.role_key === f.owner)), [template, approvals])
+  const roleOf = (field) => ((field.owner || 'requester') === 'requester' ? null : approvals.find(a => a.role_key === field.owner))
+  const valueOf = (field) => {
+    const role = roleOf(field)
+    return role ? (approverValuesByRole[role.role_key] || {})[field.id] : formValues[field.id]
+  }
+  // An approver fills their own role's fields while that role is still undecided.
+  // An "Approved by"-style employee field already set to the approver chosen when
+  // the form was filled is fixed: the approver cannot swap it.
+  const canEditField = (field) => {
+    const role = roleOf(field)
+    if (!role || role.status !== 'pending' || !canDecideRole(role.role_key)) return false
+    const v = (approverValuesByRole[role.role_key] || {})[field.id]
+    return !(field.type === 'employee' && APPROVER_FIELD.test(field.label || '') &&
+      role.approver_employee_id != null && idsOf(role).includes(String(v || '')))
+  }
+  const fieldInput = (field, compact) => {
+    const role = roleOf(field)
+    const editable = canEditField(field)
+    return (
+      <DynamicField
+        field={field}
+        value={valueOf(field)}
+        readOnly={!editable}
+        onChange={editable ? (val) => setApproverValue(role.role_key, field.id, val) : undefined}
+        employees={employees}
+        signerName={signerName}
+        compact={compact}
+      />
+    )
+  }
 
   // Who may open this form at all: its author, anyone assigned to decide any
   // role on it, and an ISO Forms admin. Without this the list could scope
@@ -178,7 +222,7 @@ function FormDetail() {
     const me = [myEmployeeId, localStorage.getItem('userEmail')].filter(Boolean).map(String)
     if (!me.length) return false
     if (me.includes(String(entry.created_by || ''))) return true
-    return approvals.some(a => me.includes(String(a.approver_employee_id || '')))
+    return approvals.some(a => idsOf(a).some(id => me.includes(id)))
   })()
 
   // Who may revise this form: its author while it is still pending, and an ISO
@@ -186,7 +230,7 @@ function FormDetail() {
   // so changing it is deliberately an admin-only act.
   // A form that any approver has already approved or rejected is locked for
   // everyone, admins included.
-  const isDecided = entry ? ((entry.status || 'pending') !== 'pending' || approvals.some(a => a.status && a.status !== 'pending')) : false
+  const isDecided = entry ? (!['pending', 'submitted'].includes(entry.status || 'pending') || approvals.some(a => a.status && a.status !== 'pending')) : false
   const canEdit = (() => {
     if (!entry || isDecided || fromPending) return false
     if (isAdminOverride) return true
@@ -251,6 +295,29 @@ function FormDetail() {
     } finally {
       setDownloading(false)
     }
+  }
+
+  // The same filled PDF the download produces, opened in the page to read.
+  const handleViewPdf = async () => {
+    const originalPdf = template?.originalPdf
+    if (!originalPdf) {
+      showToast('This template has no PDF attached, so the form cannot be generated. Ask an admin to edit the template and import its PDF.', 'error')
+      return
+    }
+    setPreparingView(true)
+    try {
+      const { bytes } = await fillOriginalPdf(originalPdf, template.fields || [], formValues, flatApproverValues, employees)
+      setPdfView(URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' })))
+    } catch (err) {
+      console.error('View PDF failed:', err)
+      showToast('Could not generate the PDF from the attached template. The stored PDF may be corrupt — re-import it on the template and try again.', 'error')
+    } finally {
+      setPreparingView(false)
+    }
+  }
+  const closePdfView = () => {
+    if (pdfView) URL.revokeObjectURL(pdfView)
+    setPdfView(null)
   }
 
   const handleDecision = async (roleKey, status) => {
@@ -349,7 +416,7 @@ function FormDetail() {
   if (!entry) return null
 
   return (
-    <div style={{ padding: 'clamp(24px, 4vw, 48px)', maxWidth: 860, margin: '0 auto' }}>
+    <div style={{ padding: 'clamp(14px, 2vw, 28px)', width: '100%', boxSizing: 'border-box' }}>
       <Link to={`${base}/entries`} className="back-link" style={{ display: 'inline-block', fontSize: 13, textDecoration: 'none' }}>← Back to All Forms</Link>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16, margin: '12px 0 24px' }}>
@@ -359,7 +426,27 @@ function FormDetail() {
             {entry.template_name || template?.name || `Form #${entry.id}`}
           </h1>
         </div>
+        {pdfView && (
+          <div onClick={closePdfView} style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999,
+            display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '32px 16px', overflowY: 'auto',
+          }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 1000 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 22px', borderBottom: '1px solid #ececf0' }}>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: 17, color: '#14141c' }}>{entry.template_name || template?.name || `Form #${entry.id}`}</div>
+                  <div style={{ fontSize: 13, color: '#7a7a8c', marginTop: 2 }}>Filled form — as it downloads</div>
+                </div>
+                <button type="button" className="close-modal-btn" onClick={closePdfView} aria-label="Close"><X size={20} /></button>
+              </div>
+              <iframe src={`${pdfView}#navpanes=0&view=FitH`} title="Filled form" style={{ width: '100%', height: '80vh', border: 'none', display: 'block', borderRadius: '0 0 20px 20px' }} />
+            </div>
+          </div>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button type="button" className="ghost-btn" disabled={preparingView} onClick={handleViewPdf}>
+            {preparingView ? 'Preparing PDF…' : '👁 View PDF'}
+          </button>
           <button type="button" className="ghost-btn" disabled={downloading} onClick={handleDownloadPdf}>
             {downloading ? 'Preparing PDF…' : '⬇ Download PDF'}
           </button>
@@ -420,20 +507,36 @@ function FormDetail() {
 
       </article>
 
-      <article className="panel" style={{ padding: 24, marginBottom: 20, display: 'grid', gap: 18 }}>
-        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Form Details</h3>
-        {requesterFields.map(field => (
-          <div key={field.id}>
-            <div style={{ fontSize: 12, color: '#7a7a8c', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{field.label}</div>
-            <DynamicField field={field} value={formValues[field.id]} readOnly employees={employees} />
-          </div>
-        ))}
-        {!template && <p style={{ margin: 0, fontSize: 13, color: '#7a7a8c' }}>Template details unavailable.</p>}
-      </article>
+      {/* The whole form laid out like the printed one: what the requester filled in, and
+          in their own places the parts each approver fills — editable for the approver
+          whose turn it is, read-only for everyone else. */}
+      <h3 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 700 }}>Form Details</h3>
+      {template ? (
+        <FormLayoutView
+          fields={layoutFieldList}
+          renderField={(field) => {
+            const role = roleOf(field)
+            return (
+              <>
+                <div style={{ fontSize: 12, color: '#7a7a8c', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+                  {field.label}
+                  {role && <span style={{ textTransform: 'none', letterSpacing: 0, color: '#2c4f86', fontWeight: 600 }}> · {role.role_label || role.role_key}</span>}
+                  {canEditField(field) && field.required && <span style={{ color: '#d7263d' }}> *</span>}
+                </div>
+                {fieldInput(field, false)}
+              </>
+            )
+          }}
+          renderCell={(field) => fieldInput(field, true)}
+        />
+      ) : (
+        <article className="panel" style={{ padding: 24, marginBottom: 20 }}>
+          <p style={{ margin: 0, fontSize: 13, color: '#7a7a8c' }}>Template details unavailable.</p>
+        </article>
+      )}
 
       {approvals.map(approval => {
         const roleFields = fieldsForRole(approval.role_key)
-        const roleValues = approverValuesByRole[approval.role_key] || {}
         const iAmDecider = canDecideRole(approval.role_key)
         return (
           <article className="panel" key={approval.role_key} style={{ padding: 24, marginBottom: 20, display: 'grid', gap: 16 }}>
@@ -453,28 +556,10 @@ function FormDetail() {
               </div>
             )}
 
-            {roleFields.length > 0 && (
-              <div style={{ display: 'grid', gap: 16 }}>
-                {roleFields.map(field => (
-                  <div key={field.id}>
-                    <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, fontSize: 14 }}>
-                      {field.label}{field.required && <span style={{ color: '#d7263d' }}> *</span>}
-                    </label>
-                    <DynamicField
-                      field={field}
-                      value={roleValues[field.id]}
-                      onChange={(val) => setApproverValue(approval.role_key, field.id, val)}
-                      // An "Approved by"-style employee field already set to the approver
-                      // chosen when the form was filled is fixed: the approver cannot swap it.
-                      readOnly={!(iAmDecider && approval.status === 'pending')
-                        || (field.type === 'employee' && APPROVER_FIELD.test(field.label || '')
-                          && approval.approver_employee_id != null
-                          && String(roleValues[field.id] || '') === String(approval.approver_employee_id))}
-                      employees={employees}
-                      signerName={signerName}
-                    />
-                  </div>
-                ))}
+            {/* This role's own fields sit in the form above, where the printed form has them. */}
+            {roleFields.length > 0 && iAmDecider && approval.status === 'pending' && (
+              <div style={{ fontSize: 13, color: '#2c4f86', background: '#eef4ff', border: '1px solid #c9dafc', borderRadius: 10, padding: '10px 14px' }}>
+                Fill in your part of the form above (the fields marked “{approval.role_label || approval.role_key}”), then approve or reject here.
               </div>
             )}
 

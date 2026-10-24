@@ -17,6 +17,7 @@ const STATUS_COLORS = {
   pending:  { bg: '#fff7e6', color: '#b54708' },
   approved: { bg: '#e7f6ec', color: '#1a7f4e' },
   rejected: { bg: '#fdecea', color: '#b42318' },
+  submitted: { bg: '#eef4ff', color: '#2c4f86' },
 }
 
 const StatusBadge = ({ status }) => {
@@ -75,7 +76,7 @@ function FormEntriesList() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [offline, setOffline] = useState(false)
-  const [myEmployeeId, setMyEmployeeId] = useState(null)
+  const [myEmployeeId, setMyEmployeeId] = useState(undefined)
 
   // Filters
   const [search, setSearch] = useState('')
@@ -100,9 +101,12 @@ function FormEntriesList() {
   const onDateToChange = setFilterAndResetPage(setDateTo)
   const onOnlyMineChange = setFilterAndResetPage(setOnlyMine)
 
-  const effectiveOnlyMine = pendingMine && !isAdmin ? true : onlyMine
+  // On the employee side, Pending Approvals is always "waiting for me" — an ISO Forms
+  // admin included, who sees everyone's queue from the admin panel instead.
+  const effectiveOnlyMine = pendingMine && (!isAdmin || isUserSide) ? true : onlyMine
 
-  useEffect(() => { getCurrentEmployeeId().then(setMyEmployeeId) }, [])
+  // undefined while the lookup runs; null when no employee matches this login.
+  useEffect(() => { getCurrentEmployeeId().then(id => setMyEmployeeId(id || null)) }, [])
 
   // A form is somebody's record, not a company noticeboard: the register shows
   // an ISO Forms admin every form, and everyone else only the forms they
@@ -114,12 +118,18 @@ function FormEntriesList() {
   // submitted, so the "only what I submitted" limit must not apply there or an
   // approver would have nothing to approve.
   const myEmail = localStorage.getItem('userEmail') || ''
-  const identityReady = isAdmin || Boolean(myEmployeeId) || Boolean(myEmail)
+  // "Waiting for me" needs the employee id itself: without it the request carried
+  // no filter at all and listed every pending form, other people's included.
+  const identityReady = effectiveOnlyMine
+    ? myEmployeeId !== undefined
+    : isAdmin || Boolean(myEmployeeId) || Boolean(myEmail)
 
   useEffect(() => {
     // Waiting for the identity keeps the unscoped "everything" list from
     // flashing up before the scope is known.
     if (!identityReady) return
+    // No employee matches this login: nothing is waiting for it.
+    if (effectiveOnlyMine && !myEmployeeId) { Promise.resolve().then(() => { setEntries([]); setLoading(false) }); return }
 
     const params = new URLSearchParams()
     if (statusFilter) params.set('status', statusFilter)
@@ -160,7 +170,7 @@ function FormEntriesList() {
   // signed off, so changing it is deliberately an admin-only act.
   // Once any approver has approved or rejected, the form is locked for everyone
   // (admins included) — and the Pending Approvals queue is for deciding, not editing.
-  const isDecided = (entry) => (entry.status || 'pending') !== 'pending'
+  const isDecided = (entry) => !['pending', 'submitted'].includes(entry.status || 'pending')
     || (Array.isArray(entry.approvals) && entry.approvals.some(a => a.status && a.status !== 'pending'))
   const canEdit = (entry) => {
     if (pendingMine || isDecided(entry)) return false
@@ -208,7 +218,7 @@ function FormEntriesList() {
     // Approvals); removing a form is done from the admin panel.
     if (isUserSide) return false
     if (isAdmin) return true
-    if (entry.status !== 'pending') return false
+    if (!['pending', 'submitted'].includes(entry.status)) return false
     const me = myEmployeeId || localStorage.getItem('userEmail')
     return Boolean(me) && String(entry.created_by || '') === String(me)
   }
@@ -312,6 +322,7 @@ function FormEntriesList() {
               { value: 'pending', label: 'Pending' },
               { value: 'approved', label: 'Approved' },
               { value: 'rejected', label: 'Rejected' },
+              { value: 'submitted', label: 'Submitted (no approval)' },
             ]}
             emptyOptionLabel="All Statuses"
           />

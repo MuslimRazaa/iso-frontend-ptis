@@ -13,6 +13,9 @@ import { isPlaced } from '../utils/pdfCoords'
 import { FIELD_TYPES, blankField, hasOptions, blankApprovalRole, ownerOptionsFor } from '../utils/fieldTypes'
 import StyledSelect from '../../components/StyledSelect'
 import SearchableSelect from '../../components/SearchableSelect'
+import MultiSelect from '../../components/MultiSelect'
+import EmployeeMultiPicker from '../components/EmployeeMultiPicker'
+import RoleLimits from '../components/RoleLimits'
 
 // The template PDF is sent as a real file part, not as base64 inside the JSON
 // body: shared hosting (mod_security) caps non-file request data at 128 KB and
@@ -69,6 +72,8 @@ function TemplateBuilder() {
   const [description, setDescription] = useState('')
   const [fields, setFields] = useState([blankField()])
   const [approvalRoles, setApprovalRoles] = useState([])
+  // Some forms need no sign-off: they are filed on submit, with no approver and no e-mail.
+  const [requiresApproval, setRequiresApproval] = useState(true)
   const [departments, setDepartments] = useState([])
   const [employees, setEmployees] = useState([])
 
@@ -105,6 +110,7 @@ function TemplateBuilder() {
       setOriginalPdfName(json.originalPdfName || '')
       setFormCode(json.formCode || '')
       setApprovalRoles(Array.isArray(json.approvalRoles) ? json.approvalRoles : [])
+      setRequiresApproval(json.requiresApproval !== false)
       const parsedFields = typeof json.fields === 'string' ? JSON.parse(json.fields) : json.fields
       const normalized = Array.isArray(parsedFields)
         ? parsedFields.map(f => ({ owner: 'requester', ...f }))
@@ -196,6 +202,7 @@ function TemplateBuilder() {
       description: description.trim(),
       fields,
       approvalRoles,
+      requiresApproval,
       originalPdf: originalPdfBase64 || undefined,
       originalPdfName: originalPdfName || undefined,
       formCode: formCode || undefined,
@@ -209,6 +216,7 @@ function TemplateBuilder() {
         description: payload.description,
         fields,
         approvalRoles,
+        requiresApproval,
         originalPdfName: originalPdfName || 'template.pdf',
         formCode: formCode || undefined,
       }))
@@ -329,15 +337,40 @@ function TemplateBuilder() {
       <article className="panel" style={{ padding: 24, marginBottom: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Approval Roles</h3>
-          <button type="button" onClick={addApprovalRole} className="ghost-btn small">+ Add Role</button>
+          {requiresApproval && <button type="button" onClick={addApprovalRole} className="ghost-btn small">+ Add Role</button>}
         </div>
-        <p style={{ margin: '0 0 14px', fontSize: 13, color: '#7a7a8c' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600, marginBottom: 10, cursor: 'pointer' }}>
+          <input type="checkbox" checked={requiresApproval} onChange={e => setRequiresApproval(e.target.checked)} />
+          This form needs approval
+        </label>
+        {!requiresApproval && (
+          <p style={{ margin: '0 0 6px', fontSize: 13, color: '#7a7a8c' }}>
+            No approver is asked for when this form is filled. It is filed as soon as it is submitted, does not
+            appear in Pending Approvals, and no approval e-mail is sent.
+          </p>
+        )}
+        <p style={{ margin: '0 0 14px', fontSize: 13, color: '#7a7a8c', display: requiresApproval ? 'block' : 'none' }}>
           {approvalRoles.length
             ? 'Everyone listed here must sign off independently before this form is fully approved.'
             : 'No named roles yet — this form uses a single "Approver". Add a role for each person who must sign off (e.g. "HOD QA", "HOD Operations").'}
         </p>
-        {approvalRoles.map((role) => (
-          <div key={role.key} style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10 }}>
+        {requiresApproval && approvalRoles.length === 0 && (
+          // The single "Approver" a form shows when it has no named roles. Picking who it
+          // may be given to here turns it into a real role (still keyed "approver", so
+          // forms already filed keep working).
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>Approver</div>
+            <RoleLimits
+              role={{}}
+              departments={departments}
+              employees={employees}
+              onPatch={patch => setApprovalRoles([{ key: 'approver', label: 'Approver', ...patch }])}
+            />
+          </div>
+        )}
+        {requiresApproval && approvalRoles.map((role) => (
+          <div key={role.key} style={{ marginBottom: 14 }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 8 }}>
             <SearchableSelect
               value={role.autoDepartment || ''}
               onChange={v => updateApprovalRole(role.key, {
@@ -371,6 +404,8 @@ function TemplateBuilder() {
               style={{ minWidth: 200, padding: '10px 14px', border: '2px solid #e0e0e6', borderRadius: 10, fontSize: 14, cursor: 'text', boxSizing: 'border-box' }}
             />
             <button type="button" onClick={() => removeApprovalRole(role.key)} className="ghost-btn small">Remove</button>
+          </div>
+          <RoleLimits role={role} departments={departments} employees={employees} onPatch={patch => updateApprovalRole(role.key, patch)} />
           </div>
         ))}
       </article>
@@ -411,6 +446,36 @@ function TemplateBuilder() {
                 placeholder="Comma-separated options, e.g. Hardware, Software, Network, Other"
                 style={{ padding: '10px 14px', border: '2px solid #e0e0e6', borderRadius: 10, fontSize: 14 }}
               />
+            )}
+
+            {(field.type === 'employee' || field.type === 'employee-multi') && (
+              // Limits who this field's picker offers (e.g. an "Approved by" field).
+              // Nothing picked = every employee. Departments and named people add up.
+              <div style={{ background: '#f7f7fa', border: '1px solid #ececf0', borderRadius: 10, padding: '12px 14px', display: 'grid', gap: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#595966' }}>
+                  Who can be picked in this field
+                  <span style={{ fontWeight: 500, color: '#7a7a8c' }}> — leave both empty to allow everyone</span>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11.5, color: '#7a7a8c', marginBottom: 4 }}>Only people from these departments</div>
+                  <MultiSelect
+                    value={(field.allowedDepartments || []).join(',')}
+                    onChange={v => updateField(field.id, { allowedDepartments: v ? v.split(',').map(x => x.trim()).filter(Boolean) : undefined })}
+                    options={departments.map(d => d.name)}
+                    placeholder="Any department"
+                    searchPlaceholder="Search departments…"
+                  />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11.5, color: '#7a7a8c', marginBottom: 4 }}>And / or only these people</div>
+                  <EmployeeMultiPicker
+                    value={field.allowedEmployeeIds || []}
+                    onChange={ids => updateField(field.id, { allowedEmployeeIds: ids.length ? ids : undefined })}
+                    employees={employees}
+                    style={{ width: '100%', padding: '10px 14px', border: '2px solid #e0e0e6', borderRadius: 10, fontSize: 14, cursor: 'text', boxSizing: 'border-box' }}
+                  />
+                </div>
+              </div>
             )}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

@@ -32,6 +32,8 @@ const guessType = (label) => {
   if (isSignatureLabel(l)) return 'signature'
   if (isDateTimeLabel(l)) return 'datetime'
   if (/\bdate\b|tarikh/.test(l)) return 'date'
+  // A client's, customer's or company's name is typed, not picked from staff.
+  if (/\b(client|customer|company|vendor|supplier|contractor|party)\b/.test(l)) return 'text'
   if (/\b(name|personnel|by|inspector|assigned|responsible|verified|reported|concerned)\b/.test(l)) return 'employee'
   if (/department|dept\b/.test(l)) return 'text'
   if (/\b(description|detail|reason|remark|comment|note|action|cause|correction|nonconform|non-conform)\b/.test(l)) return 'textarea'
@@ -439,6 +441,7 @@ const mergeTextRuns = (items) => {
     const prev = merged[merged.length - 1]
     const adjacent = prev &&
       prev.page === item.page &&
+      !prev.rotated && !item.rotated &&
       !RULE_RUN.test(item.text) &&
       !RULE_RUN.test(prev.text) &&
       Math.abs(prev.pdfY - item.pdfY) <= 2 &&
@@ -526,7 +529,29 @@ export async function parsePdf(file) {
     const rawItems = content.items
       .filter(item => item.str.trim() && !/^input$/i.test(item.str.trim()))
       .map(item => {
-        const [, , , , tx, ty] = item.transform
+        const [a, b, , , tx, ty] = item.transform
+        // Text set on its side (narrow column headings written bottom-to-top) runs
+        // along y, not x. It is kept as the narrow strip it actually covers, its
+        // middle as its height, so it lands in the column it heads — and it is never
+        // joined to its neighbours, which share its baseline only by accident.
+        if (Math.abs(a) < 0.01 && Math.abs(b) > 0.01) {
+          const size = Math.abs(b)
+          const up = b > 0
+          const length = Math.round(item.width)
+          const mid = Math.round(ty + (up ? 1 : -1) * length / 2)
+          return {
+            text: item.str.trim(),
+            x: Math.round(up ? tx - size : tx),
+            y: Math.round(vp.height - mid),
+            pdfY: mid,
+            width: Math.max(1, Math.round(size)),
+            height: length,
+            rotated: true,
+            page: pageNum - 1,
+            pageWidth: Math.round(vp.width),
+            pageHeight: Math.round(vp.height),
+          }
+        }
         return {
           text: item.str.trim(),
           x: Math.round(tx),
@@ -561,8 +586,20 @@ export async function parsePdf(file) {
   // and empty cells don't also turn up as stray text fields.
   // Stacked sections of different shapes (daily / weekly / monthly rows) are read
   // cell by cell first; a plain register inside the same area is then left alone.
+  const rawRegisters = geometry.flatMap((geom, pageIdx) =>
+    detectRegisterTables(geom.rects || [], pages[pageIdx] || []).map(t => ({ ...t, page: pageIdx })))
+  const inRegisterRows = (page, cell) => rawRegisters.some(t => t.page === page && t.rows.some(r => r.cells.some(c =>
+    c && Math.abs(c.x - cell.x) <= 3 && Math.abs(c.y - cell.y) <= 3)))
+  // Several plain tables side by side (or stacked) can look like one sectioned
+  // sheet. When ordinary register tables already account for nearly every cell
+  // it found, they are what the page is, and read with their own column names.
   const sectionedTables = geometry.flatMap((geom, pageIdx) =>
     detectSectionedTables(geom.rects || [], pages[pageIdx] || []).map(t => ({ ...t, page: pageIdx })))
+    .filter(t => {
+      const inside = rawRegisters.filter(r => r.page === t.page && r.bottom >= t.bottom - 2 && r.top <= t.top + 2)
+      const sideBySide = inside.some(a => inside.some(b => a !== b && a.bottom < b.top && b.bottom < a.top))
+      return !(sideBySide && t.entries.filter(e => inRegisterRows(t.page, e.cell)).length >= t.entries.length * 0.8)
+    })
   const ratingGrids = geometry.flatMap((geom, pageIdx) => {
     const drawn = detectRatingMatrices(geom.rects || [], pages[pageIdx] || [])
       .map(m => ({ ...m, page: pageIdx }))
@@ -579,17 +616,41 @@ export async function parsePdf(file) {
   // Register tables (an issue log, a schedule): captions over rows of empty
   // cells, every cell its own entry. Rating and box-glyph grids are read first,
   // and a table that overlaps one is that grid, not a register.
-  const registerTables = geometry.flatMap((geom, pageIdx) =>
-    detectRegisterTables(geom.rects || [], pages[pageIdx] || [])
-      .map(t => ({ ...t, page: pageIdx }))
-      .filter(t => !sectionedTables.some(g => g.page === pageIdx && t.bottom <= g.top && t.top >= g.bottom))
-      .filter(t => !ratingGrids.some(g => g.page === pageIdx && t.bottom <= g.top + HEADER_BAND && t.top >= g.bottom)))
-  const inRegisterTable = (page, y) => registerTables.some(t =>
-    t.page === page && y >= t.bottom - 2 && y <= t.top + 2) ||
+  const sameColumns = (a, b) => a.columns.length === b.columns.length &&
+    a.columns.every((c, i) => Math.abs(c.x - b.columns[i].x) <= 3 && Math.abs(c.w - b.columns[i].w) <= 4)
+  const registerTables = rawRegisters
+    .filter(t => !sectionedTables.some(g => g.page === t.page && t.bottom <= g.top && t.top >= g.bottom))
+    .filter(t => !ratingGrids.some(g => g.page === t.page && t.bottom <= g.top + HEADER_BAND && t.top >= g.bottom))
+    // A table with no header of its own carries on one from an earlier page (a
+    // checklist running onto page 2): it takes that table's column names, and its
+    // rows carry on its numbering. One with nothing to carry on is not a table.
+    .map((t, i, all) => {
+      if (!t.headerless) return t
+      const from = all.slice(0, i).reverse().find(o => !o.headerless && o.page < t.page && sameColumns(o, t))
+      if (!from) return null
+      return { ...t, columns: t.columns.map((c, k) => ({ ...c, caption: from.columns[k].caption, choices: from.columns[k].choices })) }
+    })
+    .filter(Boolean)
+    .filter(t => t.columns.some(c => c.caption && c.fillable) || t.rows.some(r => r.cells.some(Boolean)))
+  // Given an x span too, only a table under that span counts: a table on the left
+  // half of the page says nothing about a "W.O No" line on the right half.
+  const tableSpan = (t) => [t.columns[0].x, t.columns[t.columns.length - 1].x + t.columns[t.columns.length - 1].w]
+  const inRegisterTable = (page, y, x, w = 0) => registerTables.some(t =>
+    t.page === page && y >= t.bottom - 2 && y <= (t.blockTop ?? t.top) + 2 &&
+    (x === undefined || (x < tableSpan(t)[1] + 2 && x + w > tableSpan(t)[0] - 2))) ||
     sectionedTables.some(t => t.page === page && y >= t.bottom - 2 && y <= t.top + 2)
-  const inRatingGrid = (page, y) => inRegisterTable(page, y) || ratingGrids.some(g =>
+  // A table's printed title in capitals ("POWER TOOLS/GENERAL EQUIPMENTS") just over
+  // a table with nothing else drawn on it is a heading, not something to fill in.
+  const isTableTitle = (page, text, x, w, y) => {
+    const t0 = String(text || '').trim()
+    if (!/[A-Z]{3}/.test(t0) || t0 !== t0.toUpperCase()) return false
+    return registerTables.some(t => t.page === page && t.openAbove &&
+      y >= (t.blockTop ?? t.top) - 2 && y <= (t.blockTop ?? t.top) + 18 &&
+      x < t.columns[t.columns.length - 1].x + t.columns[t.columns.length - 1].w && x + (w || 0) > t.columns[0].x)
+  }
+  const inRatingGrid = (page, y, x, w) => inRegisterTable(page, y, x, w) || ratingGrids.some(g =>
     g.page === page && y >= g.bottom - 2 && y <= g.top + HEADER_BAND)
-  const inRatingCell = (page, r) => inRegisterTable(page, r.y + r.h / 2) || ratingGrids.some(g => g.page === page && g.rows.some(row =>
+  const inRatingCell = (page, r) => inRegisterTable(page, r.y + r.h / 2, r.x, r.w) || ratingGrids.some(g => g.page === page && g.rows.some(row =>
     row.cells.some(c => r.x + r.w / 2 >= c.x && r.x + r.w / 2 <= c.x + c.w &&
       r.y + r.h / 2 >= c.y && r.y + r.h / 2 <= c.y + c.h)))
   // A heading that ends in ":" over a numbered list ("1. failure to sound alarm …
@@ -669,7 +730,9 @@ export async function parsePdf(file) {
       const tick = Math.max(6, Math.min(10, cell.h - 4))
       return [{
         id: `f_reg_${t.page}_${ti}_${ri}_${ci}_${Date.now().toString(36)}`,
-        label: `Row ${row.number} — ${col.caption}`,
+        // Named after what the row is about when it says so ("ANGLE GRINDER 4" #1",
+        // "5. Condition of PPEs?"); a blank row goes by its number.
+        label: `${row.title || `Row ${row.number}`} — ${col.caption}`,
         // Same type down a whole column: a row a little taller than its neighbours
         // (it fits two lines of the printed caption) is still a one-line entry.
         type: picks ? 'radio' : isSignatureLabel(col.caption) ? 'signature' : isDateTimeLabel(col.caption) ? 'datetime' : /\bdate\b/i.test(col.caption) ? 'date' : cell.h > 60 ? 'textarea' : 'text',
@@ -809,7 +872,8 @@ export async function parsePdf(file) {
       })
 
     for (const { item: labelItem, idx } of labelIdxs) {
-      if (inRatingGrid(labelItem.page, labelItem.pdfY)) continue
+      if (inRatingGrid(labelItem.page, labelItem.pdfY, labelItem.x, labelItem.width)) continue
+      if (isTableTitle(labelItem.page, labelItem.text, labelItem.x, labelItem.width, labelItem.pdfY)) continue
       if (isCaptionUnderRule(labelItem, allItems)) continue
       if (listHeadings.has(allItems.find(a => a.page === labelItem.page && a.x === labelItem.x && a.pdfY === labelItem.pdfY && a.text === labelItem.text))) continue
       // Clean label: an embedded label ("Email: ____") uses the part before
@@ -1033,11 +1097,18 @@ export async function parsePdf(file) {
     named
       .sort((a, b) => b.region.y - a.region.y || a.region.x - b.region.x)
       .forEach(({ region, label }, idx) => {
-        const caption = (label?.text || '').replace(/[:\s]+$/, '').replace(/\s+/g, ' ').trim()
+        const caption = (label?.text || '').replace(/[:\-\s]+$/, '').replace(/\s+/g, ' ').trim()
         // The empty cell beside the letterhead's Code / Issue Date value (where the
         // logo sits) takes that value as its caption. It is printed on every form
         // and never filled in.
         if (/^FM-\d{3}-\d{2}$/i.test(caption) || /^\d{1,2}-[A-Za-z]{3}-\d{2,4}$/.test(caption)) return
+        // The letterhead read as one run ("Title Code Equipment Checklist FM-015-05",
+        // "Issue Date Issue 30-Aug-2019"): printed on every form, never filled in.
+        if (/\bFM-\d{3}-\d{2}\b/i.test(caption) || /premier tubular/i.test(caption) ||
+            (/\bissue\b/i.test(caption) && /\b\d{1,2}-[A-Za-z]{3}-\d{2,4}\b/.test(caption))) return
+        // A table's printed title in capitals ("POWER TOOLS/GENERAL EQUIPMENTS") over a
+        // table with nothing else drawn on it is a heading, not something to fill in.
+        if (isTableTitle(pageIdx, caption, region.x, region.w, region.y)) return
 
         let name = caption || `Field ${idx + 1}`
 
