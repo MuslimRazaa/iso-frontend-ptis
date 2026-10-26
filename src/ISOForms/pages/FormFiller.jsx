@@ -370,7 +370,8 @@ function FormFiller() {
           const q = templateSearch.trim().toLowerCase()
           const filteredTemplates = q
             ? templates.filter(t => [t.name, t.description, t.form_code].filter(Boolean).join(' ').toLowerCase().includes(q))
-            : templates
+            : [...templates]
+          filteredTemplates.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base', numeric: true }))
           return filteredTemplates.length === 0 ? (
             <div style={{ color: '#7a7a8c' }}>No forms match "{templateSearch}".</div>
           ) : (
