@@ -33,7 +33,7 @@ const guessType = (label) => {
   if (isDateTimeLabel(l)) return 'datetime'
   if (/\bdate\b|tarikh/.test(l)) return 'date'
   // A client's, customer's or company's name is typed, not picked from staff.
-  if (/\b(client|customer|company|vendor|supplier|contractor|party)\b/.test(l)) return 'text'
+  if (/\b(client|customer|company|vendor|supplier|contractor|party|candidate|applicant)\b/.test(l)) return 'text'
   if (/\b(name|personnel|by|inspector|assigned|responsible|verified|reported|concerned)\b/.test(l)) return 'employee'
   if (/department|dept\b/.test(l)) return 'text'
   if (/\b(description|detail|reason|remark|comment|note|action|cause|correction|nonconform|non-conform)\b/.test(l)) return 'textarea'
@@ -641,6 +641,20 @@ export async function parsePdf(file) {
     sectionedTables.some(t => t.page === page && y >= t.bottom - 2 && y <= t.top + 2)
   // A table's printed title in capitals ("POWER TOOLS/GENERAL EQUIPMENTS") just over
   // a table with nothing else drawn on it is a heading, not something to fill in.
+  // The PTIS letterhead: a "Title" cell with "Code" on the same line, and an
+  // "Issue" / "Issue Date" line under it. Anything between the top of the Title
+  // line and the bottom of the Issue line is printed matter.
+  const letterheads = pages.map(items => {
+    const title = items.find(t => /^title$/i.test(t.text.trim()) &&
+      items.some(c => /^code$/i.test(c.text.trim()) && Math.abs(c.pdfY - t.pdfY) <= 3))
+    if (!title) return null
+    const issue = items.find(t => /^issue$/i.test(t.text.trim()) && t.pdfY < title.pdfY && title.pdfY - t.pdfY <= 40)
+    return { top: title.pdfY + 14, bottom: (issue ? issue.pdfY : title.pdfY) - 8 }
+  })
+  const inLetterhead = (item) => {
+    const lh = letterheads[item.page]
+    return Boolean(lh) && item.pdfY <= lh.top && item.pdfY >= lh.bottom
+  }
   const isTableTitle = (page, text, x, w, y) => {
     const t0 = String(text || '').trim()
     if (!/[A-Z]{3}/.test(t0) || t0 !== t0.toUpperCase()) return false
@@ -650,8 +664,8 @@ export async function parsePdf(file) {
   }
   const inRatingGrid = (page, y, x, w) => inRegisterTable(page, y, x, w) || ratingGrids.some(g =>
     g.page === page && y >= g.bottom - 2 && y <= g.top + HEADER_BAND)
-  const inRatingCell = (page, r) => inRegisterTable(page, r.y + r.h / 2, r.x, r.w) || ratingGrids.some(g => g.page === page && g.rows.some(row =>
-    row.cells.some(c => r.x + r.w / 2 >= c.x && r.x + r.w / 2 <= c.x + c.w &&
+  const inRatingCell = (page, r) => inRegisterTable(page, r.y + r.h / 2, r.x, r.w) || ratingGrids.some(g => g.page === page && g.rows.some((row, ri) =>
+    [...row.cells, ...(g.extras || []).map(e => e.cells[ri])].some(c => c && r.x + r.w / 2 >= c.x && r.x + r.w / 2 <= c.x + c.w &&
       r.y + r.h / 2 >= c.y && r.y + r.h / 2 <= c.y + c.h)))
   // A heading that ends in ":" over a numbered list ("1. failure to sound alarm …
   // 7. Others") is a choose-any question whose answers are the listed lines. The
@@ -659,18 +673,25 @@ export async function parsePdf(file) {
   const listChoices = pages.flatMap((items, pageIdx) => items
     .filter(h => /:$/.test(h.text.trim()) && !/^\d/.test(h.text.trim()))
     .flatMap(h => {
-      const nums = items.filter(n => /^\d{1,2}[.)]$/.test(n.text.trim()) &&
+      // "1." / "2)" … or "a)" / "b." …; a lettered list is a pick-one.
+      const nums = items.filter(n => (/^\d{1,2}[.)]$/.test(n.text.trim()) || /^[a-h][.)]$/i.test(n.text.trim())) &&
         n.x >= h.x - 4 && h.pdfY - n.pdfY >= -2 && h.pdfY - n.pdfY <= 120 &&
         !inRegisterTable(pageIdx, n.pdfY) && !inRatingGrid(pageIdx, n.pdfY))
       const options = nums.map(n => {
         const text = items
           .filter(t => t !== n && Math.abs(t.pdfY - n.pdfY) <= 2 && t.x > n.x && t.x - (n.x + n.width) < 14)
           .sort((a, b) => a.x - b.x)[0]
-        return text ? { n: Number(n.text.replace(/\D/g, '')), num: n, text: text.text.replace(/[_:\s]+$/, '').replace(/:.*$/, '').replace(/\s*,\s*/g, ' / ').trim() } : null
+        const letter = /^[a-h]/i.test(n.text.trim())
+        return text ? {
+          n: letter ? n.text.trim().toLowerCase().charCodeAt(0) - 96 : Number(n.text.replace(/\D/g, '')),
+          letter,
+          num: n,
+          text: text.text.replace(/[_:\s]+$/, '').replace(/:.*$/, '').replace(/[,;]+$/, '').replace(/\s*,\s*/g, ' / ').trim(),
+        } : null
       }).filter(Boolean).sort((a, b) => a.n - b.n)
-      // Must read 1, 2, 3 … without gaps, or it is not a list.
-      if (options.length < 3 || options.some((o, i) => o.n !== i + 1)) return []
-      return [{ page: pageIdx, heading: h, options }]
+      // Must read 1, 2, 3 … (or a, b, c …) without gaps, and all of one kind.
+      if (options.length < 3 || options.some((o, i) => o.n !== i + 1 || o.letter !== options[0].letter)) return []
+      return [{ page: pageIdx, heading: h, options, single: options[0].letter }]
     }))
   const listHeadings = new Set(listChoices.map(l => l.heading))
   const listFields = listChoices.map((l, i) => {
@@ -680,7 +701,7 @@ export async function parsePdf(file) {
     return {
       id: `f_list_${l.page}_${i}_${Date.now().toString(36)}`,
       label: l.heading.text.replace(/:$/, '').trim(),
-      type: 'checkbox-group',
+      type: l.single ? 'radio' : 'checkbox-group',
       required: false,
       owner: 'requester',
       options: l.options.map(o => o.text).join(', '),
@@ -721,7 +742,50 @@ export async function parsePdf(file) {
   })
   const registerFields = registerTables.flatMap((t, ti) => {
     const sample = pages[t.page]?.[0]
+    // Neighbouring fillable columns under one heading, each with a short name of its
+    // own and a tick square in its cells ("Present" over "Yes" | "No"), are one
+    // choice: a row is answered by ticking one of them, not by writing in each.
+    const choiceGroups = []
+    for (let ci = 0; ci < t.columns.length; ci++) {
+      const c = t.columns[ci]
+      const shortOwn = (x) => x && x.fillable && x.group && x.own && x.own.length <= 14
+      if (!shortOwn(c)) continue
+      let cj = ci
+      while (cj + 1 < t.columns.length && shortOwn(t.columns[cj + 1]) && t.columns[cj + 1].group === c.group) cj++
+      const span = t.columns.slice(ci, cj + 1).map(x => x.index)
+      if (span.length >= 2 && t.rows.filter(r => span.every(k => r.ticks?.[k])).length >= t.rows.length * 0.8) {
+        choiceGroups.push(span)
+        ci = cj
+      }
+    }
+    const inGroup = new Map(choiceGroups.flatMap(span => span.map(k => [k, span])))
     return t.rows.flatMap((row, ri) => t.columns.flatMap((col, ci) => {
+      const span = inGroup.get(ci)
+      if (span) {
+        if (span[0] !== ci) return []
+        const marks = span.map(k => ({ label: t.columns[k].own, t: row.ticks?.[k], cell: row.cells[k] })).filter(m => m.cell)
+        if (!marks.length) return []
+        const first = marks[0].cell, last = marks[marks.length - 1].cell
+        return [{
+          id: `f_reg_${t.page}_${ti}_${ri}_${ci}_${Date.now().toString(36)}`,
+          label: `${row.title || `Row ${row.number}`} — ${col.group}`,
+          type: 'radio',
+          required: false,
+          owner: 'requester',
+          options: marks.map(m => m.label).join(', '),
+          pdfCoords: {
+            page: t.page,
+            x: first.x + 2, y: first.y + 2,
+            width: Math.max(12, last.x + last.w - first.x - 4), height: Math.max(8, first.h - 4),
+            pageWidth: sample?.pageWidth, pageHeight: sample?.pageHeight,
+            rowBox: row.box,
+            optionMarks: marks.map(m => {
+              const b = m.t || { x: m.cell.x + (m.cell.w - 10) / 2, y: m.cell.y + (m.cell.h - 10) / 2, w: 10, h: 10 }
+              return { label: m.label, box: { x: b.x, y: b.y, width: b.w, height: b.h } }
+            }),
+          },
+        }]
+      }
       const cell = row.cells[ci]
       if (!cell || !col.caption) return []
       // A column split into Yes | No (or similar) sub-headings is a choice, not
@@ -763,7 +827,27 @@ export async function parsePdf(file) {
     const sample = pages[g.page]?.[0]
     const left = Math.min(...g.rows.flatMap(r => r.cells.map(c => c.x)))
     const right = Math.max(...g.rows.flatMap(r => r.cells.map(c => c.x + c.w)))
-    return g.rows.map((row, i) => {
+    // A written column beside the scale ("Comments"), one entry per row, named after
+    // the row it is on.
+    const extraFields = (row, i) => (g.extras || []).map((e, ei) => {
+      const cell = e.cells[i]
+      const name = row.label.replace(/^\d{1,2}[.)]\s+/, '')
+      return {
+        id: `f_rating_x_${g.page}_${Date.now().toString(36)}_${i}_${ei}`,
+        label: `${name} — ${e.caption}`,
+        type: 'text',
+        required: false,
+        owner: 'requester',
+        options: '',
+        pdfCoords: {
+          page: g.page,
+          x: cell.x + 2, y: cell.y + 2,
+          width: Math.max(12, cell.w - 4), height: Math.max(8, cell.h - 4),
+          pageWidth: sample?.pageWidth, pageHeight: sample?.pageHeight,
+        },
+      }
+    })
+    return g.rows.flatMap((row, i) => {
       const markSize = Math.max(6, Math.min(14, row.h - 4, ...row.cells.map(c => c.w - 4)))
       // Typeset boxes are already the exact square; drawn cells hold a smaller mark.
       const markBox = (cell) => g.exact
@@ -774,7 +858,7 @@ export async function parsePdf(file) {
             width: markSize,
             height: markSize,
           }
-      return {
+      return [{
         id: `f_rating_${g.page}_${Date.now().toString(36)}_${i}`,
         label: row.label.replace(/^\d{1,2}[.)]\s+/, ''),
         // A rating row is single-select (one box per question); a grid of
@@ -797,7 +881,7 @@ export async function parsePdf(file) {
             box: markBox(row.cells[ci]),
           })),
         },
-      }
+      }, ...extraFields(row, i)]
     })
   })
 
@@ -874,6 +958,9 @@ export async function parsePdf(file) {
     for (const { item: labelItem, idx } of labelIdxs) {
       if (inRatingGrid(labelItem.page, labelItem.pdfY, labelItem.x, labelItem.width)) continue
       if (isTableTitle(labelItem.page, labelItem.text, labelItem.x, labelItem.width, labelItem.pdfY)) continue
+      // A word of the form's own title, wrapped onto a second line inside the
+      // letterhead ("Employee's Document / Checklist" beside "Title" … "Code").
+      if (inLetterhead(labelItem)) continue
       if (isCaptionUnderRule(labelItem, allItems)) continue
       if (listHeadings.has(allItems.find(a => a.page === labelItem.page && a.x === labelItem.x && a.pdfY === labelItem.pdfY && a.text === labelItem.text))) continue
       // Clean label: an embedded label ("Email: ____") uses the part before
@@ -1097,7 +1184,16 @@ export async function parsePdf(file) {
     named
       .sort((a, b) => b.region.y - a.region.y || a.region.x - b.region.x)
       .forEach(({ region, label }, idx) => {
-        const caption = (label?.text || '').replace(/[:\-\s]+$/, '').replace(/\s+/g, ' ').trim()
+        let caption = (label?.text || '').replace(/[:\-\s]+$/, '').replace(/\s+/g, ' ').trim()
+        // The line under a list whose answer says "(specify reason)" is where that
+        // reason is written: named after that answer, not after the whole list.
+        const specify = /\(specify[^)]*\)/i.test(caption) &&
+          items.filter(t => /\(specify[^)]*\)/i.test(t.text) && t.pdfY >= region.y && t.pdfY - region.y <= 40)
+            .sort((a, b) => a.pdfY - b.pdfY)[0]
+        if (specify) caption = specify.text.replace(/^[a-h0-9]{1,2}[.)]\s*/i, '').replace(/[,;:\s]+$/, '').trim()
+        // Spare room in a letterhead cell (a form title that wraps onto two lines
+        // leaves the rest of its cell empty). Printed, never filled in.
+        if (inLetterhead({ page: pageIdx, pdfY: region.y + region.h / 2 })) return
         // The empty cell beside the letterhead's Code / Issue Date value (where the
         // logo sits) takes that value as its caption. It is printed on every form
         // and never filled in.

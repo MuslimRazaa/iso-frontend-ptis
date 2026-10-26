@@ -526,7 +526,7 @@ export function cellContaining(item, rects) {
 // taken for a rating grid. A column like "Score" is not in it, so it is left
 // alone while the scale columns beside it are picked up.
 const SCALE_WORDS = {
-  excellent: 'Excellent', verygood: 'Very Good', good: 'Good', satisfactory: 'Satisfactory',
+  outstanding: 'Outstanding', excellent: 'Excellent', verygood: 'Very Good', good: 'Good', satisfactory: 'Satisfactory',
   average: 'Average', fair: 'Fair', poor: 'Poor', verypoor: 'Very Poor',
   unsatisfactory: 'Unsatisfactory', na: 'NA', 'n/a': 'N/A',
 }
@@ -640,7 +640,21 @@ export function detectRatingMatrices(rects, textItems) {
     rows.forEach((row, i) => { if (!row.label) row.label = `Question ${i + 1}` })
     if (rows.length < 2) continue
 
-    matrices.push({ top: col0.y + col0.h, bottom: rows[rows.length - 1].y, columns, rows })
+    // Columns of the same grid that are written in rather than ticked ("Comments"
+    // beside the scale): a heading cell on the scale's line, and an empty cell under
+    // it on every row. Each becomes an entry of its row.
+    const lastCol = columns[columns.length - 1]
+    const extras = boxes
+      .filter(b => Math.abs(b.y - col0.y) <= 3 && Math.abs(b.h - col0.h) <= 3 && b.x >= lastCol.x + lastCol.w - 2)
+      .sort((a, b) => a.x - b.x)
+      .filter((b, i, all) => all.findIndex(o => Math.abs(o.x - b.x) <= 2) === i)
+      .map(head => ({
+        caption: textInside(head, textItems).map(t => t.text.trim()).join(' ').replace(/\s+/g, ' ').trim(),
+        cells: rows.map(row => cellAt({ x: head.x, w: head.w }, row.y, row.h) || null),
+      }))
+      .filter(e => e.caption && !SCALE_WORDS[scaleKey(e.caption)] && e.cells.every(c => c && !textInside(c, textItems).length))
+
+    matrices.push({ top: col0.y + col0.h, bottom: rows[rows.length - 1].y, columns, rows, extras })
   }
   return matrices
 }
@@ -834,6 +848,20 @@ export function detectRegisterTables(rects, textItems) {
   }
   bands.sort((a, b) => b.y - a.y || a.cells[0].x - b.cells[0].x)
 
+  // A small box drawn inside a cell (the tick square of a Yes / No column) is not a
+  // row of its own. Left in, the squares made a "row" between every two real rows
+  // and broke the table up. They are kept aside as the place a tick goes.
+  const insideBox = (inner, outer) => inner !== outer &&
+    inner.x >= outer.x - 0.5 && inner.x + inner.w <= outer.x + outer.w + 0.5 &&
+    inner.y >= outer.y - 0.5 && inner.y + inner.h <= outer.y + outer.h + 0.5 &&
+    inner.w * inner.h < outer.w * outer.h * 0.6
+  const nested = new Set()
+  for (const band of bands) {
+    if (band.cells.every(c => boxes.some(o => insideBox(c, o)))) nested.add(band)
+  }
+  const tickBoxes = [...nested].flatMap(b => b.cells)
+  for (let i = bands.length - 1; i >= 0; i--) if (nested.has(bands[i])) bands.splice(i, 1)
+
   const emptyBand = (band) => {
     const empty = band.cells.filter(c => !textInside(c, textItems).length)
     // A row may carry printed text in a column or two (a description beside its
@@ -974,7 +1002,7 @@ export function detectRegisterTables(rects, textItems) {
     const clean = (parts) => parts.join(' ').replace(/\s+/g, ' ').replace(/\/\s+/g, '/').trim()
     const columns = cols.map((k, i) => {
       const g = clean(group[i]), o = clean(own[i])
-      return { index: i, x: k.x, w: k.w, caption: [g, o].filter(Boolean).join(' '), choices: choices[i] }
+      return { index: i, x: k.x, w: k.w, caption: [g, o].filter(Boolean).join(' '), group: g, own: o, choices: choices[i] }
     })
     // The same heading over several columns ("Location" x 8) would give every one
     // of them the same name; number them left to right so each stays distinct.
@@ -1029,6 +1057,11 @@ export function detectRegisterTables(rects, textItems) {
         title: title ? (numberCol >= 0 && numberOf(r, numberCol) ? number + ". " + title : title) : null,
         // A printed column left blank on this row (the spare rows under a checklist)
         // is written in like any other entry; the number column is not.
+        // The tick square drawn inside a cell, where there is one.
+        ticks: cols.map((_, i) => {
+          const c = r.cells.find(cc => colOf(cc) === i)
+          return c ? tickBoxes.find(t => insideBox(t, c)) || null : null
+        }),
         cells: cols.map((_, i) => {
           if (fillable[i]) return r.cells.find(cc => colOf(cc) === i)
           if (i === numberCol || cellText(r, i)) return null

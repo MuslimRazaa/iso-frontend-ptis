@@ -53,8 +53,10 @@ export function layoutFields(fields) {
 // which column. Labels of table cells are made this way by the PDF importer.
 const splitLabel = (label) => {
   const s = String(label || '')
-  const i = s.lastIndexOf(' — ')
-  return i > 0 ? [s.slice(0, i).trim(), s.slice(i + 3).trim()] : null
+  // The dash may have lost a space on either side when names were edited by hand
+  // ("Row 6— Comments"), so it is the dash itself that splits the label.
+  const i = s.lastIndexOf('—')
+  return i > 0 && s.slice(i + 1).trim() ? [s.slice(0, i).trim(), s.slice(i + 1).trim()] : null
 }
 
 /**

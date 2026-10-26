@@ -211,7 +211,9 @@ function TemplateBuilder() {
     let body
     try {
       body = new FormData()
-      body.append('data', JSON.stringify({
+      // Sent as a file part, not a text field: the live host rejects text fields over
+      // 128 KB, which a template with hundreds of input boxes exceeds.
+      const metaJson = JSON.stringify({
         name: payload.name,
         description: payload.description,
         fields,
@@ -219,7 +221,8 @@ function TemplateBuilder() {
         requiresApproval,
         originalPdfName: originalPdfName || 'template.pdf',
         formCode: formCode || undefined,
-      }))
+      })
+      body.append('meta', new Blob([metaJson], { type: 'application/json' }), 'meta.json')
       body.append('pdf', base64ToBlob(originalPdfBase64), originalPdfName || 'template.pdf')
       // For the audit trail — templates carry no "who is editing this" field
       // of their own, unlike an entry's created_by.
