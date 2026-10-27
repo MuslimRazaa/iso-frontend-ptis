@@ -10,6 +10,7 @@ const FIELD_TYPES = [
   { value: 'number',         label: 'Number' },
   { value: 'date',           label: 'Date' },
   { value: 'datetime',       label: 'Date & Time' },
+  { value: 'time',           label: 'Time' },
   { value: 'dropdown',       label: 'Dropdown' },
   { value: 'checkbox-group', label: 'Checkbox Group' },
   { value: 'radio',          label: 'Checkbox (select one only)' },

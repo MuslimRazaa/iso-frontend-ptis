@@ -1,9 +1,10 @@
 import React from 'react'
 import { signatureLines } from '../utils/signature'
-import { formatDateTimeValue } from '../utils/fieldHelpers'
+import { formatDateTimeValue, formatTimeValue } from '../utils/fieldHelpers'
 import StyledSelect from '../../components/StyledSelect'
 import SearchableSelect from '../../components/SearchableSelect'
 import StyledDatePicker from '../../components/StyledDatePicker'
+import StyledTimePicker from '../../components/StyledTimePicker'
 
 const BASE_INPUT = {
   width: '100%', padding: '12px 15px', border: '2px solid #e0e0e6',
@@ -92,6 +93,7 @@ function DynamicField({ field, value, onChange, readOnly, employees = [], signer
       display = names.length ? names.join(', ') : '—'
     }
     else if (field.type === 'datetime') display = formatDateTimeValue(value) || '—'
+    else if (field.type === 'time') display = formatTimeValue(value) || '—'
     else if (value !== undefined && value !== null && value !== '') display = String(value)
     return <div style={{ fontSize: 14, color: '#14141c' }}>{display}</div>
   }
@@ -111,6 +113,9 @@ function DynamicField({ field, value, onChange, readOnly, employees = [], signer
           style={{ ...inputStyle, cursor: 'pointer' }}
         />
       )
+    case 'time':
+      // A clock time on its own, stored as "HH:mm" (24-hour).
+      return <StyledTimePicker value={String(value || '').slice(0, 5)} onChange={onChange} style={{ ...inputStyle, cursor: 'pointer' }} />
     case 'datetime': {
       // Stored as "YYYY-MM-DDTHH:mm" (just the date until a time is picked).
       const [datePart = '', timePart = ''] = String(value || '').split('T')
@@ -124,14 +129,14 @@ function DynamicField({ field, value, onChange, readOnly, employees = [], signer
               style={{ ...inputStyle, cursor: 'pointer' }}
             />
           </div>
-          <input
-            type="time"
-            value={timePart.slice(0, 5)}
-            disabled={!datePart}
-            title={datePart ? 'Time' : 'Pick the date first'}
-            onChange={(e) => onChange(join(datePart, e.target.value))}
-            style={{ ...inputStyle, width: 130, flexShrink: 0 }}
-          />
+          <div style={{ width: 150, flexShrink: 0 }} title={datePart ? 'Time' : 'Pick the date first'}>
+            <StyledTimePicker
+              value={timePart.slice(0, 5)}
+              disabled={!datePart}
+              onChange={(t) => onChange(join(datePart, t))}
+              style={{ ...inputStyle, cursor: datePart ? 'pointer' : 'not-allowed' }}
+            />
+          </div>
         </div>
       )
     }

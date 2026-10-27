@@ -14,6 +14,7 @@ import {
   detectRegisterTables,
   detectSectionedTables,
   labelForRegion,
+  cellRightOf,
 } from './detectPdfGeometry'
 import { readAcroFormFields } from './readAcroForm'
 
@@ -27,10 +28,19 @@ const isSignatureLabel = (label) => /\bsign(ature|atures|ed)?\b/i.test(String(la
 // field that takes both a day and a clock time.
 const isDateTimeLabel = (label) => /\bdate\s*(&|and|\/|-)?\s*time\b/i.test(String(label || ''))
 
+// A clock time on its own: "Time", "Actual Time", "Target Time" … but not a duration or
+// a time-keeping word ("Timeline", "Time taken" stays free text), and not a date.
+const isTimeLabel = (label) => {
+  const l = String(label || '').toLowerCase()
+  // "Time", "Actual Time", "Row 1 — Time", "Time 2" (a numbered repeat); not "Time taken".
+  return /(^|[\s—(-])(actual|target|achieved|start|end|arrival|departure|completion)?\s*time\s*(on|off|in|out)?(\s+site)?\s*:?(\s+\d+)?$/.test(l.trim()) && !/\bdate\b/.test(l)
+}
+
 const guessType = (label) => {
   const l = label.toLowerCase()
   if (isSignatureLabel(l)) return 'signature'
   if (isDateTimeLabel(l)) return 'datetime'
+  if (isTimeLabel(l)) return 'time'
   if (/\bdate\b|tarikh/.test(l)) return 'date'
   // A client's, customer's or company's name is typed, not picked from staff.
   if (/\b(client|customer|company|vendor|supplier|contractor|party|candidate|applicant)\b/.test(l)) return 'text'
@@ -598,7 +608,11 @@ export async function parsePdf(file) {
     .filter(t => {
       const inside = rawRegisters.filter(r => r.page === t.page && r.bottom >= t.bottom - 2 && r.top <= t.top + 2)
       const sideBySide = inside.some(a => inside.some(b => a !== b && a.bottom < b.top && b.bottom < a.top))
-      return !(sideBySide && t.entries.filter(e => inRegisterRows(t.page, e.cell)).length >= t.entries.length * 0.8)
+      if (sideBySide && t.entries.filter(e => inRegisterRows(t.page, e.cell)).length >= t.entries.length * 0.8) return false
+      // A frame that holds an ordinary table which reads out far more cells than the
+      // frame itself did: the table is what is there.
+      const cells = inside.reduce((n, r) => n + r.rows.reduce((m, row) => m + row.cells.filter(Boolean).length, 0), 0)
+      return !(inside.length && cells > t.entries.length)
     })
   const ratingGrids = geometry.flatMap((geom, pageIdx) => {
     const drawn = detectRatingMatrices(geom.rects || [], pages[pageIdx] || [])
@@ -644,6 +658,8 @@ export async function parsePdf(file) {
   // The PTIS letterhead: a "Title" cell with "Code" on the same line, and an
   // "Issue" / "Issue Date" line under it. Anything between the top of the Title
   // line and the bottom of the Issue line is printed matter.
+  const textInsideBox = (b, page) => (pages[page] || []).some(t =>
+    t.x + t.width > b.x + 1 && t.x < b.x + b.w - 1 && t.pdfY > b.y - 1 && t.pdfY < b.y + b.h - 1)
   const letterheads = pages.map(items => {
     const title = items.find(t => /^title$/i.test(t.text.trim()) &&
       items.some(c => /^code$/i.test(c.text.trim()) && Math.abs(c.pdfY - t.pdfY) <= 3))
@@ -725,7 +741,7 @@ export async function parsePdf(file) {
     return t.entries.map((e, ei) => ({
       id: `f_sec_${t.page}_${ti}_${ei}_${Date.now().toString(36)}`,
       label: e.label,
-      type: isSignatureLabel(e.label) ? 'signature' : isDateTimeLabel(e.label) ? 'datetime' : /\bdate\b/i.test(e.label) ? 'date' : 'text',
+      type: isSignatureLabel(e.label) ? 'signature' : isDateTimeLabel(e.label) ? 'datetime' : isTimeLabel(e.label) ? 'time' : /\bdate\b/i.test(e.label) ? 'date' : 'text',
       required: false,
       owner: 'requester',
       options: '',
@@ -797,9 +813,12 @@ export async function parsePdf(file) {
         // Named after what the row is about when it says so ("ANGLE GRINDER 4" #1",
         // "5. Condition of PPEs?"); a blank row goes by its number.
         label: `${row.title || `Row ${row.number}`} — ${col.caption}`,
+        // The heading printed over this column and its neighbours ("Hardware" over seven
+        // columns); the filler draws it once above them, as the form does.
+        ...(col.group ? { columnGroup: col.group } : null),
         // Same type down a whole column: a row a little taller than its neighbours
         // (it fits two lines of the printed caption) is still a one-line entry.
-        type: picks ? 'radio' : isSignatureLabel(col.caption) ? 'signature' : isDateTimeLabel(col.caption) ? 'datetime' : /\bdate\b/i.test(col.caption) ? 'date' : cell.h > 60 ? 'textarea' : 'text',
+        type: picks ? 'radio' : isSignatureLabel(col.caption) ? 'signature' : isDateTimeLabel(col.caption) ? 'datetime' : isTimeLabel(col.caption) ? 'time' : /\bdate\b/i.test(col.caption) ? 'date' : cell.h > 60 ? 'textarea' : 'text',
         required: false,
         owner: 'requester',
         options: picks ? picks.map(c => c.label).join(', ') : '',
@@ -1013,12 +1032,28 @@ export async function parsePdf(file) {
           // to find, so a short number is let through here even though it
           // still can't become a label by itself anywhere else.
           const isShortNumber = /^\d{1,2}$/.test(t)
-          return t && t.length < 40 && !t.endsWith(':') && (isShortNumber || !isNoise(t)) && !isBlankFill(t)
+          return t && t.length < 40 && !t.endsWith(':') && !t.endsWith('?') && (isShortNumber || !isNoise(t)) && !isBlankFill(t)
         })
         if (candidates.length === nextRow.length && candidates.length >= 2 && candidates.length <= 6) {
           optionItems = candidates
           optionsFromNextRow = true
           consumedRowIdxs.add(i + 1)
+        }
+      }
+
+      // A caption printed in its own drawn cell with an empty cell beside it ("Time:" |
+      // box) is a label for that box, read from the drawn cells. The next captions along
+      // the row ("Location", "No. of Participants") are other cells' captions, not choices.
+      if (optionItems.length >= 2) {
+        const rects = geometry[labelItem.page]?.rects || []
+        // The cell holding the text may be a shaded block drawn a little narrower than
+        // its real cell, so every box around the text is tried, with some slack.
+        const around = rects.filter(r => labelItem.x >= r.x - 1 && labelItem.x + labelItem.width <= r.x + r.w + 1 &&
+          labelItem.pdfY >= r.y - 1 && labelItem.pdfY <= r.y + r.h)
+        const beside = around.map(r => cellRightOf(r, rects, { gapTol: 14 })).find(Boolean)
+        if (beside && !textInsideBox(beside, labelItem.page)) {
+          if (optionsFromNextRow) consumedRowIdxs.delete(i + 1)   // that row is not this label's answers
+          continue
         }
       }
 
@@ -1222,7 +1257,7 @@ export async function parsePdf(file) {
           label: name,
           // Headings are not sentences, so the label heuristics misread them
           // ("Document Name" as a person). Only shape and dates read reliably.
-          type: isSignatureLabel(caption) ? 'signature' : isDateTimeLabel(caption) ? 'datetime' : /\bdate\b/i.test(caption) ? 'date'
+          type: isSignatureLabel(caption) ? 'signature' : isDateTimeLabel(caption) ? 'datetime' : isTimeLabel(caption) ? 'time' : /\bdate\b/i.test(caption) ? 'date'
             : region.h > LINE_TALL ? 'textarea'
             : 'text',
           required: false,
@@ -1289,6 +1324,105 @@ export async function parsePdf(file) {
     })
     fields.splice(at < 0 ? fields.length : at, 0, ...mine)
   }
+  // A YES cell and a NO cell on the same line are one Yes / No choice ("Was the drill
+  // successful?  YES [ ]  NO [ ]"): ticked in the box of the one picked.
+  for (let i = regionFields.length - 1; i >= 0; i--) {
+    const yes = regionFields[i]
+    if (!/^yes$/i.test(yes.label)) continue
+    const noAt = regionFields.findIndex(r => /^no$/i.test(r.label) && r.pdfCoords.page === yes.pdfCoords.page &&
+      Math.abs(r.pdfCoords.y - yes.pdfCoords.y) <= 6)
+    if (noAt < 0) continue
+    const no = regionFields[noAt]
+    const page = yes.pdfCoords.page
+    const line = (pages[page] || []).filter(t => Math.abs(t.pdfY - (yes.pdfCoords.y + yes.pdfCoords.height / 2)) <= 8 &&
+      t.x + t.width <= Math.min(yes.pdfCoords.x, no.pdfCoords.x) && !/^(yes|no)$/i.test(t.text.trim()))
+      .sort((a, b) => a.x - b.x).map(t => t.text.trim()).join(' ').replace(/\s+/g, ' ').trim()
+    const mark = (r, text) => {
+      const c = r.pdfCoords, size = Math.max(6, Math.min(12, c.height - 4, c.width - 4))
+      return { label: text, box: { x: c.x + (c.width - size) / 2, y: c.y + (c.height - size) / 2, width: size, height: size } }
+    }
+    const first = yes.pdfCoords.x < no.pdfCoords.x ? yes : no, second = first === yes ? no : yes
+    regionFields[Math.min(i, noAt)] = {
+      ...first,
+      label: line.replace(/[:?\s]+$/, '') || 'Yes / No',
+      type: 'radio',
+      options: 'Yes, No',
+      pdfCoords: {
+        ...first.pdfCoords,
+        x: first.pdfCoords.x, width: second.pdfCoords.x + second.pdfCoords.width - first.pdfCoords.x,
+        optionMarks: first === yes ? [mark(yes, 'Yes'), mark(no, 'No')] : [mark(no, 'Yes'), mark(yes, 'No')],
+      },
+    }
+    regionFields.splice(Math.max(i, noAt), 1)
+    // The label scan read the same question as a checkbox group of the words YES / NO;
+    // the drawn boxes are the better reading.
+    const merged = regionFields[Math.min(i, noAt)]
+    const same = fields.findIndex(x => x.type === 'checkbox-group' && x.pdfCoords?.page === page &&
+      x.label.toLowerCase().replace(/[:?\s]+$/, '') === merged.label.toLowerCase())
+    if (same >= 0) fields.splice(same, 1)
+  }
+  // A footer of captions side by side in boxes of their own ("Risk Assessment conducted
+  // by | Reviewed by | Approved by"): nothing is drawn to write in, so each caption is a
+  // name to be entered in the space just under its box.
+  // A "label" that is really several columns' headings run together (over 110 characters,
+  // read from the label scan) is the table's header, not a field.
+  for (let i = fields.length - 1; i >= 0; i--) {
+    if (/^f_(imported|area)_/.test(String(fields[i].id)) && String(fields[i].label).length > 110) fields.splice(i, 1)
+  }
+  const signoffFields = []
+  geometry.forEach((geom, pageIdx) => {
+    const cells = (geom.rects || []).filter(r => r.w >= 40 && r.h >= 14 && r.h <= 60)
+    const caps = []
+    for (const r of cells) {
+      const inside = (pages[pageIdx] || []).filter(t => t.x + t.width > r.x + 1 && t.x < r.x + r.w - 1 && t.pdfY > r.y - 1 && t.pdfY < r.y + r.h - 1)
+      const text = inside.map(t => t.text.trim()).join(' ').replace(/\s+/g, ' ').trim()
+      if (!text || !/\bby$/i.test(text) || text.length > 40) continue
+      if (caps.some(c => Math.abs(c.r.x - r.x) <= 2 && Math.abs(c.r.y - r.y) <= 2)) continue
+      caps.push({ r, text })
+    }
+    for (const c of caps) {
+      const row = caps.filter(o => Math.abs(o.r.y - c.r.y) <= 3)
+      if (row.length < 2) continue
+      if (signoffFields.some(f => f.label === c.text && f.pdfCoords.page === pageIdx)) continue
+      // Only when no box of this form lies just under it to write in.
+      const sample = pages[pageIdx]?.[0]
+      signoffFields.push({
+        id: `f_signoff_${pageIdx}_${signoffFields.length}_${Date.now().toString(36)}`,
+        label: c.text,
+        type: 'employee',
+        required: false,
+        owner: 'requester',
+        options: '',
+        pdfCoords: {
+          page: pageIdx, x: c.r.x + 2, y: Math.max(4, c.r.y - 18), width: Math.max(12, c.r.w - 4), height: 14,
+          pageWidth: sample?.pageWidth, pageHeight: sample?.pageHeight,
+        },
+      })
+    }
+  })
+  if (signoffFields.length) {
+    const names = new Set(signoffFields.map(f => f.label.toLowerCase()))
+    for (let i = fields.length - 1; i >= 0; i--) if (names.has(String(fields[i].label).toLowerCase().replace(/[:\s]+$/, ''))) fields.splice(i, 1)
+    fields.push(...signoffFields)
+  }
+  for (let i = regionFields.length - 1; i >= 0; i--) if (String(regionFields[i].label).length > 110) regionFields.splice(i, 1)
+  // Cells of a captioned table's own heading block, up to the letterhead above it: column
+  // captions drawn as cells, a "Site -" bar, a band of group headings. They carry no
+  // answer — the table's columns already name them — so a box whose name is a piece of
+  // those captions (or that never got a name) is not a field.
+  for (let i = regionFields.length - 1; i >= 0; i--) {
+    const f = regionFields[i], c = f.pdfCoords
+    const base = String(f.label).replace(/\s+\d+$/, '').trim().toLowerCase()
+    registerTables.forEach(t => {
+      if (t.page !== c.page || t.headerless) return
+      const left = t.columns[0].x, right = t.columns[t.columns.length - 1].x + t.columns[t.columns.length - 1].w
+      if (!(c.y >= t.bottom - 60 && c.y <= t.top + 90 && c.x < right && c.x + c.width > left)) return
+      const captions = t.columns.map(k => String(k.caption || '').toLowerCase()).join(' ')
+      const lh = letterheads[c.page]
+      const inLetter = lh && c.y >= lh.bottom - 6 && c.y <= lh.top + 14 && String(f.id).startsWith('f_area_') && f.type === 'text'
+      if (/^field \d+$/i.test(f.label) || (base.length > 2 && captions.includes(base)) || inLetter) regionFields.splice(i, 1)
+    })
+  }
   fields.push(...regionFields)
 
   // Deduplicate by label (table structures repeat the same label text, and a
@@ -1302,10 +1436,19 @@ export async function parsePdf(file) {
     const key = f.label.toLowerCase()
     const c = f.pdfCoords || {}
     const placed = seen.get(key)
-    if (!placed) { seen.set(key, [{ ...c, n: 1 }]); return true }
-    const same = placed.some(o => o.page === c.page &&
+    if (!placed) { seen.set(key, [{ ...c, n: 1, field: f }]); return true }
+    const same = placed.find(o => o.page === c.page &&
       Math.abs((o.x || 0) - (c.x || 0)) <= 80 && Math.abs((o.y || 0) - (c.y || 0)) <= 12)
-    if (same) return false
+    if (same) {
+      // The label scan can land on a sliver beside its caption (27pt of a 190pt cell).
+      // The drawn cell is the real input, so it takes over the earlier field's place.
+      const area = (k) => (k.width || 0) * (k.height || 0)
+      if (String(f.id).startsWith('f_area_') && same.field && same.field.type === f.type && area(c) > area(same) * 2.5) {
+        same.field.pdfCoords = f.pdfCoords
+        Object.assign(same, c)
+      }
+      return false
+    }
     placed.push({ ...c, n: placed.length + 1 })
     f.label = `${f.label} ${placed.length}`
     return true
