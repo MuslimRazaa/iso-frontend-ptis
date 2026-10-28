@@ -70,6 +70,7 @@ const fromDB = row => ({
   vLog: row.v_log || '',
   tbt: row.tbt || '',
   status: canonStatus(row.status),
+  statusManual: row.status_manual || '',
   completionDate: row.completion_date ? row.completion_date.slice(0, 10) : '',
   rept: row.rept || '',
   exp: row.exp || '',
@@ -116,7 +117,9 @@ const toDB = data => ({
   equip_cl: data.equipCL || null,
   v_log: data.vLog || null,
   tbt: data.tbt || null,
-  status: data.status || null,
+  // Status follows the job's dates and paperwork (the server works it out). Only a
+  // status someone chose by hand in the Operations section is saved; empty = automatic.
+  status: STATUS_CHOICES.includes(data.status) ? data.status : null,
   completion_date: data.completionDate || null,
   rept: data.rept || null,
   exp: data.exp || null,
@@ -283,7 +286,23 @@ const REFERENCE_OPTIONS = ['Via Email', 'Via Phone call', 'Via Whatsapp']
 // QHSE compliance dropdowns (Equip C/L, V. Log, REPT) — only these three values.
 const QHSE_OPTIONS = ['Yes', 'No', 'NA']
 const JMP_OPTIONS = ['1', '2', '3', '4', '5', 'NA']
-const STATUS_OPTIONS = ['In Progress', 'Incomplete', 'Completed', 'On Hold']
+const ROW_TONES = {
+  'in progress': { edge: '#f5c518', tint: '#fffbe3' },
+  incomplete: { edge: '#e5646f', tint: '#fff0f1' },
+}
+// The status is worked out by itself from the dates and what each department has filled;
+// someone in Operations can still pick a different one, which then stays.
+const STATUS_CHOICES = ['In Progress', 'Incomplete', 'Completed', 'On Hold']
+const AUTO = '__auto'
+// The same rule the server uses (utils/jlrStatus.js), so the form can show the
+// status the entry will get while it is still being filled in.
+const REQUIRED_KEYS = ['tra', 'equipCL', 'vLog', 'tbt', 'rept', 'accounts', 'it', 'stockRequisition', 'goodsIssueNote', 'consumption', 'gatePass']
+const todayYmd = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+const autoStatusOf = (e) => {
+  const end = String(e.endDate || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(end) || end > todayYmd()) return 'In Progress'
+  return REQUIRED_KEYS.some(k => !String(e[k] ?? '').trim()) ? 'Incomplete' : 'Completed'
+}
 
 // ── CSV / Excel export ───────────────────────────────────────
 // Ordered [Column header, camelCase key] pairs. Headers match the backend's
@@ -1069,7 +1088,7 @@ function JobLogDescription() {
       vehicleUsed: f('vehicleUsed'), days: f('days'), calculatedDays: f('calculatedDays'),
       manPower: f('manPower'), manHours: f('manHours'), drivenKm: f('drivenKm'),
       jmps: f('jmps'), tra: f('tra'), equipCL: f('equipCL'), vLog: f('vLog'), tbt: f('tbt'),
-      status: f('status'), completionDate: f('completionDate'), rept: f('rept'),
+      status: f('statusManual'), completionDate: f('completionDate'), rept: f('rept'),
       exp: f('exp'), accounts: f('accounts'), it: f('it'),
       submissionDate: f('submissionDate'), source: f('source'), remark: f('remark'), remarks: f('remarks'),
       remarkOperations: f('remarkOperations'), remarkQhse: f('remarkQhse'),
@@ -1120,10 +1139,6 @@ function JobLogDescription() {
     // from saving their own section.
     if (canEdit('operations') && !String(modalState.workOrder || '').trim()) {
       showToast('Please enter at least one Work Order number.', 'error')
-      return
-    }
-    if (canEdit('operations') && !String(modalState.status || '').trim()) {
-      showToast('Please select a Status before saving.', 'error')
       return
     }
     const rd = calculateDays(modalState.startDate, modalState.endDate)
@@ -1818,12 +1833,15 @@ function JobLogDescription() {
                       .map(c => `${c.oldValue} → ${c.newValue} (${c.startDate} – ${c.endDate})\n${c.reason || ''}`.trim())
                       .join('\n\n')
                     const isExpanded = expandedRows.has(entry.id)
+                    // In progress rows glow amber and incomplete ones red, as expiring and
+                    // expired certificates do in Testing & Certification.
+                    const rowTone = ROW_TONES[String(entry.status || '').toLowerCase()]
                     const woTags = String(entry.workOrder || '').split(',').map(t => t.trim()).filter(Boolean)
                     const woOpen = woTags.length > 1 && expandedWo.has(entry.id)
                     // One full table row per work order: the entry's own row carries the first,
                     // and opening the dropdown shows the same row again for each of the others.
                     const renderRow = (rowKey, wo, main) => (
-                      <tr key={rowKey} style={main ? undefined : { background: '#fafcff' }}>
+                      <tr key={rowKey} style={rowTone ? { backgroundColor: rowTone.tint, boxShadow: `inset 4px 0 0 ${rowTone.edge}` } : (main ? undefined : { background: '#fafcff' })}>
                         <td style={{ textAlign: 'center' }}>
                           {main && changes.length > 0 && (
                             <button type="button" onClick={() => toggleRowExpanded(entry.id)}
@@ -2188,18 +2206,20 @@ function JobLogDescription() {
               </div>
 
               <div className="form-row">
-                <label><span>Status *</span>
+                <label><span>Status</span>
                   <StyledSelect
-                    value={modalState.status}
+                    // Filled in by itself from the job's dates and the departments'
+                    // entries, and follows them as they are filled; picking another
+                    // status here is kept instead, until it is set back to Automatic.
+                    value={modalState.status || AUTO}
                     disabled={!canEdit('operations')}
-                    // An entry still holding the retired "Pending" stays selectable,
-                    // so editing it never silently clears its status.
-                    options={modalState.status && !STATUS_OPTIONS.includes(modalState.status)
-                      ? [...STATUS_OPTIONS, modalState.status]
-                      : STATUS_OPTIONS}
-                    emptyOptionLabel="— Select —"
+                    options={[]}
+                    extraOptions={[
+                      { value: AUTO, label: `Automatic — ${autoStatusOf(modalState)}` },
+                      ...STATUS_CHOICES.map(s => ({ value: s, label: s })),
+                    ]}
                     style={modalSelectStyle}
-                    onChange={v => handleModalChange('status', v)}
+                    onChange={v => handleModalChange('status', v === AUTO ? '' : v)}
                   /></label>
                 <label><span>Completion Date</span>
                   <StyledDatePicker value={modalState.completionDate}
