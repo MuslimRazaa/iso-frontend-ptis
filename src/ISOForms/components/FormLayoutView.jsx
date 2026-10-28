@@ -40,6 +40,12 @@ function FormLayoutView({ fields, renderField, renderCell }) {
                 <div key={ti} style={{ flex: `${table.columns.length + 1} 1 360px`, minWidth: 0, overflowX: 'auto', border: '1px solid #d9d9e0', borderRadius: 8 }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                     <thead>
+                      {table.groups && (
+                        <tr>
+                          <th style={th}></th>
+                          {table.groups.map((g, gi) => <th key={gi} colSpan={g.span} style={{ ...th, textAlign: 'center', background: g.label ? '#e9e9ee' : th.background }}>{g.label}</th>)}
+                        </tr>
+                      )}
                       <tr>
                         <th style={th}></th>
                         {table.columns.map((c, ci) => <th key={ci} style={th}>{c}</th>)}

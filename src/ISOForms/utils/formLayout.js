@@ -69,6 +69,30 @@ const splitLabel = (label) => {
  *
  * Returns [{ type: 'row', items }, { type: 'tables', tables: [{ columns, rows: [{ name, cells }] }] }].
  */
+// The headings printed over several columns at once ("Hardware" over seven columns).
+// Taken from the first row's fields, which carry the `columnGroup` the importer found.
+// Returns { columns, groups } where `groups` is [{ label, span }] covering every
+// column (label '' where a column has no heading above it), or null when the table has
+// no such headings at all. A column's own name loses the heading it sits under
+// ("Hardware 3" → "3").
+function columnGroups(t) {
+  const first = t.rows[0].cells
+  const groupOf = first.map(f => String(f?.columnGroup || '').trim())
+  if (!groupOf.some(Boolean)) return { columns: t.columns, groups: null }
+  const columns = t.columns.map((c, i) => {
+    const g = groupOf[i]
+    const rest = g && c.toLowerCase().startsWith(g.toLowerCase()) ? c.slice(g.length).trim() : c
+    return rest || c
+  })
+  const groups = []
+  groupOf.forEach((g) => {
+    const last = groups[groups.length - 1]
+    if (last && last.label === g) last.span += 1
+    else groups.push({ label: g, span: 1 })
+  })
+  return { columns, groups }
+}
+
 function tableBlocks(rows) {
   const tables = []          // every table found, in the order it starts
   const open = []            // tables that may continue on the next row
@@ -107,7 +131,7 @@ function tableBlocks(rows) {
     const starting = real.filter(t => t.startRow === ri).sort((a, b) => a.x0 - b.x0)
     if (starting.length) {
       blocks.push({ type: 'tables', tables: starting.map(t => ({
-        columns: t.columns,
+        ...columnGroups(t),
         rows: t.rows.map(r => ({ name: r.name.replace(/^Row\s+(\d+)$/i, '$1'), cells: r.cells })),
       })) })
     }

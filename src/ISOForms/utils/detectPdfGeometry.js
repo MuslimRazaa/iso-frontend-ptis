@@ -298,7 +298,9 @@ export function detectInputRegions(rects, hlines, textItems) {
     const lowestCaption = Math.min(...inside.map(t => t.pdfY))
     const spare = lowestCaption - box.y
     const captionAtTop = inside.every(t => t.pdfY >= box.y + box.h - LINE * 2.2)
-    if (captionAtTop && spare >= LINE * 1.4) {
+    const printed = inside.map(t => t.text.trim()).join(' ')
+    const shouting = /[A-Z]{3}/.test(printed) && printed === printed.toUpperCase() && /\s/.test(printed)
+    if (captionAtTop && spare >= LINE * 1.4 && !shouting) {
       regions.push({ x: box.x, y: box.y, w: box.w, h: spare - 2, kind: 'below-caption' })
     }
   }
@@ -821,7 +823,13 @@ export function detectRegisterTables(rects, textItems) {
     if (cover < 0.7) return false
     // A shaded band behind a whole row (both tables, the gap between) is not that
     // cell: only a box of about the same size is the same cell drawn again.
-    if (area(o) > area(r) * 2.5) return false
+    if (area(o) > area(r) * 2.5 && Math.abs(o.w - r.w) > 3) return false
+    // A tall box laid over several stacked cells of its own width (a merged span, a
+    // frame) is not those cells' duplicate; one stripe inside one cell is.
+    if (area(o) > area(r) * 2.5) {
+      const under = sized.filter(k => k !== o && Math.abs(k.w - o.w) <= 6 && overlap(k, o) / area(k) >= 0.7).length
+      if (under >= 2) return false
+    }
     return area(o) > area(r) || (area(o) === area(r) && j < i)
   })).filter((o, _, all) => all.filter(r => r !== o && Math.abs(r.y - o.y) <= 2.5 && Math.abs(r.h - o.h) <= 3 && overlap(r, o) / area(r) >= 0.7).length < 3)
   // (a band laid over a whole row of cells -- shading behind it -- is not a cell itself)
@@ -862,10 +870,24 @@ export function detectRegisterTables(rects, textItems) {
   const tickBoxes = [...nested].flatMap(b => b.cells)
   for (let i = bands.length - 1; i >= 0; i--) if (nested.has(bands[i])) bands.splice(i, 1)
 
+  // A lone box stretched across several rows of a real table (a stray shape drawn over
+  // the grid) is not a row, and sitting between two of them it would split the table.
+  for (let i = bands.length - 1; i >= 0; i--) {
+    const b = bands[i]
+    if (b.cells.length !== 1) continue
+    const top = b.y + b.h
+    const rowsUnder = bands.filter(o => o !== b && o.cells.length >= 4 && o.y >= b.y - 1 && o.y + o.h <= top + 1 &&
+      b.cells[0].x < o.cells[o.cells.length - 1].x + o.cells[o.cells.length - 1].w && b.cells[0].x + b.cells[0].w > o.cells[0].x)
+    if (rowsUnder.length >= 2) bands.splice(i, 1)
+  }
+
   const emptyBand = (band) => {
     const empty = band.cells.filter(c => !textInside(c, textItems).length)
     // A row may carry printed text in a column or two (a description beside its
     // number); what makes it a data row is a block of empty cells to fill.
+    // Two columns will do when every cell is empty (a time | event log): the heading
+    // row above it is what makes it a table.
+    if (band.cells.length >= 2 && empty.length === band.cells.length) return true
     return band.cells.length >= 4 && empty.length >= 2 && empty.length >= band.cells.length * 0.5
   }
 
@@ -974,6 +996,7 @@ export function detectRegisterTables(rects, textItems) {
     const spans = (cell) => cols.map((k, i) => ({ k, i }))
       .filter(({ k }) => k.x + k.w / 2 >= cell.x && k.x + k.w / 2 <= cell.x + cell.w).map(({ i }) => i)
     const own = cols.map(() => []), group = cols.map(() => [])
+    const groupWidth = cols.map(() => [])
     // A column whose header is split into short side-by-side cells directly above
     // the data ("Yes | No" over one wide entry cell) is a choice: each sub-heading
     // is an option, and a tick goes under the one that is picked.
@@ -995,9 +1018,28 @@ export function detectRegisterTables(rects, textItems) {
     for (const t of headerText.sort((a, b) => b.pdfY - a.pdfY || a.x - b.x)) {
       const cell = cellContaining(t, headerCells)
       if (!cell || choiceCells.has(cell)) continue
-      const cover = spans(cell)
+      let cover = spans(cell)
       if (!cover.length) continue
+      // A heading over several columns is centred over them. Text that sits to one side
+      // inside such a cell (the frame drawn round a block of sub-headings) names the
+      // single column under it instead.
+      if (cover.length > 1) {
+        const mid = t.x + (t.width || 0) / 2
+        if (Math.abs(mid - (cell.x + cell.w / 2)) > cell.w * 0.2) {
+          const under = cols.map((k, i) => ({ i, k })).filter(({ k }) => mid >= k.x && mid <= k.x + k.w)
+          if (under.length === 1) cover = [under[0].i]
+        }
+      }
       for (const i of cover) (cover.length > 1 ? group : own)[i].push(t.text.trim())
+      if (cover.length > 1) for (const i of cover) groupWidth[i].push({ w: cell.w, text: t.text.trim() })
+    }
+    // A wide grey bar drawn behind several smaller heading cells ("Hardware" over 7
+    // columns, "Applications" over 2, both on one bar) reaches the columns of its
+    // neighbour too. Each column takes the heading of the narrowest cell over it.
+    for (let i = 0; i < cols.length; i++) {
+      if (!groupWidth[i].length) continue
+      const narrowest = Math.min(...groupWidth[i].map(e => e.w))
+      group[i] = groupWidth[i].filter(e => e.w <= narrowest + 1).map(e => e.text)
     }
     const clean = (parts) => parts.join(' ').replace(/\s+/g, ' ').replace(/\/\s+/g, '/').trim()
     const columns = cols.map((k, i) => {

@@ -17,6 +17,14 @@ export const formatDateTimeValue = (value) => {
   return formatSignatureDate(v)
 }
 
+/** A "Time" value ("HH:mm", 24-hour) the way it is read: "2:05 PM". */
+export const formatTimeValue = (value) => {
+  const m = /^(\d{1,2}):(\d{2})/.exec(String(value || '').trim())
+  if (!m) return String(value || '').trim()
+  const h = Number(m[1])
+  return `${h % 12 || 12}:${m[2]} ${h >= 12 ? 'PM' : 'AM'}`
+}
+
 /** Right now as a "Date & Time" value ("YYYY-MM-DDTHH:mm", local time). */
 export const nowDateTimeValue = () => {
   const d = new Date()

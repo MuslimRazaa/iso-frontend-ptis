@@ -10,6 +10,7 @@ export const FIELD_TYPES = [
   { value: 'number',         label: 'Number' },
   { value: 'date',           label: 'Date' },
   { value: 'datetime',       label: 'Date & Time' },
+  { value: 'time',           label: 'Time' },
   { value: 'dropdown',       label: 'Dropdown (single choice)' },
   { value: 'checkbox-group', label: 'Checkbox Group (multi-select)' },
   // Same look as the group above, but ticking one option clears the others.

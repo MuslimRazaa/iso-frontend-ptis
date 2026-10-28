@@ -1,7 +1,7 @@
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
 import { normalizePdfCoords, optionMarkBox, DEFAULT_FONT_SIZE } from '../utils/pdfCoords'
 import { signatureText } from '../utils/signature'
-import { hasContent, formatDateTimeValue } from '../utils/fieldHelpers'
+import { hasContent, formatDateTimeValue, formatTimeValue } from '../utils/fieldHelpers'
 import { base64ToBytes } from '../utils/base64'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -56,6 +56,7 @@ const displayValue = (field, value) => {
     return value.join(', ')
   }
   if (field.type === 'datetime') return formatDateTimeValue(value)
+  if (field.type === 'time') return formatTimeValue(value)
   if (field.type === 'date') {
     if (!value) return ''
     try {
