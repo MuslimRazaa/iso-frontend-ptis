@@ -2322,7 +2322,28 @@ const TestingModule = () => {
           const workbook = XLSX.read(data, { type: 'array' });
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+          // Headings as an Excel sheet writes them ("Employee ID", "Pass Criteria", "Score"
+          // …) are read as the template's ("ID", "PASSING_CRITERIA", "PERCENTAGE" …).
+          const HEADINGS = {
+            id: 'ID', employeeid: 'ID', empid: 'ID',
+            name: 'NAME', employeename: 'NAME',
+            standard: 'STANDARD',
+            date: 'DATE',
+            total: 'TOTAL_QUESTION', totalquestion: 'TOTAL_QUESTION', totalquestions: 'TOTAL_QUESTION',
+            correct: 'CORRECT_ANSWER', correctanswer: 'CORRECT_ANSWER', correctanswers: 'CORRECT_ANSWER',
+            wrong: 'WRONG_ANSWER', wronganswer: 'WRONG_ANSWER', wronganswers: 'WRONG_ANSWER',
+            score: 'PERCENTAGE', percentage: 'PERCENTAGE',
+            passcriteria: 'PASSING_CRITERIA', passingcriteria: 'PASSING_CRITERIA',
+            status: 'STATUS', certificationtype: 'CERTIFICATION_TYPE',
+          };
+          const jsonData = XLSX.utils.sheet_to_json(worksheet).map(row => {
+            const out = {};
+            for (const [key, value] of Object.entries(row)) {
+              const canon = HEADINGS[String(key).toLowerCase().replace(/[^a-z]/g, '')];
+              if (canon && !(canon in out)) out[canon] = value;     // "S.No." and the like are dropped
+            }
+            return out;
+          });
 
           if (jsonData.length === 0) {
             showSiteToast('That file has no rows.', 'error');
@@ -2334,7 +2355,8 @@ const TestingModule = () => {
           const columns = Object.keys(jsonData[0]);
           const missingColumns = requiredColumns.filter(col => !columns.includes(col));
           if (missingColumns.length > 0) {
-            showSiteToast(`Missing columns: ${missingColumns.join(', ')}. Required: ID, NAME, STANDARD, DATE (plus optional TOTAL_QUESTION, CORRECT_ANSWER, WRONG_ANSWER, PERCENTAGE, PASSING_CRITERIA, STATUS).`, 'error');
+            const shown = { ID: 'Employee ID', NAME: 'Name', STANDARD: 'Standard', DATE: 'Date' };
+            showSiteToast(`Missing columns: ${missingColumns.map(c => shown[c] || c).join(', ')}. The sheet needs: Employee ID, Name, Standard, Total, Correct, Wrong, Score, Pass Criteria, Status, Date (Total to Status are optional).`, 'error');
             if (importFileInputRef.current) importFileInputRef.current.value = '';
             return;
           }
@@ -2395,8 +2417,9 @@ const TestingModule = () => {
       const XLSX = await import('xlsx');
       const sampleData = [
         {
-          ID: '1739', NAME: 'Jane Doe', STANDARD: 'API RP 7G-2', DATE: '01-06-2024 10:00:00 AM',
-          TOTAL_QUESTION: 50, CORRECT_ANSWER: 42, WRONG_ANSWER: 8, PERCENTAGE: '84%', PASSING_CRITERIA: '75%', STATUS: 'Pass',
+          'Employee ID': '1739', Name: 'Jane Doe', Standard: 'API RP 7G-2',
+          Total: 50, Correct: 42, Wrong: 8, Score: '84%', 'Pass Criteria': '75%', Status: 'Pass',
+          Date: '01-06-2024 10:00:00 AM',
         },
       ];
       const worksheet = XLSX.utils.json_to_sheet(sampleData);
@@ -6106,8 +6129,10 @@ const TestingModule = () => {
                         <>
                           <p style={{ color: colors.textMuted, fontSize: 14, marginTop: 0 }}>
                             {importParsedRows?.length || 0} row(s) found in the file. Each row needs at least
-                            {' '}<strong>ID, NAME, STANDARD, DATE</strong> — everything else (score, status, pass
-                            criteria) is optional and defaults sensibly if left out.
+                            {' '}<strong>Employee ID, Name, Standard, Date</strong> — the rest (Total, Correct,
+                            Wrong, Score, Pass Criteria, Status) is optional and defaults sensibly if left out.
+                            Columns, in order: Employee ID · Name · Standard · Total · Correct · Wrong · Score ·
+                            Pass Criteria · Status · Date.
                           </p>
                           <button
                             type="button"

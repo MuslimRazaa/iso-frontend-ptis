@@ -451,7 +451,9 @@ function TemplateBuilder() {
               />
             )}
 
-            {(field.type === 'employee' || field.type === 'employee-multi') && (
+            {/* Only for a field an approver fills in. A requester's picker starts as whoever
+                is logged in, so there is nothing to limit. */}
+            {(field.type === 'employee' || field.type === 'employee-multi') && (field.owner || 'requester') !== 'requester' && (
               // Limits who this field's picker offers (e.g. an "Approved by" field).
               // Nothing picked = every employee. Departments and named people add up.
               <div style={{ background: '#f7f7fa', border: '1px solid #ececf0', borderRadius: 10, padding: '12px 14px', display: 'grid', gap: 10 }}>

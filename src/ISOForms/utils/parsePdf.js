@@ -43,6 +43,7 @@ const guessType = (label) => {
   if (isTimeLabel(l)) return 'time'
   if (/\bdate\b|tarikh/.test(l)) return 'date'
   // A client's, customer's or company's name is typed, not picked from staff.
+  if (/\bdesignation\b/.test(l)) return 'designation'
   if (/\b(client|customer|company|vendor|supplier|contractor|party|candidate|applicant)\b/.test(l)) return 'text'
   if (/\b(name|personnel|by|inspector|assigned|responsible|verified|reported|concerned)\b/.test(l)) return 'employee'
   if (/department|dept\b/.test(l)) return 'text'

@@ -42,7 +42,7 @@ const UserHeader = () => {
   const handleSearch = async (query) => {
     if (!myEmployeeId) return [];
     const q = query.toLowerCase();
-    const [mine, pending, tasks, jobLog, allCourses] = await Promise.all([
+    const [mine, pending, templatesJson, tasks, jobLog, allCourses] = await Promise.all([
       canSeeIsoForms
         ? fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}?employeeId=${myEmployeeId}&email=${encodeURIComponent(userEmail)}`)
             .then(r => r.ok ? r.json() : { data: [] }).catch(() => ({ data: [] }))
@@ -51,6 +51,9 @@ const UserHeader = () => {
         ? fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}?relatedEmployeeId=${myEmployeeId}`)
             .then(r => r.ok ? r.json() : { data: [] }).catch(() => ({ data: [] }))
         : { data: [] },
+      canSeeIsoForms
+        ? fetch(API_ENDPOINTS.ISO_FORMS_TEMPLATES).then(r => r.ok ? r.json() : []).catch(() => [])
+        : [],
       fetch(`${API_ENDPOINTS.TASK_ALLOCATIONS}/employee/${myEmployeeId}`)
         .then(r => r.ok ? r.json() : []).catch(() => []),
       canSeeJobLog
@@ -65,7 +68,8 @@ const UserHeader = () => {
       .filter(e => {
         if (seenEntry.has(e.id)) return false;
         seenEntry.add(e.id);
-        return (e.template_name || '').toLowerCase().includes(q);
+        return [e.template_name, e.created_by_name, e.related_employee_name, e.status]
+          .filter(Boolean).join(' ').toLowerCase().includes(q);
       })
       .map(e => ({
         type: 'Form',
@@ -74,6 +78,20 @@ const UserHeader = () => {
         title: e.template_name || 'Untitled Form',
         subtitle: `Status: ${e.status || 'pending'}`,
         path: `/user/iso-forms/entries/${e.id}`,
+      }));
+
+    // The forms themselves (templates), found by name, form code or description and
+    // opened to fill in.
+    const templateRows = Array.isArray(templatesJson?.data) ? templatesJson.data : (Array.isArray(templatesJson) ? templatesJson : []);
+    const templateResults = templateRows
+      .filter(t => [t.name, t.formCode, t.description].filter(Boolean).join(' ').toLowerCase().includes(q))
+      .map(t => ({
+        type: 'Form Template',
+        icon: '📝',
+        id: `template-${t.id}`,
+        title: t.name || 'Untitled Form',
+        subtitle: t.formCode ? `${t.formCode} · Fill a new form` : 'Fill a new form',
+        path: `/user/iso-forms/new/${t.id}`,
       }));
 
     const taskList = Array.isArray(tasks) ? tasks : [];
@@ -117,7 +135,7 @@ const UserHeader = () => {
         path: `/user/job-log/entries?q=${encodeURIComponent(query)}`,
       }));
 
-    return [...formResults, ...courseResults, ...availableCourseResults, ...jobLogResults];
+    return [...templateResults, ...formResults, ...courseResults, ...availableCourseResults, ...jobLogResults];
   };
 
   return (

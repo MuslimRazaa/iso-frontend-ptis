@@ -11,6 +11,7 @@ import { getOfflineEntry, updateOfflineEntry, deleteOfflineEntry, getOfflineTemp
 import { downloadFilledPdf, fillOriginalPdf } from '../pdf/fillOriginalPdf'
 import { X } from 'lucide-react'
 import { SEED_EMPLOYEES } from '../seedTemplates'
+import { viewAttachment, downloadAttachment } from '../utils/attachments'
 
 const STATUS_COLORS = {
   pending:  { bg: '#fff7e6', color: '#b54708' },
@@ -605,50 +606,12 @@ function FormDetail() {
                   }}
                 >
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📎 {name}</span>
-                  {/* View opens it in a new tab (works for PDFs/images the browser
-                      can render inline); Download always saves the file locally —
-                      a plain <a> without the download attribute won't force a save
-                      for a cross-origin file (the API is a different host from the
-                      frontend on the live site), so this fetches it as a blob and
-                      triggers the save itself instead, the same pattern already
-                      used for practical-result attachments elsewhere in the app. */}
-                  <a
-                    href={href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      flexShrink: 0, textDecoration: 'none', fontSize: 13, fontWeight: 600,
-                      color: '#14141c', padding: '6px 12px', borderRadius: 999, border: '1px solid #dcdce3',
-                    }}
-                  >
-                    View
-                  </a>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        const res = await fetch(href)
-                        if (!res.ok) throw new Error('Download failed')
-                        const blob = await res.blob()
-                        const blobUrl = URL.createObjectURL(blob)
-                        const link = document.createElement('a')
-                        link.href = blobUrl
-                        link.download = name
-                        document.body.appendChild(link)
-                        link.click()
-                        document.body.removeChild(link)
-                        URL.revokeObjectURL(blobUrl)
-                      } catch {
-                        showToast('Could not download the attachment.', 'error')
-                      }
-                    }}
-                    style={{
-                      flexShrink: 0, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                      color: '#fff', padding: '6px 12px', borderRadius: 999, border: 'none', background: '#d7263d',
-                    }}
-                  >
-                    Download
-                  </button>
+                  {/* View shows it in a new tab (a PDF or an image; a file a browser cannot
+                      display is saved instead); Download always saves it. Both go through
+                      the file's own bytes, so a cross-origin file or one the server sends
+                      as a download still behaves. */}
+                  <button type="button" className="ghost-btn small" onClick={() => viewAttachment(href, name)}>View</button>
+                  <button type="button" className="primary-btn small" onClick={() => downloadAttachment(href, name)}>Download</button>
                 </div>
               ) : (
                 <div

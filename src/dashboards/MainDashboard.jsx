@@ -446,15 +446,32 @@ function MainDashboard() {
   // slice of them.
   const handleAdminSearch = async (query) => {
     const q = query.toLowerCase();
-    const [entriesJson, coursesJson, jobLogJson] = await Promise.all([
+    const [entriesJson, templatesJson, coursesJson, jobLogJson] = await Promise.all([
       fetch(API_ENDPOINTS.ISO_FORMS_ENTRIES).then(r => r.ok ? r.json() : { data: [] }).catch(() => ({ data: [] })),
+      fetch(API_ENDPOINTS.ISO_FORMS_TEMPLATES).then(r => r.ok ? r.json() : []).catch(() => []),
       fetch(API_ENDPOINTS.COURSES).then(r => r.ok ? r.json() : []).catch(() => []),
       fetch(API_ENDPOINTS.JOB_LOG).then(r => r.ok ? r.json() : { data: [] }).catch(() => ({ data: [] })),
     ]);
 
     const entries = Array.isArray(entriesJson?.data) ? entriesJson.data : (Array.isArray(entriesJson) ? entriesJson : []);
+    // The forms themselves (templates): found by name, form code or description, and
+    // opened to fill in.
+    const templateRows = Array.isArray(templatesJson?.data) ? templatesJson.data : (Array.isArray(templatesJson) ? templatesJson : []);
+    const templateResults = templateRows
+      .filter(t => [t.name, t.formCode, t.description].filter(Boolean).join(' ').toLowerCase().includes(q))
+      .map(t => ({
+        type: 'Form Template',
+        icon: '📝',
+        id: `template-${t.id}`,
+        title: t.name || 'Untitled Form',
+        subtitle: t.formCode ? `${t.formCode} · Fill a new form` : 'Fill a new form',
+        path: `/iso-forms/new/${t.id}`,
+      }));
+
+    // Submitted forms: by form name, who made it, who it is with, or its status.
     const formResults = entries
-      .filter(e => (e.template_name || '').toLowerCase().includes(q))
+      .filter(e => [e.template_name, e.created_by_name, e.related_employee_name, e.status]
+        .filter(Boolean).join(' ').toLowerCase().includes(q))
       .map(e => ({
         type: 'Form',
         icon: '📄',
@@ -488,7 +505,7 @@ function MainDashboard() {
         path: `/job-log/entries?q=${encodeURIComponent(query)}`,
       }));
 
-    return [...formResults, ...courseResults, ...jobLogResults];
+    return [...templateResults, ...formResults, ...courseResults, ...jobLogResults];
   };
 
   const handleSystemMapToggle = () => setShowSystemMap((prev) => !prev);

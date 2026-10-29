@@ -113,6 +113,10 @@ function DynamicField({ field, value, onChange, readOnly, employees = [], signer
           style={{ ...inputStyle, cursor: 'pointer' }}
         />
       )
+    case 'designation':
+      // Follows the person picked in the form's Employee Picker; typed over only when
+      // that person has no designation on record.
+      return <input type="text" value={value ?? ''} onChange={(e) => onChange(e.target.value)} placeholder="Filled from the employee" style={inputStyle} />
     case 'time':
       // A clock time on its own, stored as "HH:mm" (24-hour).
       return <StyledTimePicker value={String(value || '').slice(0, 5)} onChange={onChange} style={{ ...inputStyle, cursor: 'pointer' }} />
