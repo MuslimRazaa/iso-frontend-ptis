@@ -17,6 +17,9 @@ export const FIELD_TYPES = [
   { value: 'radio',          label: 'Checkbox (select one only)' },
   { value: 'employee',       label: 'Employee Picker (from Employee Management)' },
   // Same list, but any number of people can be picked; stored as a list of ids.
+  // Filled in by itself with the designation of the person picked in the form's Employee
+  // Picker (or of whoever is logged in, when the form has none).
+  { value: 'designation',    label: 'Designation (filled from the Employee Picker)' },
   { value: 'employee-multi', label: 'Employee Picker (multiple employees)' },
   // Placed where the form asks for a signature. Nobody types it: the app stamps
   // the name of whoever completed that part of the form and the time they did,

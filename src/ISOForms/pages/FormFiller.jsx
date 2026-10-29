@@ -11,6 +11,7 @@ import { ensureSeeded, getOfflineTemplates, getOfflineTemplate, addOfflineEntry 
 import { getCurrentEmployeeId } from '../utils/currentEmployee'
 import { resolveSignerName, stampSignature } from '../utils/signature'
 import { fileToDataUrl } from '../utils/fileToDataUrl'
+import { viewAttachment, downloadAttachment } from '../utils/attachments'
 import EmployeeMultiPicker from '../components/EmployeeMultiPicker'
 import { showToast } from '../../components/Toast'
 import { getActorId, getActorName } from '../../utils/actorIdentity'
@@ -125,7 +126,9 @@ function FormFiller() {
       const fields = Array.isArray(parsedFields) ? parsedFields.map(f => ({ owner: 'requester', ...f })) : []
       // Only the requester fills fields at submission time — approver fields
       // (e.g. Impact Analysis, Closing Details) are filled in at decision time.
-      const requesterFields = fields.filter(f => (f.owner || 'requester') === 'requester')
+      // A field listed twice under one id (a template that was duplicated) is one input.
+      const seenIds = new Set()
+      const requesterFields = fields.filter(f => (f.owner || 'requester') === 'requester' && !seenIds.has(f.id) && seenIds.add(f.id))
       setTemplate({ ...json, fields: requesterFields })
       setOffline(isOffline)
       // A new form opens with "Date & Time" fields already set to now. It is only a
@@ -185,7 +188,47 @@ function FormFiller() {
   useEffect(() => { getCurrentEmployeeId().then(setMyEmployeeId) }, [])
   const signerName = resolveSignerName({ employees, employeeId: myEmployeeId })
 
-  const setFieldValue = (fieldId, val) => setValues(prev => ({ ...prev, [fieldId]: val }))
+  // Designations by employee id, for the Designation field.
+  const [designations, setDesignations] = useState({})
+  useEffect(() => {
+    fetch(`${API_ENDPOINTS.EMPLOYEES}/designations`)
+      .then(res => (res.ok ? res.json() : Promise.reject()))
+      .then(json => { if (json && typeof json === 'object') setDesignations(json) })
+      .catch(() => {})
+  }, [])
+
+  // What a requester's own fields start as: an Employee Picker holds whoever is logged
+  // in, and a Designation field holds the designation of whoever that picker has.
+  // Only a new form, and only until the person changes them.
+  useEffect(() => {
+    if (isEdit || !template || !myEmployeeId) return
+    setValues(prev => {
+      let next = prev
+      const own = (template.fields || []).filter(f => (f.owner || 'requester') === 'requester')
+      const picker = own.find(f => f.type === 'employee')
+      for (const f of own) {
+        if (f.type === 'employee' && !next[f.id]) next = { ...next, [f.id]: String(myEmployeeId) }
+      }
+      for (const f of own) {
+        if (f.type !== 'designation') continue
+        const who = picker ? next[picker.id] : myEmployeeId
+        const d = designations[who] || ''
+        if (d && next[f.id] !== d) next = { ...next, [f.id]: d }
+      }
+      return next
+    })
+  }, [template, myEmployeeId, designations, isEdit])
+
+  const setFieldValue = (fieldId, val) => setValues(prev => {
+    const next = { ...prev, [fieldId]: val }
+    const changed = (template?.fields || []).find(f => f.id === fieldId)
+    const own = (template?.fields || []).filter(f => (f.owner || 'requester') === 'requester')
+    if (changed && changed.type === 'employee' && own.find(f => f.type === 'employee')?.id === fieldId) {
+      const d = designations[val] || ''
+      for (const f of own) if (f.type === 'designation') next[f.id] = d
+    }
+    return next
+  })
 
   const addAttachment = () => setAttachments(prev => [...prev, null])
   const updateAttachment = (index, file) =>
@@ -524,37 +567,8 @@ function FormFiller() {
                   </span>
                   {href && (
                     <>
-                      <a
-                        href={href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ flexShrink: 0, textDecoration: 'none', fontSize: 13, fontWeight: 600, color: '#14141c', padding: '6px 12px', borderRadius: 999, border: '1px solid #dcdce3' }}
-                      >
-                        View
-                      </a>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            const res = await fetch(href)
-                            if (!res.ok) throw new Error('Download failed')
-                            const blob = await res.blob()
-                            const blobUrl = URL.createObjectURL(blob)
-                            const link = document.createElement('a')
-                            link.href = blobUrl
-                            link.download = name
-                            document.body.appendChild(link)
-                            link.click()
-                            document.body.removeChild(link)
-                            URL.revokeObjectURL(blobUrl)
-                          } catch {
-                            showToast('Could not download the attachment.', 'error')
-                          }
-                        }}
-                        style={{ flexShrink: 0, fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#fff', padding: '6px 12px', borderRadius: 999, border: 'none', background: '#d7263d' }}
-                      >
-                        Download
-                      </button>
+                      <button type="button" className="ghost-btn small" onClick={() => viewAttachment(href, name)}>View</button>
+                      <button type="button" className="primary-btn small" onClick={() => downloadAttachment(href, name)}>Download</button>
                     </>
                   )}
                   <button

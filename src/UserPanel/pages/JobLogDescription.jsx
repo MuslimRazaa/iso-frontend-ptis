@@ -426,7 +426,7 @@ const COL_GROUPS = [
   { label: 'Safety Documentation', span: 4, color: '#fdf5ff', textColor: '#7c3aed', borderColor: '#ddb8f7' },
   { label: 'Status & Tracking', span: 8, color: '#fff5f6', textColor: '#d7263d', borderColor: '#ffd1d8' },
   { label: 'Inventory', span: 4, color: '#fff9e6', textColor: '#a87800', borderColor: '#f4dd9d' },
-  { label: 'Remarks', span: 2, color: '#f7f7f9', textColor: '#595966', borderColor: '#e0e0e6' },
+  { label: 'Remarks', span: 1, color: '#f7f7f9', textColor: '#595966', borderColor: '#e0e0e6' },
   { label: 'Actions', span: 1, color: '#f7f7f9', textColor: '#595966', borderColor: '#e0e0e6' },
 ]
 

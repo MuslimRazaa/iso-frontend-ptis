@@ -328,15 +328,18 @@ function FormEntriesList() {
           />
         )}
 
-        {/* Created By */}
-        <SearchableSelect
-          style={{ ...inputStyle, minWidth: 150, cursor: 'text' }}
-          value={createdByFilter}
-          onChange={onCreatedByFilterChange}
-          options={createdByOptions}
-          emptyOptionLabel="All Created By"
-          placeholder="Type to search…"
-        />
+        {/* Created By — only where forms of several people are listed: an admin's register,
+            or the Pending Approvals queue. An employee's own All Forms are all theirs. */}
+        {(isAdmin || pendingMine) && (
+          <SearchableSelect
+            style={{ ...inputStyle, minWidth: 150, cursor: 'text' }}
+            value={createdByFilter}
+            onChange={onCreatedByFilterChange}
+            options={createdByOptions}
+            emptyOptionLabel="All Created By"
+            placeholder="Type to search…"
+          />
+        )}
 
         {/* Related To */}
         {(!pendingMine || isAdmin) && (
