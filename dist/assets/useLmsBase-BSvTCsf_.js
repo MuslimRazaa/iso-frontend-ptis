@@ -1,1 +1,0 @@
-import{b as s}from"./index-BXD9-vu0.js";function r(){const{pathname:e}=s();return e.startsWith("/employees")?"/employees":e.startsWith("/user")?"/user/learning-management-system":"/learning-management-system"}export{r as u};
