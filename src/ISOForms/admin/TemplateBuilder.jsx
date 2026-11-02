@@ -399,7 +399,7 @@ function TemplateBuilder() {
               }}
               options={employees
                 .filter(e => e.department === role.autoDepartment)
-                .map(e => ({ value: String(e.id), label: e.full_name || e.name }))}
+                .map(e => ({ value: String(e.id), label: e.full_name || e.name, sub: e.employee_id }))}
               emptyOptionLabel="No default person"
               emptyOptionValue=""
               placeholder={role.autoDepartment ? 'Type to search employee…' : 'Pick a department first'}

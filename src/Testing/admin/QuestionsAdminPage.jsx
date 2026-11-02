@@ -9,6 +9,8 @@ import StyledSelect from '../../components/StyledSelect';
 import SearchableSelect from '../../components/SearchableSelect';
 import StyledDatePicker from '../../components/StyledDatePicker';
 import { getActorId, getActorName } from '../../utils/actorIdentity';
+import { ModalFrame, ModalSection, ModalField, ModalButtons, modalFieldStyle } from '../../components/FormModalKit';
+import { BsQuestionCircle, BsPencilSquare, BsListOl, BsCheck2Circle } from 'react-icons/bs';
 import '../PTIS_App.css';
 
 const QuestionsAdminPage = ({ onBack, showToast }) => {
@@ -58,7 +60,6 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
 
   const isMobile = viewportWidth <= 768;
   const isTablet = viewportWidth <= 1024;
-  const twoColumnGrid = isMobile ? '1fr' : '1fr 1fr';
 
   useEffect(() => {
     const handleResize = () => setViewportWidth(window.innerWidth);
@@ -1073,62 +1074,23 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
                     {question.Answer}
                   </td>
                   <td style={{ padding: '12px', textAlign: 'center', border: `1px solid ${colors.border}` }}>
+<div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
                     <button
+                      className="ghost-btn small"
                       onClick={() => handleEdit(question)}
-                      style={{
-                        padding: '8px',
-                        backgroundColor: '#1a1a2e',
-                        color: 'white',
-                        border: '2px solid #1a1a2e',
-                        borderRadius: '28px',
-                        cursor: 'pointer',
-                        marginRight: '8px',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        transition: 'all 0.2s ease'
-                      }}
                       title="Edit Question"
-                      onMouseOver={e => {
-                        e.currentTarget.style.backgroundColor = '#e1e2e2ff';
-                        e.currentTarget.style.color = '#1a1a2e';
-                      }}
-                      onMouseOut={e => {
-                        e.currentTarget.style.backgroundColor = '#1a1a2e';
-                        e.currentTarget.style.color = 'white';
-                      }}
                     >
-                      <Edit2 size={16} />
+                      <Edit2 size={15} />
                     </button>
                     <button
+                      className="ghost-btn small"
                       onClick={() => handleDelete(question.NO)}
-                      style={{
-                        padding: '8px',
-                        background: 'linear-gradient(120deg, #b91c3c, #d7263d)',
-                        color: 'white',
-                        border: '2px solid transparent',
-                        borderRadius: '28px',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        transition: 'all 0.2s ease'
-                      }}
                       title="Delete Question"
-                      onMouseOver={e => {
-                        e.currentTarget.style.background = '#e1e2e2ff';
-                        e.currentTarget.style.border = '2px solid #c0392b';
-                        e.currentTarget.style.color = '#c0392b';
-                      }}
-                      onMouseOut={e => {
-                        e.currentTarget.style.background = 'linear-gradient(120deg, #b91c3c, #d7263d)';
-                        e.currentTarget.style.border = '2px solid transparent';
-                        e.currentTarget.style.color = 'white';
-                      }}
                     >
-                      <Trash2 size={16} />
+                      <Trash2 size={15} />
                     </button>
-                  </td>
+                  </div>
+</td>
                 </tr>
               ))}
               {filteredQuestions.length === 0 && (
@@ -1151,340 +1113,56 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
         </div>
       </article>
 
-      {/* Modal for Add/Edit */}
+      {/* Add / Edit Question */}
       {showModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: colors.modalOverlay,
-          backdropFilter: 'blur(4px)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 1000,
-          padding: '20px',
-          marginLeft: 0
-        }}>
-          <div style={{
-            backgroundColor: colors.modalBg,
-            padding: isMobile ? '22px 16px' : '35px',
-            borderRadius: '28px',
-            width: '100%',
-            maxWidth: isMobile ? '100%' : '700px',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
-            animation: 'fadeIn 0.2s ease'
-          }}>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '25px',
-              borderBottom: '3px solid #d7263d',
-              paddingBottom: '15px'
-            }}>
-              <h3 style={{
-                margin: 0,
-                color: colors.text,
-                fontSize: '1.6em',
-                fontWeight: '600'
-              }}>
-                {editMode ? 'Edit Question' : 'Add New Question'}
-              </h3>
-              <button
-                type="button"
-                className="close-modal-btn"
-                onClick={() => setShowModal(false)}
-                style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}
-              >
-                <X size={18} />
-              </button>
-            </div>
+        <ModalFrame
+          Icon={editMode ? BsPencilSquare : BsQuestionCircle}
+          title={editMode ? 'Edit Question' : 'Add New Question'}
+          subtitle={editMode ? 'Update the question information.' : 'Fill in the question and its options below.'}
+          onClose={() => setShowModal(false)}
+          onSubmit={handleSubmit}
+          dark={isDarkMode}
+          actions={<ModalButtons onCancel={() => setShowModal(false)} label={editMode ? 'Update Question' : 'Create Question'} />}
+        >
+          <ModalSection Icon={BsQuestionCircle} title="Question" hint="Standard & text" />
+          <ModalField label="Standard">
+            <StyledSelect
+              value={formData.Standard_List}
+              onChange={(v) => handleChange({ target: { name: 'Standard_List', value: v } })}
+              options={standards.map(std => std.Standard_List)}
+              style={{ ...modalFieldStyle, cursor: 'pointer' }}
+            />
+          </ModalField>
+          <ModalField label="Question Text" required>
+            <textarea name="Question" value={formData.Question} onChange={handleChange} required rows={3} style={{ resize: 'vertical' }} />
+          </ModalField>
 
-            <form onSubmit={handleSubmit}>
-              <div style={{ marginBottom: '22px' }}>
-                <label style={{ 
-                  display: 'block', 
-                  marginBottom: '8px', 
-                  fontWeight: '600',
-                  color: colors.text,
-                  fontSize: '0.95em'
-                }}>
-                  Standard:
-                </label>
-                <StyledSelect
-                  value={formData.Standard_List}
-                  onChange={(v) => handleChange({ target: { name: 'Standard_List', value: v } })}
-                  options={standards.map(std => std.Standard_List)}
-                  style={{
-                    width: '100%',
-                    padding: '12px 15px',
-                    border: `2px solid ${colors.inputBorder}`,
-                    borderRadius: '4px',
-                    fontSize: '15px',
-                    backgroundColor: colors.inputBg,
-                    color: colors.text,
-                    transition: 'border-color 0.2s ease',
-                    outline: 'none',
-                    cursor: 'pointer',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: '22px' }}>
-                <label style={{ 
-                  display: 'block', 
-                  marginBottom: '8px', 
-                  fontWeight: '600',
-                  color: colors.text,
-                  fontSize: '0.95em'
-                }}>
-                  Question Text:
-                </label>
-                <textarea
-                  name="Question"
-                  value={formData.Question}
-                  onChange={handleChange}
-                  required
-                  rows={3}
-                  style={{
-                    width: '100%',
-                    padding: '12px 15px',
-                    border: `2px solid ${colors.inputBorder}`,
-                    borderRadius: '4px',
-                    fontSize: '15px',
-                    backgroundColor: colors.inputBg,
-                    color: colors.text,
-                    fontFamily: 'inherit',
-                    transition: 'border-color 0.2s ease',
-                    outline: 'none',
-                    resize: 'vertical',
-                    boxSizing: 'border-box'
-                  }}
-                  onFocus={e => e.target.style.borderColor = colors.text}
-                  onBlur={e => e.target.style.borderColor = colors.inputBorder}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: twoColumnGrid, gap: '15px', marginBottom: '22px' }}>
-                <div>
-                  <label style={{ 
-                    display: 'block', 
-                    marginBottom: '8px', 
-                    fontWeight: '600',
-                    color: colors.text,
-                    fontSize: '0.95em'
-                  }}>
-                    Option A:
-                  </label>
-                  <input
-                    type="text"
-                    name="Opt_A"
-                    value={formData.Opt_A}
-                    onChange={handleChange}
-                    required
-                    style={{
-                      width: '100%',
-                      padding: '12px 15px',
-                      border: `2px solid ${colors.inputBorder}`,
-                      borderRadius: '4px',
-                    fontSize: '15px',
-                    backgroundColor: colors.inputBg,
-                      color: colors.text,
-                      transition: 'border-color 0.2s ease',
-                      outline: 'none',
-                      boxSizing: 'border-box'
-                    }}
-                    onFocus={e => e.target.style.borderColor = colors.text}
-                    onBlur={e => e.target.style.borderColor = colors.inputBorder}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ 
-                    display: 'block', 
-                    marginBottom: '8px', 
-                    fontWeight: '600',
-                    color: colors.text,
-                    fontSize: '0.95em'
-                  }}>
-                    Option B:
-                  </label>
-                  <input
-                    type="text"
-                    name="Opt_B"
-                    value={formData.Opt_B}
-                    onChange={handleChange}
-                    required
-                    style={{
-                      width: '100%',
-                      padding: '12px 15px',
-                      border: `2px solid ${colors.inputBorder}`,
-                      borderRadius: '4px',
-                    fontSize: '15px',
-                    backgroundColor: colors.inputBg,
-                      color: colors.text,
-                      transition: 'border-color 0.2s ease',
-                      outline: 'none',
-                      boxSizing: 'border-box'
-                    }}
-                    onFocus={e => e.target.style.borderColor = colors.text}
-                    onBlur={e => e.target.style.borderColor = colors.inputBorder}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ 
-                    display: 'block', 
-                    marginBottom: '8px', 
-                    fontWeight: '600',
-                    color: colors.text,
-                    fontSize: '0.95em'
-                  }}>
-                    Option C:
-                  </label>
-                  <input
-                    type="text"
-                    name="Opt_C"
-                    value={formData.Opt_C}
-                    onChange={handleChange}
-                    required
-                    style={{
-                      width: '100%',
-                      padding: '12px 15px',
-                      border: `2px solid ${colors.inputBorder}`,
-                      borderRadius: '4px',
-                    fontSize: '15px',
-                    backgroundColor: colors.inputBg,
-                      color: colors.text,
-                      transition: 'border-color 0.2s ease',
-                      outline: 'none',
-                      boxSizing: 'border-box'
-                    }}
-                    onFocus={e => e.target.style.borderColor = colors.text}
-                    onBlur={e => e.target.style.borderColor = colors.inputBorder}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ 
-                    display: 'block', 
-                    marginBottom: '8px', 
-                    fontWeight: '600',
-                    color: colors.text,
-                    fontSize: '0.95em'
-                  }}>
-                    Option D:
-                  </label>
-                  <input
-                    type="text"
-                    name="Opt_D"
-                    value={formData.Opt_D}
-                    onChange={handleChange}
-                    required
-                    style={{
-                      width: '100%',
-                      padding: '12px 15px',
-                      border: `2px solid ${colors.inputBorder}`,
-                      borderRadius: '4px',
-                    fontSize: '15px',
-                    backgroundColor: colors.inputBg,
-                      color: colors.text,
-                      transition: 'border-color 0.2s ease',
-                      outline: 'none',
-                      boxSizing: 'border-box'
-                    }}
-                    onFocus={e => e.target.style.borderColor = colors.text}
-                    onBlur={e => e.target.style.borderColor = colors.inputBorder}
-                  />
-                </div>
-              </div>
-
-              <div style={{ marginBottom: '22px' }}>
-                <label style={{ 
-                  display: 'block', 
-                  marginBottom: '8px', 
-                  fontWeight: '600',
-                  color: colors.text,
-                  fontSize: '0.95em'
-                }}>
-                  Correct Answer:
-                </label>
-                <StyledSelect
-                  value={formData.Answer}
-                  onChange={(v) => handleChange({ target: { name: 'Answer', value: v } })}
-                  options={['A', 'B', 'C', 'D']}
-                  style={{
-                    width: '100%',
-                    padding: '12px 15px',
-                    border: `2px solid ${colors.inputBorder}`,
-                    borderRadius: '4px',
-                    fontSize: '15px',
-                    backgroundColor: colors.inputBg,
-                    color: colors.text,
-                    transition: 'border-color 0.2s ease',
-                    outline: 'none',
-                    cursor: 'pointer',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '30px', flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  style={{
-                    padding: '12px 28px',
-                    backgroundColor: colors.inputBg,
-                    color: colors.textMuted,
-                    border: `2px solid ${colors.border}`,
-                    borderRadius: '28px',
-                    cursor: 'pointer',
-                    fontSize: '15px',
-                    fontWeight: '600',
-                    width: isMobile ? '100%' : 'auto',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseOver={e => e.currentTarget.classList.add('grad-hover-outline')}
-                  onMouseOut={e => e.currentTarget.classList.remove('grad-hover-outline')}
-                >
-                  <span className="grad-label">Cancel</span>
-                </button>
-                <button
-                  type="submit"
-                  style={{
-                    padding: '12px 30px',
-                    background: 'linear-gradient(120deg, #b91c3c, #d7263d)',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '18px',
-                    cursor: 'pointer',
-                    fontSize: '15px',
-                    fontWeight: '600',
-                    width: isMobile ? '100%' : 'auto',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(215, 38, 61, 0.4)';
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = 'none';
-                  }}
-                >
-                  {editMode ? 'Update Question' : 'Create Question'}
-                </button>
-              </div>
-            </form>
+          <ModalSection Icon={BsListOl} title="Options" hint="Four choices" />
+          <div className="form-row">
+            <ModalField label="Option A" required>
+              <input type="text" name="Opt_A" value={formData.Opt_A} onChange={handleChange} required />
+            </ModalField>
+            <ModalField label="Option B" required>
+              <input type="text" name="Opt_B" value={formData.Opt_B} onChange={handleChange} required />
+            </ModalField>
+            <ModalField label="Option C" required>
+              <input type="text" name="Opt_C" value={formData.Opt_C} onChange={handleChange} required />
+            </ModalField>
+            <ModalField label="Option D" required>
+              <input type="text" name="Opt_D" value={formData.Opt_D} onChange={handleChange} required />
+            </ModalField>
           </div>
-        </div>
+
+          <ModalSection Icon={BsCheck2Circle} title="Answer" hint="Which option is right" />
+          <ModalField label="Correct Answer">
+            <StyledSelect
+              value={formData.Answer}
+              onChange={(v) => handleChange({ target: { name: 'Answer', value: v } })}
+              options={['A', 'B', 'C', 'D']}
+              style={{ ...modalFieldStyle, cursor: 'pointer' }}
+            />
+          </ModalField>
+        </ModalFrame>
       )}
 
       {/* Excel Preview Modal */}

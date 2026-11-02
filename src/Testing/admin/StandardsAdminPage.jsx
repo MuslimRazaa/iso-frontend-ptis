@@ -5,6 +5,8 @@ import { API_BASE_URL as HOST_API_BASE_URL } from '../../config/api';
 import PaginationBar from '../../components/PaginationBar';
 import ClearFilterButton from '../../components/ClearFilterButton';
 import { getActorId, getActorName } from '../../utils/actorIdentity';
+import { ModalFrame, ModalSection, ModalField, ModalButtons, ModalFilePick, ModalChoice } from '../../components/FormModalKit';
+import { BsJournalCheck, BsPencilSquare, BsListOl, BsAward, BsPaperclip } from 'react-icons/bs';
 import '../PTIS_App.css';
 
 const StandardsAdminPage = ({ onBack, showToast, onSaved }) => {
@@ -39,8 +41,6 @@ const StandardsAdminPage = ({ onBack, showToast, onSaved }) => {
   });
 
   const isMobile = viewportWidth <= 768;
-  const isTablet = viewportWidth <= 1024;
-  const twoColumnGrid = isMobile ? '1fr' : '1fr 1fr';
   const TEMPLATE_MAX_BYTES = 25 * 1024 * 1024;
   const templateAllowedMimeTypes = new Set(['application/pdf']);
   const templateAllowedExtensions = new Set(['.pdf']);
@@ -563,62 +563,23 @@ const StandardsAdminPage = ({ onBack, showToast, onSaved }) => {
                           </span>
                         </td>
                         <td style={{ padding: '16px 20px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+<div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
                           <button
+                            className="ghost-btn small"
                             onClick={() => handleEdit(standard)}
-                            style={{
-                              padding: '8px',
-                              backgroundColor: '#1a1a2e',
-                              color: 'white',
-                              border: '2px solid #1a1a2e',
-                              borderRadius: '28px',
-                              cursor: 'pointer',
-                              marginRight: '8px',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              transition: 'all 0.2s ease'
-                            }}
                             title="Edit Standard"
-                            onMouseOver={e => {
-                              e.currentTarget.style.backgroundColor = '#e1e2e2ff';
-                              e.currentTarget.style.color = '#1a1a2e';
-                            }}
-                            onMouseOut={e => {
-                              e.currentTarget.style.backgroundColor = '#1a1a2e';
-                              e.currentTarget.style.color = 'white';
-                            }}
                           >
-                            <Edit2 size={16} />
+                            <Edit2 size={15} />
                           </button>
                           <button
+                            className="ghost-btn small"
                             onClick={() => handleDelete(standard.Standard_List)}
-                            style={{
-                              padding: '8px',
-                              background: 'linear-gradient(120deg, #b91c3c, #d7263d)',
-                              color: 'white',
-                              border: '2px solid transparent',
-                              borderRadius: '28px',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              transition: 'all 0.2s ease'
-                            }}
                             title="Delete Standard"
-                            onMouseOver={e => {
-                              e.currentTarget.style.background = '#e1e2e2ff';
-                              e.currentTarget.style.border = '2px solid #c0392b';
-                              e.currentTarget.style.color = '#c0392b';
-                            }}
-                            onMouseOut={e => {
-                              e.currentTarget.style.background = 'linear-gradient(120deg, #b91c3c, #d7263d)';
-                              e.currentTarget.style.border = '2px solid transparent';
-                              e.currentTarget.style.color = 'white';
-                            }}
                           >
-                            <Trash2 size={16} />
+                            <Trash2 size={15} />
                           </button>
-                        </td>
+                        </div>
+</td>
                       </tr>
                     );
                   })
@@ -637,542 +598,85 @@ const StandardsAdminPage = ({ onBack, showToast, onSaved }) => {
         </article>
       </div>
 
-      {/* Modern Modal for Add/Edit */}
+      {/* Add / Edit Standard */}
       {showModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: colors.modalOverlay,
-          backdropFilter: 'blur(4px)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 1000,
-          padding: '20px',
-          marginLeft: 0
-        }}>
-          <div style={{
-            backgroundColor: colors.modalBg,
-            padding: isMobile ? '22px 16px' : '35px',
-            borderRadius: '28px',
-            width: '100%',
-            maxWidth: isMobile ? '100%' : '650px',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
-            animation: 'fadeIn 0.2s ease'
-          }}>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '25px',
-              borderBottom: '3px solid #d7263d',
-              paddingBottom: '15px'
-            }}>
-              <h3 style={{
-                margin: 0,
-                color: colors.text,
-                fontSize: '1.6em',
-                fontWeight: '600'
-              }}>
-                {editMode ? 'Edit Standard' : 'Add New Standard'}
-              </h3>
-              <button
-                type="button"
-                className="close-modal-btn"
-                onClick={() => { setShowModal(false); resetTemplateFile(); }}
-                style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit}>
-              <div style={{ marginBottom: '22px' }}>
-                <label style={{ 
-                  display: 'block', 
-                  marginBottom: '8px', 
-                  fontWeight: '600',
-                  color: colors.text,
-                  fontSize: '0.95em'
-                }}>
-                  Standard Name:
-                </label>
-                <input
-                  type="text"
-                  name="Standard_List"
-                  value={formData.Standard_List}
-                  onChange={handleChange}
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '12px 15px',
-                    border: `2px solid ${colors.inputBorder}`,
-                    borderRadius: '4px',
-                    fontSize: '15px',
-                    backgroundColor: colors.inputBg,
-                    color: colors.text,
-                    transition: 'border-color 0.2s ease',
-                    outline: 'none',
-                    boxSizing: 'border-box'
-                  }}
-                  onFocus={e => e.target.style.borderColor = '#1a1a2e'}
-                  onBlur={e => e.target.style.borderColor = colors.inputBorder}
-                />
-              </div>
-
-              <div style={{ marginBottom: '22px' }}>
-                <label style={{ 
-                  display: 'block', 
-                  marginBottom: '8px', 
-                  fontWeight: '600',
-                  color: colors.text,
-                  fontSize: '0.95em'
-                }}>
-                  Short Name:
-                </label>
-                <input
-                  type="text"
-                  name="Short_Name"
-                  value={formData.Short_Name}
-                  onChange={handleChange}
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '12px 15px',
-                    border: `2px solid ${colors.inputBorder}`,
-                    borderRadius: '4px',
-                    fontSize: '15px',
-                    backgroundColor: colors.inputBg,
-                    color: colors.text,
-                    transition: 'border-color 0.2s ease',
-                    outline: 'none',
-                    boxSizing: 'border-box'
-                  }}
-                  onFocus={e => e.target.style.borderColor = '#1a1a2e'}
-                  onBlur={e => e.target.style.borderColor = colors.inputBorder}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: twoColumnGrid, gap: '15px', marginBottom: '22px' }}>
-                <div>
-                  <label style={{ 
-                    display: 'block', 
-                    marginBottom: '8px', 
-                    fontWeight: '600',
-                    color: colors.text,
-                    fontSize: '0.95em'
-                  }}>
-                    Total Questions:
-                  </label>
-                  <input
-                    type="number"
-                    name="Total_Questions"
-                    value={formData.Total_Questions}
-                    onChange={handleChange}
-                    required
-                    min="1"
-                    style={{
-                      width: '100%',
-                      padding: '12px 15px',
-                      border: `2px solid ${colors.inputBorder}`,
-                      borderRadius: '4px',
-                    fontSize: '15px',
-                    backgroundColor: colors.inputBg,
-                      color: colors.text,
-                      transition: 'border-color 0.2s ease',
-                      outline: 'none',
-                      boxSizing: 'border-box'
-                    }}
-                    onFocus={e => e.target.style.borderColor = '#1a1a2e'}
-                    onBlur={e => e.target.style.borderColor = colors.inputBorder}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ 
-                    display: 'block', 
-                    marginBottom: '8px', 
-                    fontWeight: '600',
-                    color: colors.text,
-                    fontSize: '0.95em'
-                  }}>
-                    Passing Criteria:
-                  </label>
-                  <input
-                    type="text"
-                    name="Passing_Criteria"
-                    value={formData.Passing_Criteria}
-                    onChange={handleChange}
-                    required
-                    placeholder="e.g., 70%"
-                    style={{
-                      width: '100%',
-                      padding: '12px 15px',
-                      border: `2px solid ${colors.inputBorder}`,
-                      borderRadius: '4px',
-                    fontSize: '15px',
-                    backgroundColor: colors.inputBg,
-                      color: colors.text,
-                      transition: 'border-color 0.2s ease',
-                      outline: 'none',
-                      boxSizing: 'border-box'
-                    }}
-                    onFocus={e => e.target.style.borderColor = '#1a1a2e'}
-                    onBlur={e => e.target.style.borderColor = colors.inputBorder}
-                  />
-                </div>
-              </div>
-
-              <div style={{ marginBottom: '25px' }}>
-                <label style={{ 
-                  display: 'block', 
-                  marginBottom: '12px', 
-                  fontWeight: '600',
-                  color: colors.text,
-                  fontSize: '0.95em'
-                }}>
-                  Time Limit:
-                </label>
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : isTablet ? 'repeat(2, 1fr)' : '1fr 1fr 1fr', gap: '12px' }}>
-                  <div>
-                    <label style={{ fontSize: '13px', color: colors.textMuted, fontWeight: '500', marginBottom: '6px', display: 'block' }}>Hours</label>
-                    <input
-                      type="number"
-                      name="Hours"
-                      value={formData.Hours}
-                      onChange={handleChange}
-                      min="0"
-                      style={{
-                        width: '100%',
-                        padding: '12px 15px',
-                        border: `2px solid ${colors.inputBorder}`,
-                        borderRadius: '4px',
-                        fontSize: '15px',
-                        textAlign: 'center',
-                        backgroundColor: colors.inputBg,
-                        color: colors.text,
-                        transition: 'border-color 0.2s ease',
-                        outline: 'none',
-                        boxSizing: 'border-box'
-                      }}
-                      onFocus={e => e.target.style.borderColor = '#1a1a2e'}
-                      onBlur={e => e.target.style.borderColor = colors.inputBorder}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '13px', color: colors.textMuted, fontWeight: '500', marginBottom: '6px', display: 'block' }}>Minutes</label>
-                    <input
-                      type="number"
-                      name="Minutes"
-                      value={formData.Minutes}
-                      onChange={handleChange}
-                      min="0"
-                      max="59"
-                      style={{
-                        width: '100%',
-                        padding: '12px 15px',
-                        border: `2px solid ${colors.inputBorder}`,
-                        borderRadius: '4px',
-                        fontSize: '15px',
-                        textAlign: 'center',
-                        backgroundColor: colors.inputBg,
-                        color: colors.text,
-                        transition: 'border-color 0.2s ease',
-                        outline: 'none',
-                        boxSizing: 'border-box'
-                      }}
-                      onFocus={e => e.target.style.borderColor = '#1a1a2e'}
-                      onBlur={e => e.target.style.borderColor = colors.inputBorder}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '13px', color: colors.textMuted, fontWeight: '500', marginBottom: '6px', display: 'block' }}>Seconds</label>
-                    <input
-                      type="number"
-                      name="Seconds"
-                      value={formData.Seconds}
-                      onChange={handleChange}
-                      min="0"
-                      max="59"
-                      style={{
-                        width: '100%',
-                        padding: '12px 15px',
-                        border: `2px solid ${colors.inputBorder}`,
-                        borderRadius: '4px',
-                        fontSize: '15px',
-                        textAlign: 'center',
-                        backgroundColor: colors.inputBg,
-                        color: colors.text,
-                        transition: 'border-color 0.2s ease',
-                        outline: 'none',
-                        boxSizing: 'border-box'
-                      }}
-                      onFocus={e => e.target.style.borderColor = '#1a1a2e'}
-                      onBlur={e => e.target.style.borderColor = colors.inputBorder}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Certificate Template Upload */}
-              <div style={{ marginTop: '20px' }}>
-                <label style={{
-                  fontSize: '14px',
-                  color: colors.text,
-                  fontWeight: '600',
-                  marginBottom: '8px',
-                  display: 'block'
-                }}>
-                  Upload Certificate Template (PDF)
-                  <span style={{ fontSize: '12px', color: colors.textMuted, fontWeight: 'normal', marginLeft: '8px' }}>
-                    Optional. This will attach the uploaded template to this standard.
-                  </span>
-                </label>
-                {formData.Certificate_Template && !templateFile && (
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    backgroundColor: colors.cardAltBg,
-                    border: `1px solid ${colors.inputBorder}`,
-                    marginBottom: '10px'
-                  }}>
-                    <span style={{ color: colors.text, fontSize: '0.9em' }}>
-                      Current: {formData.Certificate_Template}.pdf
-                    </span>
-                  </div>
-                )}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    onClick={() => templateInputRef.current?.click()}
-                    disabled={templateUploading}
-                    onMouseEnter={(e) => {
-                      if (templateUploading) return;
-                      e.currentTarget.style.background = '#fff';
-                      e.currentTarget.style.color = '#c0392b';
-                      e.currentTarget.style.border = '2px solid #c0392b';
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = '0 6px 20px rgba(192, 57, 43, 0.4)';
-                    }}
-                    onMouseLeave={(e) => {
-                      if (templateUploading) return;
-                      e.currentTarget.style.background = 'linear-gradient(120deg, #b91c3c, #d7263d)';
-                      e.currentTarget.style.color = '#fff';
-                      e.currentTarget.style.border = '2px solid transparent';
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = 'none';
-                    }}
-                    style={{
-                      padding: '10px 16px',
-                      background: templateUploading ? '#95a5a6' : 'linear-gradient(120deg, #b91c3c, #d7263d)',
-                      color: '#fff',
-                      border: '2px solid transparent',
-                      borderRadius: '8px',
-                      cursor: templateUploading ? 'not-allowed' : 'pointer',
-                      fontSize: '13px',
-                      fontWeight: '600',
-                      transition: 'all 0.2s ease',
-                      opacity: templateUploading ? 0.75 : 1
-                    }}
-                  >
-                    Choose PDF
-                  </button>
-                  <span style={{ fontSize: '12px', color: colors.textMuted }}>
-                    {templateFile
-                      ? templateFile.name
-                      : formData.Certificate_Template
-                        ? `${formData.Certificate_Template}.pdf`
-                        : 'No file chosen'}
-                  </span>
-                </div>
-                <input
-                  ref={templateInputRef}
-                  type="file"
-                  accept=".pdf,application/pdf"
-                  onChange={handleTemplateFileChange}
-                  style={{ display: 'none' }}
-                />
-                {templateUploading && (
-                  <div style={{ marginTop: '8px', color: colors.textMuted, fontSize: '12px' }}>
-                    Uploading template...
-                  </div>
-                )}
-              </div>
-
-              {/* Negative Marking Toggle */}
-              <div style={{ marginTop: '20px' }}>
-                <label style={{ fontSize: '14px', color: colors.text, fontWeight: '600', marginBottom: '12px', display: 'block' }}>
-                  Negative Marking (-0.25 per wrong answer)
-                </label>
-                <div style={{ display: 'flex', gap: '12px', flexDirection: isMobile ? 'column' : 'row' }}>
-                  <label style={{
-                    flex: 1,
-                    padding: '15px',
-                    border: `2px solid ${formData.Negative_Marking === 'Yes' ? '#d7263d' : colors.inputBorder}`,
-                    borderRadius: '28px',
-                    cursor: 'pointer',
-                    textAlign: 'center',
-                    transition: 'all 0.2s ease',
-                    backgroundColor: formData.Negative_Marking === 'Yes' ? (isDarkMode ? '#2d1f1f' : '#fee') : colors.inputBg
-                  }}>
-                    <input
-                      type="radio"
-                      name="Negative_Marking"
-                      value="Yes"
-                      checked={formData.Negative_Marking === 'Yes'}
-                      onChange={handleChange}
-                      style={{ marginRight: '8px' }}
-                    />
-                    <span style={{ fontWeight: '600', color: formData.Negative_Marking === 'Yes' ? '#d7263d' : colors.textMuted }}>
-                      Enabled
-                    </span>
-                  </label>
-                  <label style={{
-                    flex: 1,
-                    padding: '15px',
-                    border: `2px solid ${formData.Negative_Marking === 'No' ? '#27ae60' : colors.inputBorder}`,
-                    borderRadius: '28px',
-                    cursor: 'pointer',
-                    textAlign: 'center',
-                    transition: 'all 0.2s ease',
-                    backgroundColor: formData.Negative_Marking === 'No' ? (isDarkMode ? '#1f2d1f' : '#efe') : colors.inputBg
-                  }}>
-                    <input
-                      type="radio"
-                      name="Negative_Marking"
-                      value="No"
-                      checked={formData.Negative_Marking === 'No'}
-                      onChange={handleChange}
-                      style={{ marginRight: '8px' }}
-                    />
-                    <span style={{ fontWeight: '600', color: formData.Negative_Marking === 'No' ? '#27ae60' : colors.textMuted }}>
-                      Disabled
-                    </span>
-                  </label>
-                </div>
-              </div>
-
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{
-                  display: 'block',
-                  marginBottom: 10,
-                  fontWeight: '600',
-                  color: colors.text,
-                  fontSize: '0.9em'
-                }}>
-                  Practical Required
-                </label>
-                <div style={{ display: 'flex', gap: '12px', flexDirection: isMobile ? 'column' : 'row' }}>
-                  <label style={{
-                    flex: 1,
-                    padding: '15px',
-                    border: `2px solid ${formData.Practical_Required === 'Yes' ? '#d7263d' : colors.inputBorder}`,
-                    borderRadius: '28px',
-                    cursor: 'pointer',
-                    textAlign: 'center',
-                    transition: 'all 0.2s ease',
-                    backgroundColor: formData.Practical_Required === 'Yes' ? (isDarkMode ? '#2d1f1f' : '#fee') : colors.inputBg
-                  }}>
-                    <input
-                      type="radio"
-                      name="Practical_Required"
-                      value="Yes"
-                      checked={formData.Practical_Required === 'Yes'}
-                      onChange={handleChange}
-                      style={{ marginRight: '8px' }}
-                    />
-                    <span style={{ fontWeight: '600', color: formData.Practical_Required === 'Yes' ? '#d7263d' : colors.textMuted }}>
-                      Yes — practical is compulsory
-                    </span>
-                  </label>
-                  <label style={{
-                    flex: 1,
-                    padding: '15px',
-                    border: `2px solid ${formData.Practical_Required === 'No' ? '#27ae60' : colors.inputBorder}`,
-                    borderRadius: '28px',
-                    cursor: 'pointer',
-                    textAlign: 'center',
-                    transition: 'all 0.2s ease',
-                    backgroundColor: formData.Practical_Required === 'No' ? (isDarkMode ? '#1f2d1f' : '#efe') : colors.inputBg
-                  }}>
-                    <input
-                      type="radio"
-                      name="Practical_Required"
-                      value="No"
-                      checked={formData.Practical_Required === 'No'}
-                      onChange={handleChange}
-                      style={{ marginRight: '8px' }}
-                    />
-                    <span style={{ fontWeight: '600', color: formData.Practical_Required === 'No' ? '#27ae60' : colors.textMuted }}>
-                      No — theory only
-                    </span>
-                  </label>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '30px', flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowModal(false);
-                    resetTemplateFile();
-                  }}
-                  style={{
-                    padding: '12px 28px',
-                    backgroundColor: colors.inputBg,
-                    color: colors.textMuted,
-                    border: `2px solid ${colors.border}`,
-                    borderRadius: '28px',
-                    cursor: 'pointer',
-                    fontSize: '15px',
-                    fontWeight: '600',
-                    width: isMobile ? '100%' : 'auto',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseOver={e => e.currentTarget.classList.add('grad-hover-outline')}
-                  onMouseOut={e => e.currentTarget.classList.remove('grad-hover-outline')}
-                >
-                  <span className="grad-label">Cancel</span>
-                </button>
-                <button
-                  type="submit"
-                  disabled={templateUploading}
-                  style={{
-                    padding: '12px 30px',
-                    background: templateUploading ? colors.inputBorder : 'linear-gradient(120deg, #b91c3c, #d7263d)',
-                    color: templateUploading ? colors.textMuted : 'white',
-                    border: 'none',
-                    borderRadius: '18px',
-                    cursor: templateUploading ? 'not-allowed' : 'pointer',
-                    fontSize: '15px',
-                    fontWeight: '600',
-                    width: isMobile ? '100%' : 'auto',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseOver={e => {
-                    if (templateUploading) return;
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(215, 38, 61, 0.4)';
-                  }}
-                  onMouseOut={e => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = 'none';
-                  }}
-                >
-                  {templateUploading ? 'Uploading...' : (editMode ? 'Update Standard' : 'Create Standard')}
-                </button>
-              </div>
-            </form>
+        <ModalFrame
+          Icon={editMode ? BsPencilSquare : BsJournalCheck}
+          title={editMode ? 'Edit Standard' : 'Add New Standard'}
+          subtitle={editMode ? 'Update the standard information.' : 'Fill in the standard details below.'}
+          onClose={() => { setShowModal(false); resetTemplateFile(); }}
+          onSubmit={handleSubmit}
+          dark={isDarkMode}
+          actions={<ModalButtons onCancel={() => { setShowModal(false); resetTemplateFile(); }} busy={templateUploading}
+            busyLabel="Uploading..." label={editMode ? 'Update Standard' : 'Create Standard'} />}
+        >
+          <ModalSection Icon={BsJournalCheck} title="Standard" hint="Name & short name" />
+          <div className="form-row">
+            <ModalField label="Standard Name" required>
+              <input type="text" name="Standard_List" value={formData.Standard_List} onChange={handleChange} required />
+            </ModalField>
+            <ModalField label="Short Name" required>
+              <input type="text" name="Short_Name" value={formData.Short_Name} onChange={handleChange} required />
+            </ModalField>
           </div>
-        </div>
+
+          <ModalSection Icon={BsListOl} title="Exam" hint="Questions, pass mark & time" />
+          <div className="form-row">
+            <ModalField label="Total Questions" required>
+              <input type="number" name="Total_Questions" value={formData.Total_Questions} onChange={handleChange} required min="1" />
+            </ModalField>
+            <ModalField label="Passing Criteria" required>
+              <input type="text" name="Passing_Criteria" value={formData.Passing_Criteria} onChange={handleChange} required placeholder="e.g., 70%" />
+            </ModalField>
+          </div>
+          <div className="form-row">
+            <ModalField label="Hours">
+              <input type="number" name="Hours" value={formData.Hours} onChange={handleChange} min="0" />
+            </ModalField>
+            <ModalField label="Minutes">
+              <input type="number" name="Minutes" value={formData.Minutes} onChange={handleChange} min="0" max="59" />
+            </ModalField>
+            <ModalField label="Seconds">
+              <input type="number" name="Seconds" value={formData.Seconds} onChange={handleChange} min="0" max="59" />
+            </ModalField>
+          </div>
+
+          <ModalSection Icon={BsAward} title="Marking" hint="Penalty & practical" />
+          <ModalField label="Negative Marking (-0.25 per wrong answer)">
+            <ModalChoice name="Negative_Marking" value={formData.Negative_Marking} onChange={handleChange}
+              choices={[
+                { value: 'Yes', label: 'Enabled' },
+                { value: 'No', label: 'Disabled', tone: '#27ae60', bg: '#f0fff8' },
+              ]} />
+          </ModalField>
+          <ModalField label="Practical Required">
+            <ModalChoice name="Practical_Required" value={formData.Practical_Required} onChange={handleChange}
+              choices={[
+                { value: 'Yes', label: 'Yes — practical is compulsory' },
+                { value: 'No', label: 'No — theory only', tone: '#27ae60', bg: '#f0fff8' },
+              ]} />
+          </ModalField>
+
+          <ModalSection Icon={BsPaperclip} title="Certificate Template" hint="Optional · PDF" />
+          <ModalFilePick
+            current={formData.Certificate_Template && !templateFile ? `${formData.Certificate_Template}.pdf` : null}
+            onChoose={() => templateInputRef.current?.click()}
+            disabled={templateUploading}
+            chooseLabel="Choose PDF"
+            fileName={templateFile ? templateFile.name : (formData.Certificate_Template ? `${formData.Certificate_Template}.pdf` : '')}
+            note="This will attach the uploaded template to this standard."
+          />
+          <input
+            ref={templateInputRef}
+            type="file"
+            accept=".pdf,application/pdf"
+            onChange={handleTemplateFileChange}
+            style={{ display: 'none' }}
+          />
+          {templateUploading && (
+            <div className="fmk-note" style={{ color: '#7a7a8c', fontSize: 12 }}>Uploading template...</div>
+          )}
+        </ModalFrame>
       )}
     </>
   );
