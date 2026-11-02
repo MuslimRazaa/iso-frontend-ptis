@@ -36,6 +36,8 @@ import {
 import { Links, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTheme } from './contexts/ThemeContext';
 import { localToday } from '../utils/localDate';
+import { ModalFrame, ModalSection, ModalField, ModalButtons, ModalFilePick, modalFieldStyle, modalFieldStyleDisabled } from '../components/FormModalKit';
+import { BsClipboardData, BsPencilSquare, BsPersonBadge, BsJournalCheck, BsCalendar3, BsBarChart, BsPaperclip } from 'react-icons/bs';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import StandardsAdminPage from './admin/StandardsAdminPage';
 import QuestionsAdminPage from './admin/QuestionsAdminPage';
@@ -2428,14 +2430,14 @@ const TestingModule = () => {
       XLSX.writeFile(workbook, 'Test_Results_Import_Template.xlsx');
     };
 
-    const resultEmployeeIdOptions = useMemo(() => {
-      const ids = new Set(employees.map(emp => String(emp.ID || '')).filter(Boolean));
-      return Array.from(ids).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-    }, [employees]);
-
-    const resultEmployeeNameOptions = useMemo(() => {
-      const names = new Set(employees.map(emp => String(emp.Name || '')).filter(Boolean));
-      return Array.from(names).sort((a, b) => a.localeCompare(b));
+    // One dropdown for the employee: the name, with the id small underneath. The value is the id.
+    const resultEmployeeOptions = useMemo(() => {
+      const byId = new Map();
+      employees.forEach(emp => {
+        const id = String(emp.ID || '');
+        if (id && !byId.has(id)) byId.set(id, { value: id, label: String(emp.Name || id), sub: id });
+      });
+      return Array.from(byId.values()).sort((a, b) => a.label.localeCompare(b.label));
     }, [employees]);
 
     const resultStandardOptions = useMemo(() => {
@@ -3836,6 +3838,8 @@ const TestingModule = () => {
                         </td>
                         <td style={{ padding: '15px', textAlign: 'center' }}>
                           <button
+                            className="ghost-btn small"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
                             onClick={() => {
                               const trimmedPreviousCertNo = String(previousCertNo || '').trim();
                               if (selectedCertType === 'Recertification' && !trimmedPreviousCertNo) {
@@ -3866,42 +3870,9 @@ const TestingModule = () => {
                                   .catch(() => { /* no saved details — the boxes just stay empty */ });
                               }
                             }}
-                            style={{
-                              padding: '10px 16px',
-                              backgroundColor: '#d7263d',
-                              color: 'white',
-                              border: '2px solid #d7263d',
-                              borderRadius: '28px',
-                              cursor: 'pointer',
-                              fontSize: '13px',
-                              fontWeight: '600',
-                              boxShadow: '0 3px 10px rgba(215, 38, 61, 0.3)',
-                              transition: 'all 0.2s ease',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              whiteSpace: 'nowrap'
-                            }}
-                            onMouseOver={e => {
-                              e.currentTarget.style.backgroundColor = '#ffffff';
-                              e.currentTarget.style.color = '#d7263d';
-                              e.currentTarget.style.border = '2px solid #d7263d';
-                              e.currentTarget.style.transform = 'translateY(-2px)';
-                              e.currentTarget.style.boxShadow = '0 5px 15px rgba(215, 38, 61, 0.4)';
-                              e.currentTarget.querySelector('svg').style.color = '#d7263d';
-                            }}
-                            onMouseOut={e => {
-                              e.currentTarget.style.backgroundColor = '#d7263d';
-                              e.currentTarget.style.color = 'white';
-                              e.currentTarget.style.border = '2px solid #d7263d';
-                              e.currentTarget.style.transform = 'translateY(0)';
-                              e.currentTarget.style.boxShadow = '0 3px 10px rgba(215, 38, 61, 0.3)';
-                              e.currentTarget.querySelector('svg').style.color = 'white';
-                            }}
                             title="Generate Certificate"
                           >
-                            <Download size={16} style={{ color: 'inherit' }} />
-                            Generate Certificate
+                            <Download size={15} /> Generate Certificate
                           </button>
                         </td>
                       </tr>
@@ -5244,7 +5215,7 @@ const TestingModule = () => {
                                 const actorId = getActorId();
                                 const actorName = getActorName();
                                 const response = await fetch(
-                                  `${API_BASE_URL}/api/test-results/legacy/${encodeURIComponent(result.ID)}/${encodeURIComponent(result.STANDARD)}/${encodeURIComponent(result.DATE)}?actorId=${encodeURIComponent(actorId)}&actorName=${encodeURIComponent(actorName)}`,
+                                  `${API_BASE_URL}/api/test-results/legacy?id=${encodeURIComponent(result.ID)}&standard=${encodeURIComponent(result.STANDARD)}&date=${encodeURIComponent(result.DATE)}&actorId=${encodeURIComponent(actorId)}&actorName=${encodeURIComponent(actorName)}`,
                                   { method: 'DELETE' }
                                 );
                                 if (!response.ok) throw new Error('Delete failed');
@@ -5375,98 +5346,27 @@ const TestingModule = () => {
                                 <td style={commonStyles.td}>
                                   <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center', flexWrap: 'nowrap' }}>
                                     <button
+                                      className="ghost-btn small"
                                       onClick={handleDownload}
                                       disabled={!downloadEnabled}
-                                      style={{
-                                        padding: '8px',
-                                        width: '36px',
-                                        height: '36px',
-                                        boxSizing: 'border-box',
-                                        backgroundColor: downloadEnabled ? '#1a1a2e' : '#95a5a6',
-                                        color: 'white',
-                                        border: downloadEnabled ? '2px solid #1a1a2e' : '2px solid #95a5a6',
-                                        borderRadius: '28px',
-                                        cursor: downloadEnabled ? 'pointer' : 'not-allowed',
-                                        opacity: downloadEnabled ? 1 : 0.65,
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        transition: 'all 0.2s ease'
-                                      }}
                                       title={downloadTitle}
-                                      onMouseOver={e => {
-                                        if (!downloadEnabled) return;
-                                        e.currentTarget.style.backgroundColor = '#e1e2e2ff';
-                                        e.currentTarget.style.color = '#1a1a2e';
-                                      }}
-                                      onMouseOut={e => {
-                                        e.currentTarget.style.backgroundColor = downloadEnabled ? '#1a1a2e' : '#95a5a6';
-                                        e.currentTarget.style.color = 'white';
-                                      }}
+                                      style={!downloadEnabled ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
                                     >
-                                      <Download size={16} />
+                                      <Download size={15} />
                                     </button>
                                     <button
+                                      className="ghost-btn small"
                                       onClick={handleEditResult}
-                                      style={{
-                                        padding: '8px',
-                                        width: '36px',
-                                        height: '36px',
-                                        boxSizing: 'border-box',
-                                        background: 'linear-gradient(120deg, #1a1a2e, #16213e)',
-                                        color: 'white',
-                                        border: '2px solid transparent',
-                                        borderRadius: '28px',
-                                        cursor: 'pointer',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        transition: 'all 0.2s ease'
-                                      }}
                                       title="Edit Test Result"
-                                      onMouseOver={e => {
-                                        e.currentTarget.style.background = '#e1e2e2ff';
-                                        e.currentTarget.style.border = '2px solid #1a1a2e';
-                                        e.currentTarget.style.color = '#1a1a2e';
-                                      }}
-                                      onMouseOut={e => {
-                                        e.currentTarget.style.background = 'linear-gradient(120deg, #1a1a2e, #16213e)';
-                                        e.currentTarget.style.border = '2px solid transparent';
-                                        e.currentTarget.style.color = 'white';
-                                      }}
                                     >
-                                      <Edit2 size={16} />
+                                      <Edit2 size={15} />
                                     </button>
                                     <button
+                                      className="ghost-btn small"
                                       onClick={handleDeleteResult}
-                                      style={{
-                                        padding: '8px',
-                                        width: '36px',
-                                        height: '36px',
-                                        boxSizing: 'border-box',
-                                        background: 'linear-gradient(120deg, #b91c3c, #d7263d)',
-                                        color: 'white',
-                                        border: '2px solid transparent',
-                                        borderRadius: '28px',
-                                        cursor: 'pointer',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        transition: 'all 0.2s ease'
-                                      }}
                                       title="Delete Test Result"
-                                      onMouseOver={e => {
-                                        e.currentTarget.style.background = '#e1e2e2ff';
-                                        e.currentTarget.style.border = '2px solid #c0392b';
-                                        e.currentTarget.style.color = '#c0392b';
-                                      }}
-                                      onMouseOut={e => {
-                                        e.currentTarget.style.background = 'linear-gradient(120deg, #b91c3c, #d7263d)';
-                                        e.currentTarget.style.border = '2px solid transparent';
-                                        e.currentTarget.style.color = 'white';
-                                      }}
                                     >
-                                      <Trash2 size={16} />
+                                      <Trash2 size={15} />
                                     </button>
                                   </div>
                                 </td>
@@ -5490,608 +5390,174 @@ const TestingModule = () => {
 
                 {/* Add Result Modal */}
                 {showAddResultModal && (
-                  <div style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    backgroundColor: 'rgba(26, 26, 46, 0.85)',
-                    backdropFilter: 'blur(4px)',
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    zIndex: 1000,
-                    padding: '20px',
-                    marginLeft: 0
-                  }}>
-                    <div style={{
-                      backgroundColor: theme.bg.card,
-                      padding: isMobile ? '22px 16px' : '35px',
-                      borderRadius: '28px',
-                      width: '100%',
-                      maxWidth: isMobile ? '100%' : '650px',
-                      maxHeight: '90vh',
-                      overflowY: 'auto',
-                      boxShadow: `0 20px 60px ${isDarkMode ? 'rgba(0,0,0,0.5)' : 'rgba(0, 0, 0, 0.3)'}`,
-                      animation: 'fadeIn 0.2s ease'
-                    }}>
-                      <div style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: '25px',
-                        borderBottom: '3px solid #d7263d',
-                        paddingBottom: '15px'
-                      }}>
-                        <h3 style={{
-                          margin: 0,
-                          color: theme.text.primary,
-                          fontSize: '1.6em',
-                          fontWeight: '600'
-                        }}>
-                          {resultEditMode ? 'Edit Result' : 'Add Result'}
-                        </h3>
-                        <button
-                          type="button"
-                          className="close-modal-btn"
-                          onClick={closeAddResultModal}
-                          style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}
-                        >
-                          <X size={18} />
-                        </button>
-                      </div>
-
-                      <form onSubmit={handleAddResultSubmit}>
-                        <div style={{ display: 'grid', gridTemplateColumns: twoColumnGrid, gap: '15px', marginBottom: '22px' }}>
-                          <div>
-                            <label style={{
-                              display: 'block',
-                              marginBottom: '8px',
-                              fontWeight: '600',
-                              color: colors.text,
-                              fontSize: '0.95em'
-                            }}>
-                              Employee ID:
-                            </label>
-                            <SearchableSelect
-                              value={resultFormData.employeeId}
-                              disabled={resultEditMode}
-                              required
-                              options={resultEmployeeIdOptions}
-                              placeholder="Type to search…"
-                              onChange={(selectedId) => {
-                                const selectedEmployee = employees.find(emp => String(emp.ID) === String(selectedId));
-                                setResultFormData({
-                                  ...resultFormData,
-                                  employeeId: selectedId,
-                                  employeeName: selectedEmployee ? String(selectedEmployee.Name || '') : ''
-                                });
-                              }}
-                              style={{
-                                width: '100%',
-                                padding: '12px 15px',
-                                border: `2px solid ${colors.inputBorder}`,
-                                borderRadius: '4px',
-                                fontSize: '15px',
-                                transition: 'border-color 0.2s ease',
-                                outline: 'none',
-                                boxSizing: 'border-box',
-                                backgroundColor: resultEditMode ? colors.cardAltBg : colors.inputBg,
-                                color: colors.text,
-                                cursor: resultEditMode ? 'not-allowed' : 'text'
-                              }}
-                            />
-                          </div>
-                          <div>
-                            <label style={{
-                              display: 'block',
-                              marginBottom: '8px',
-                              fontWeight: '600',
-                              color: colors.text,
-                              fontSize: '0.95em'
-                            }}>
-                              Employee Name:
-                            </label>
-                            <SearchableSelect
-                              value={resultFormData.employeeName}
-                              disabled={resultEditMode}
-                              required
-                              options={resultEmployeeNameOptions}
-                              placeholder="Type to search…"
-                              onChange={(selectedName) => {
-                                const selectedEmployee = employees.find(emp => String(emp.Name || '') === selectedName);
-                                setResultFormData({
-                                  ...resultFormData,
-                                  employeeName: selectedName,
-                                  employeeId: selectedEmployee ? String(selectedEmployee.ID || '') : ''
-                                });
-                              }}
-                              style={{
-                                width: '100%',
-                                padding: '12px 15px',
-                                border: `2px solid ${colors.inputBorder}`,
-                                borderRadius: '4px',
-                                fontSize: '15px',
-                                transition: 'border-color 0.2s ease',
-                                outline: 'none',
-                                boxSizing: 'border-box',
-                                backgroundColor: resultEditMode ? colors.cardAltBg : colors.inputBg,
-                                color: colors.text,
-                                cursor: resultEditMode ? 'not-allowed' : 'text'
-                              }}
-                            />
-                          </div>
-                        </div>
-
-                        <div style={{ marginBottom: '22px' }}>
-                          <label style={{
-                            display: 'block',
-                            marginBottom: '8px',
-                            fontWeight: '600',
-                            color: colors.text,
-                            fontSize: '0.95em'
-                          }}>
-                            Standard:
-                          </label>
-                          <SearchableSelect
-                            value={resultFormData.standard}
-                            disabled={resultEditMode}
-                            required
-                            options={resultStandardOptions}
-                            placeholder="Type to search…"
-                            onChange={async (newStandard) => {
-                              setIsResultPercentageManuallyEdited(false);
-                              setResultFormData(prev => ({ ...prev, standard: newStandard }));
-
-                              // Auto-fill Total Questions + Passing Criteria from the
-                              // selected standard's config - still editable afterwards.
-                              if (!newStandard) return;
-                              try {
-                                const info = await fetchData(`/info?standard=${encodeURIComponent(newStandard)}`);
-                                if (info && !Array.isArray(info)) {
-                                  setResultFormData(prev => ({
-                                    ...prev,
-                                    standard: newStandard,
-                                    totalQuestions: info.Total_Questions != null ? String(info.Total_Questions) : prev.totalQuestions,
-                                    passingCriteria: info.Passing_Criteria != null ? String(info.Passing_Criteria).replace('%', '') : prev.passingCriteria
-                                  }));
-                                }
-                              } catch (err) {
-                                console.warn('Failed to auto-fill standard info:', err);
-                              }
-                            }}
-                            style={{
-                              width: '100%',
-                              padding: '12px 15px',
-                              border: `2px solid ${colors.inputBorder}`,
-                              borderRadius: '4px',
-                              fontSize: '15px',
-                              transition: 'border-color 0.2s ease',
-                              outline: 'none',
-                              boxSizing: 'border-box',
-                              backgroundColor: resultEditMode ? colors.cardAltBg : colors.inputBg,
-                              color: colors.text,
-                              cursor: resultEditMode ? 'not-allowed' : 'text'
-                            }}
-                          />
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: twoColumnGrid, gap: '15px', marginBottom: '22px' }}>
-                          <div>
-                            <label style={{
-                              display: 'block',
-                              marginBottom: '8px',
-                              fontWeight: '600',
-                              color: colors.text,
-                              fontSize: '0.95em'
-                            }}>
-                              Result Date:
-                            </label>
-                            <StyledDatePicker
-                              value={resultFormData.resultDate}
-                              onChange={(v) => setResultFormData({ ...resultFormData, resultDate: v })}
-                              style={{
-                                width: '100%',
-                                padding: '12px 15px',
-                                border: `2px solid ${colors.inputBorder}`,
-                                borderRadius: '4px',
-                                fontSize: '15px',
-                                transition: 'border-color 0.2s ease',
-                                outline: 'none',
-                                boxSizing: 'border-box',
-                                backgroundColor: colors.inputBg,
-                                color: colors.text
-                              }}
-                            />
-                          </div>
-                          <div>
-                            <label style={{
-                              display: 'block',
-                              marginBottom: '8px',
-                              fontWeight: '600',
-                              color: colors.text,
-                              fontSize: '0.95em'
-                            }}>
-                              Result Time:
-                            </label>
-                            <input
-                              type="time"
-                              value={resultFormData.resultTime}
-                              onChange={(e) => setResultFormData({ ...resultFormData, resultTime: e.target.value })}
-                              required
-                              style={{
-                                width: '100%',
-                                padding: '12px 15px',
-                                border: `2px solid ${colors.inputBorder}`,
-                                borderRadius: '4px',
-                                fontSize: '15px',
-                                transition: 'border-color 0.2s ease',
-                                outline: 'none',
-                                boxSizing: 'border-box',
-                                backgroundColor: colors.inputBg,
-                                color: colors.text
-                              }}
-                              onFocus={e => (e.target.style.borderColor = '#1a1a2e')}
-                              onBlur={e => (e.target.style.borderColor = colors.inputBorder)}
-                            />
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: twoColumnGrid, gap: '15px', marginBottom: '22px' }}>
-                          <div>
-                            <label style={{
-                              display: 'block',
-                              marginBottom: '8px',
-                              fontWeight: '600',
-                              color: colors.text,
-                              fontSize: '0.95em'
-                            }}>
-                              Total Questions:
-                            </label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={resultFormData.totalQuestions}
-                              onChange={(e) => {
-                                setIsResultPercentageManuallyEdited(false);
-                                setResultFormData({ ...resultFormData, totalQuestions: e.target.value });
-                              }}
-                              required
-                              style={{
-                                width: '100%',
-                                padding: '12px 15px',
-                                border: `2px solid ${colors.inputBorder}`,
-                                borderRadius: '4px',
-                                fontSize: '15px',
-                                transition: 'border-color 0.2s ease',
-                                outline: 'none',
-                                boxSizing: 'border-box',
-                                backgroundColor: colors.inputBg,
-                                color: colors.text
-                              }}
-                              onFocus={e => (e.target.style.borderColor = '#1a1a2e')}
-                              onBlur={e => (e.target.style.borderColor = colors.inputBorder)}
-                              placeholder="100"
-                            />
-                          </div>
-                          <div>
-                            <label style={{
-                              display: 'block',
-                              marginBottom: '8px',
-                              fontWeight: '600',
-                              color: colors.text,
-                              fontSize: '0.95em'
-                            }}>
-                              Correct Answers:
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              value={resultFormData.correctAnswers}
-                              onChange={(e) => {
-                                setIsResultPercentageManuallyEdited(false);
-                                setResultFormData({ ...resultFormData, correctAnswers: e.target.value });
-                              }}
-                              required
-                              style={{
-                                width: '100%',
-                                padding: '12px 15px',
-                                border: `2px solid ${colors.inputBorder}`,
-                                borderRadius: '4px',
-                                fontSize: '15px',
-                                transition: 'border-color 0.2s ease',
-                                outline: 'none',
-                                boxSizing: 'border-box',
-                                backgroundColor: colors.inputBg,
-                                color: colors.text
-                              }}
-                              onFocus={e => (e.target.style.borderColor = '#1a1a2e')}
-                              onBlur={e => (e.target.style.borderColor = colors.inputBorder)}
-                              placeholder="85"
-                            />
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: twoColumnGrid, gap: '15px', marginBottom: '22px' }}>
-                          <div>
-                            <label style={{
-                              display: 'block',
-                              marginBottom: '8px',
-                              fontWeight: '600',
-                              color: colors.text,
-                              fontSize: '0.95em'
-                            }}>
-                              Percentage (%):
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              step="0.01"
-                              value={resultFormData.percentage}
-                              onChange={(e) => {
-                                setIsResultPercentageManuallyEdited(true);
-                                setResultFormData({ ...resultFormData, percentage: e.target.value });
-                              }}
-                              required
-                              style={{
-                                width: '100%',
-                                padding: '12px 15px',
-                                border: `2px solid ${colors.inputBorder}`,
-                                borderRadius: '4px',
-                                fontSize: '15px',
-                                transition: 'border-color 0.2s ease',
-                                outline: 'none',
-                                backgroundColor: colors.inputBg,
-                                color: colors.text,
-                                boxSizing: 'border-box'
-                              }}
-                              onFocus={e => (e.target.style.borderColor = '#1a1a2e')}
-                              onBlur={e => (e.target.style.borderColor = colors.inputBorder)}
-                              placeholder="Auto calculated (editable)"
-                            />
-                            <div style={{ marginTop: '6px', fontSize: '12px', color: colors.textMuted }}>
-                              {resultHasNegativeMarking
-                                ? 'Auto formula: (Correct - Wrong x 0.25) / Total x 100'
-                                : 'Auto formula: Correct / Total x 100'}
-                            </div>
-                          </div>
-                          <div>
-                            <label style={{
-                              display: 'block',
-                              marginBottom: '8px',
-                              fontWeight: '600',
-                              color: colors.text,
-                              fontSize: '0.95em'
-                            }}>
-                              Passing Criteria (%):
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              value={resultFormData.passingCriteria}
-                              onChange={(e) => setResultFormData({ ...resultFormData, passingCriteria: e.target.value })}
-                              required
-                              style={{
-                                width: '100%',
-                                padding: '12px 15px',
-                                border: `2px solid ${colors.inputBorder}`,
-                                borderRadius: '4px',
-                                fontSize: '15px',
-                                transition: 'border-color 0.2s ease',
-                                outline: 'none',
-                                boxSizing: 'border-box',
-                                backgroundColor: colors.inputBg,
-                                color: colors.text
-                              }}
-                              onFocus={e => (e.target.style.borderColor = '#1a1a2e')}
-                              onBlur={e => (e.target.style.borderColor = colors.inputBorder)}
-                            />
-                          </div>
-                        </div>
-
-                        <div style={{ marginBottom: '15px' }}>
-                          <label style={{
-                            display: 'block',
-                            marginBottom: '8px',
-                            fontWeight: '600',
-                            color: colors.text,
-                            fontSize: '0.95em'
-                          }}>
-                            Result Status:
-                          </label>
-                          <div style={{
-                            width: '100%',
-                            padding: '12px 15px',
-                            border: `2px solid ${colors.inputBorder}`,
-                            borderRadius: '4px',
-                            boxSizing: 'border-box',
-                            backgroundColor: colors.cardAltBg,
-                            color: addResultStatusPreview === 'Pass' ? '#27ae60' : addResultStatusPreview === 'Fail' ? '#d7263d' : colors.textMuted,
-                            fontWeight: '600'
-                          }}>
-                            {addResultStatusPreview || 'Calculated from percentage and passing criteria'}
-                          </div>
-                        </div>
-
-                        <div style={{ marginBottom: '22px' }}>
-                          <label style={{
-                            display: 'block',
-                            marginBottom: '8px',
-                            fontWeight: '600',
-                            color: colors.text,
-                            fontSize: '0.95em'
-                          }}>
-                            Attachment (PDF, DOC, DOCX):
-                          </label>
-                          {resultAttachmentLockNote && (
-                            <div style={{
-                              marginBottom: '10px',
-                              padding: '8px 12px',
-                              borderRadius: '8px',
-                              backgroundColor: colors.cardAltBg,
-                              border: `1px solid ${colors.inputBorder}`,
-                              color: colors.textMuted,
-                              fontSize: '12px'
-                            }}>
-                              {resultAttachmentLockNote}
-                            </div>
-                          )}
-                          {resultEditMode && resultEditTarget && (String(resultEditTarget.HAS_PRACTICAL_ATTACHMENT) === '1' || resultEditTarget.HAS_PRACTICAL_ATTACHMENT === 1) && (
-                            <div style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '10px',
-                              padding: '10px 12px',
-                              borderRadius: '8px',
-                              backgroundColor: colors.cardAltBg,
-                              border: `1px solid ${colors.inputBorder}`,
-                              marginBottom: '10px'
-                            }}>
-                              <span style={{ color: colors.text, fontSize: '0.9em' }}>
-                                Current: {resultEditTarget.PRACTICAL_ATTACHMENT_NAME || 'Attachment'}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => downloadResultAttachment(resultEditTarget)}
-                                style={{
-                                  padding: '6px 12px',
-                                  backgroundColor: '#1a1a2e',
-                                  color: '#fff',
-                                  border: 'none',
-                                  borderRadius: '20px',
-                                  cursor: 'pointer',
-                                  fontSize: '12px',
-                                  fontWeight: '600'
-                                }}
-                              >
-                                Download
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => removeResultAttachment(resultEditTarget)}
-                                style={{
-                                  padding: '6px 12px',
-                                  backgroundColor: '#d7263d',
-                                  color: '#fff',
-                                  border: 'none',
-                                  borderRadius: '20px',
-                                  cursor: 'pointer',
-                                  fontSize: '12px',
-                                  fontWeight: '600'
-                                }}
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          )}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (!resultAttachmentLocked) {
-                                  resultAttachmentInputRef.current?.click();
-                                }
-                              }}
-                              disabled={resultAttachmentLocked}
-                              onMouseEnter={(e) => {
-                                if (resultAttachmentLocked) return;
-                                e.currentTarget.classList.add('grad-hover-outline');
-                                e.currentTarget.style.transform = 'translateY(-2px)';
-                                e.currentTarget.style.boxShadow = '0 6px 20px rgba(192, 57, 43, 0.4)';
-                              }}
-                              onMouseLeave={(e) => {
-                                if (resultAttachmentLocked) return;
-                                e.currentTarget.classList.remove('grad-hover-outline');
-                                e.currentTarget.style.transform = 'translateY(0)';
-                                e.currentTarget.style.boxShadow = 'none';
-                              }}
-                              style={{
-                                padding: '10px 16px',
-                                background: resultAttachmentLocked ? '#95a5a6' : 'linear-gradient(120deg, #b91c3c, #d7263d)',
-                                color: '#fff',
-                                border: '2px solid transparent',
-                                borderRadius: '8px',
-                                cursor: resultAttachmentLocked ? 'not-allowed' : 'pointer',
-                                fontSize: '13px',
-                                fontWeight: '600',
-                                transition: 'all 0.2s ease',
-                                opacity: resultAttachmentLocked ? 0.75 : 1
-                              }}
-                            >
-                              <span className="grad-label">Choose File</span>
-                            </button>
-                            <span style={{ fontSize: '12px', color: colors.textMuted }}>
-                              {resultAttachmentFile ? resultAttachmentFile.name : 'No file chosen'}
-                            </span>
-                          </div>
-                          <input
-                            ref={resultAttachmentInputRef}
-                            type="file"
-                            accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                            onChange={handleResultAttachmentChange}
-                            disabled={resultAttachmentLocked}
-                            style={{ display: 'none' }}
-                          />
-                        </div>
-
-                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '30px', paddingTop: '25px', borderTop: '2px solid #ecf0f1' }}>
-                          <button
-                            type="button"
-                            onClick={closeAddResultModal}
-                            style={{
-                              padding: '12px 30px',
-                              backgroundColor: theme.bg.card,
-                              color: theme.text.secondary,
-                              border: `2px solid ${theme.border.default}`,
-                              borderRadius: '28px',
-                              cursor: 'pointer',
-                              fontSize: '15px',
-                              fontWeight: '600',
-                              transition: 'all 0.2s ease'
-                            }}
-                            onMouseOver={(e) => {
-                              e.currentTarget.classList.add('grad-hover-outline');
-                            }}
-                            onMouseOut={(e) => {
-                              e.currentTarget.classList.remove('grad-hover-outline');
-                            }}
-                          >
-                            <span className="grad-label">Cancel</span>
-                          </button>
-                          <button
-                            type="submit"
-                            disabled={resultSaving}
-                            style={{
-                              padding: '12px 30px',
-                              background: resultSaving ? '#95a5a6' : 'linear-gradient(120deg, #b91c3c, #d7263d)',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '18px',
-                              cursor: resultSaving ? 'not-allowed' : 'pointer',
-                              fontSize: '15px',
-                              fontWeight: '600',
-                              transition: 'all 0.2s ease'
-                            }}
-                            onMouseOver={(e) => {
-                              if (!resultSaving) {
-                                e.currentTarget.style.transform = 'translateY(-2px)';
-                                e.currentTarget.style.boxShadow = '0 6px 20px rgba(215, 38, 61, 0.4)';
-                              }
-                            }}
-                            onMouseOut={(e) => {
-                              e.currentTarget.style.transform = 'translateY(0)';
-                              e.currentTarget.style.boxShadow = 'none';
-                            }}
-                          >
-                            {resultSaving ? (resultEditMode ? 'Updating...' : 'Adding...') : (resultEditMode ? 'Update Result' : 'Add Result')}
-                          </button>
-                        </div>
-                      </form>
+                  <ModalFrame
+                    Icon={resultEditMode ? BsPencilSquare : BsClipboardData}
+                    title={resultEditMode ? 'Edit Result' : 'Add Result'}
+                    subtitle={resultEditMode ? 'Update the result information.' : 'Fill in the test result below.'}
+                    onClose={closeAddResultModal}
+                    onSubmit={handleAddResultSubmit}
+                    dark={isDarkMode}
+                    actions={<ModalButtons onCancel={closeAddResultModal} busy={resultSaving}
+                      busyLabel={resultEditMode ? 'Updating...' : 'Adding...'} label={resultEditMode ? 'Update Result' : 'Add Result'} />}
+                  >
+                    <ModalSection Icon={BsPersonBadge} title="Employee" hint="Who took the test" />
+                    <div className="form-row">
+                      <ModalField label="Employee" required span>
+                        <SearchableSelect
+                          value={resultFormData.employeeId}
+                          disabled={resultEditMode}
+                          required
+                          options={resultEmployeeOptions}
+                          placeholder="Type to search…"
+                          onChange={(selectedId) => {
+                            const selectedEmployee = employees.find(emp => String(emp.ID) === String(selectedId));
+                            setResultFormData({
+                              ...resultFormData,
+                              employeeId: selectedId,
+                              employeeName: selectedEmployee ? String(selectedEmployee.Name || '') : ''
+                            });
+                          }}
+                          style={resultEditMode ? modalFieldStyleDisabled : { ...modalFieldStyle, cursor: 'text' }}
+                        />
+                      </ModalField>
                     </div>
-                  </div>
+
+                    <ModalSection Icon={BsJournalCheck} title="Test" hint="Standard & when" />
+                    <div className="form-row">
+                      <ModalField label="Standard" required span>
+                        <SearchableSelect
+                          value={resultFormData.standard}
+                          disabled={resultEditMode}
+                          required
+                          options={resultStandardOptions}
+                          placeholder="Type to search…"
+                          onChange={async (newStandard) => {
+                            setIsResultPercentageManuallyEdited(false);
+                            setResultFormData(prev => ({ ...prev, standard: newStandard }));
+
+                            // Auto-fill Total Questions + Passing Criteria from the
+                            // selected standard's config - still editable afterwards.
+                            if (!newStandard) return;
+                            try {
+                              const info = await fetchData(`/info?standard=${encodeURIComponent(newStandard)}`);
+                              if (info && !Array.isArray(info)) {
+                                setResultFormData(prev => ({
+                                  ...prev,
+                                  standard: newStandard,
+                                  totalQuestions: info.Total_Questions != null ? String(info.Total_Questions) : prev.totalQuestions,
+                                  passingCriteria: info.Passing_Criteria != null ? String(info.Passing_Criteria).replace('%', '') : prev.passingCriteria
+                                }));
+                              }
+                            } catch (err) {
+                              console.warn('Failed to auto-fill standard info:', err);
+                            }
+                          }}
+                          style={resultEditMode ? modalFieldStyleDisabled : { ...modalFieldStyle, cursor: 'text' }}
+                        />
+                      </ModalField>
+                      <ModalField label="Result Date" required>
+                        <StyledDatePicker
+                          value={resultFormData.resultDate}
+                          onChange={(v) => setResultFormData({ ...resultFormData, resultDate: v })}
+                          style={modalFieldStyle}
+                        />
+                      </ModalField>
+                      <ModalField label="Result Time" required>
+                        <input
+                          type="time"
+                          value={resultFormData.resultTime}
+                          onChange={(e) => setResultFormData({ ...resultFormData, resultTime: e.target.value })}
+                          required
+                        />
+                      </ModalField>
+                    </div>
+
+                    <ModalSection Icon={BsBarChart} title="Marks" hint="Score & result" />
+                    <div className="form-row">
+                      <ModalField label="Total Questions" required>
+                        <input
+                          type="number"
+                          min="1"
+                          value={resultFormData.totalQuestions}
+                          onChange={(e) => {
+                            setIsResultPercentageManuallyEdited(false);
+                            setResultFormData({ ...resultFormData, totalQuestions: e.target.value });
+                          }}
+                          required
+                          placeholder="100"
+                        />
+                      </ModalField>
+                      <ModalField label="Correct Answers" required>
+                        <input
+                          type="number"
+                          min="0"
+                          value={resultFormData.correctAnswers}
+                          onChange={(e) => {
+                            setIsResultPercentageManuallyEdited(false);
+                            setResultFormData({ ...resultFormData, correctAnswers: e.target.value });
+                          }}
+                          required
+                          placeholder="85"
+                        />
+                      </ModalField>
+                      <ModalField label="Percentage (%)" required
+                        note={resultHasNegativeMarking
+                          ? 'Auto formula: (Correct - Wrong x 0.25) / Total x 100'
+                          : 'Auto formula: Correct / Total x 100'}>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          value={resultFormData.percentage}
+                          onChange={(e) => {
+                            setIsResultPercentageManuallyEdited(true);
+                            setResultFormData({ ...resultFormData, percentage: e.target.value });
+                          }}
+                          required
+                          placeholder="Auto calculated (editable)"
+                        />
+                      </ModalField>
+                      <ModalField label="Passing Criteria (%)" required>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={resultFormData.passingCriteria}
+                          onChange={(e) => setResultFormData({ ...resultFormData, passingCriteria: e.target.value })}
+                          required
+                        />
+                      </ModalField>
+                      <ModalField label="Result Status" span>
+                        <div style={{
+                          ...modalFieldStyleDisabled, cursor: 'default', fontWeight: 600,
+                          color: addResultStatusPreview === 'Pass' ? '#27ae60' : addResultStatusPreview === 'Fail' ? '#d7263d' : '#9a9aaa'
+                        }}>
+                          {addResultStatusPreview || 'Calculated from percentage and passing criteria'}
+                        </div>
+                      </ModalField>
+                    </div>
+
+                    <ModalSection Icon={BsPaperclip} title="Attachment" hint="PDF, DOC, DOCX" />
+                    <ModalFilePick
+                      note={resultAttachmentLockNote}
+                      current={resultEditMode && resultEditTarget && (String(resultEditTarget.HAS_PRACTICAL_ATTACHMENT) === '1' || resultEditTarget.HAS_PRACTICAL_ATTACHMENT === 1)
+                        ? (resultEditTarget.PRACTICAL_ATTACHMENT_NAME || 'Attachment') : null}
+                      onDownload={() => downloadResultAttachment(resultEditTarget)}
+                      onRemove={() => removeResultAttachment(resultEditTarget)}
+                      onChoose={() => { if (!resultAttachmentLocked) resultAttachmentInputRef.current?.click(); }}
+                      disabled={resultAttachmentLocked}
+                      fileName={resultAttachmentFile ? resultAttachmentFile.name : ''}
+                    />
+                    <input
+                      ref={resultAttachmentInputRef}
+                      type="file"
+                      accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                      onChange={handleResultAttachmentChange}
+                      disabled={resultAttachmentLocked}
+                      style={{ display: 'none' }}
+                    />
+                  </ModalFrame>
                 )}
 
                 {/* Removed certification type edit modal - now handled at certificate generation time */}
@@ -6628,15 +6094,13 @@ const TestingModule = () => {
         });
     }, [results, normalizePracticalBaseType, singlePracticalRequiredKeys]);
 
-    const eligibleEmployeeIds = useMemo(
-      () => [...new Set(eligibleEmployees.map((emp) => emp.empId))],
-      [eligibleEmployees]
-    );
-
-    const eligibleEmployeeNames = useMemo(
-      () => [...new Set(eligibleEmployees.map((emp) => emp.empName))],
-      [eligibleEmployees]
-    );
+    const eligibleEmployeeOptions = useMemo(() => {
+      const byId = new Map();
+      eligibleEmployees.forEach((emp) => {
+        if (!byId.has(emp.empId)) byId.set(emp.empId, { value: emp.empId, label: String(emp.empName || emp.empId), sub: emp.empId });
+      });
+      return Array.from(byId.values()).sort((a, b) => a.label.localeCompare(b.label));
+    }, [eligibleEmployees]);
 
     // Standards still PENDING a practical for the currently selected employee:
     // eligible (theory passed) but practical not yet added. When no employee is
@@ -6852,7 +6316,7 @@ const TestingModule = () => {
         const actorId = getActorId();
         const actorName = getActorName();
         const response = await fetch(
-          `${API_BASE_URL}/api/test-results/legacy/${result.ID}/${encodeURIComponent(result.STANDARD)}/${encodeURIComponent(result.DATE)}?actorId=${encodeURIComponent(actorId)}&actorName=${encodeURIComponent(actorName)}`,
+          `${API_BASE_URL}/api/test-results/legacy?id=${encodeURIComponent(result.ID)}&standard=${encodeURIComponent(result.STANDARD)}&date=${encodeURIComponent(result.DATE)}&actorId=${encodeURIComponent(actorId)}&actorName=${encodeURIComponent(actorName)}`,
           { method: 'DELETE' }
         );
 
@@ -7149,87 +6613,27 @@ const TestingModule = () => {
                       <td style={{ padding: '16px 20px', textAlign: 'center' }}>
                         <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                           <button
+                            className="ghost-btn small"
                             onClick={() => downloadPracticalAttachment(result)}
                             disabled={!hasAttachment}
-                            style={{
-                              padding: '8px',
-                              backgroundColor: hasAttachment ? '#1a1a2e' : '#95a5a6',
-                              color: 'white',
-                              border: hasAttachment ? '2px solid #1a1a2e' : '2px solid #95a5a6',
-                              borderRadius: '28px',
-                              cursor: hasAttachment ? 'pointer' : 'not-allowed',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              transition: 'all 0.2s ease'
-                            }}
                             title={hasAttachment ? 'Download Attachment' : 'No attachment available'}
-                            onMouseOver={(e) => {
-                              if (!hasAttachment) return;
-                              e.currentTarget.style.backgroundColor = '#e1e2e2ff';
-                              e.currentTarget.style.color = '#1a1a2e';
-                            }}
-                            onMouseOut={(e) => {
-                              e.currentTarget.style.backgroundColor = hasAttachment ? '#1a1a2e' : '#95a5a6';
-                              e.currentTarget.style.color = 'white';
-                            }}
-                          >
-                            <Download size={16} />
+                                      style={!hasAttachment ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+                                    >
+                            <Download size={15} />
                           </button>
                           <button
+                            className="ghost-btn small"
                             onClick={() => handleEdit(result)}
-                            style={{
-                              padding: '8px',
-                              backgroundColor: '#1a1a2e',
-                              color: 'white',
-                              border: '2px solid #1a1a2e',
-                              borderRadius: '28px',
-                              cursor: 'pointer',
-                              marginRight: '8px',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              transition: 'all 0.2s ease'
-                            }}
                             title="Edit Practical Result"
-                            onMouseOver={(e) => {
-                              e.currentTarget.style.backgroundColor = '#e1e2e2ff';
-                              e.currentTarget.style.color = '#1a1a2e';
-                            }}
-                            onMouseOut={(e) => {
-                              e.currentTarget.style.backgroundColor = '#1a1a2e';
-                              e.currentTarget.style.color = 'white';
-                            }}
                           >
-                            <Edit2 size={16} />
+                            <Edit2 size={15} />
                           </button>
                           <button
+                            className="ghost-btn small"
                             onClick={() => handleDelete(result)}
-                            style={{
-                              padding: '8px',
-                              background: 'linear-gradient(120deg, #b91c3c, #d7263d)',
-                              color: 'white',
-                              border: '2px solid transparent',
-                              borderRadius: '28px',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              transition: 'all 0.2s ease'
-                            }}
                             title="Delete Practical Result"
-                            onMouseOver={(e) => {
-                              e.currentTarget.style.background = '#e1e2e2ff';
-                              e.currentTarget.style.border = '2px solid #c0392b';
-                              e.currentTarget.style.color = '#c0392b';
-                            }}
-                            onMouseOut={(e) => {
-                              e.currentTarget.style.background = 'linear-gradient(120deg, #b91c3c, #d7263d)';
-                              e.currentTarget.style.border = '2px solid transparent';
-                              e.currentTarget.style.color = 'white';
-                            }}
                           >
-                            <Trash2 size={16} />
+                            <Trash2 size={15} />
                           </button>
                         </div>
                       </td>
@@ -7259,52 +6663,11 @@ const TestingModule = () => {
 
         {/* Add Practical Result Modal */}
         {showModal && (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(26, 26, 46, 0.85)',
-            backdropFilter: 'blur(4px)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 1000,
-            padding: '20px',
-            marginLeft: 0
-          }}>
-            <div style={{
-              backgroundColor: theme.bg.card,
-              padding: isMobile ? '22px 16px' : '35px',
-              borderRadius: '28px',
-              width: '100%',
-              maxWidth: isMobile ? '100%' : '650px',
-              maxHeight: '90vh',
-              overflowY: 'auto',
-              boxShadow: `0 20px 60px ${isDarkMode ? 'rgba(0,0,0,0.5)' : 'rgba(0, 0, 0, 0.3)'}`,
-              animation: 'fadeIn 0.2s ease'
-            }}>
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '25px',
-                borderBottom: '3px solid #d7263d',
-                paddingBottom: '15px'
-              }}>
-                <h3 style={{
-                  margin: 0,
-                  color: theme.text.primary,
-                  fontSize: '1.6em',
-                  fontWeight: '600'
-                }}>
-                  {editMode ? 'Edit Practical Result' : 'Add Practical Result'}
-                </h3>
-                <button
-                  type="button"
-                  className="close-modal-btn"
-                  onClick={() => {
+          <ModalFrame
+            Icon={editMode ? BsPencilSquare : BsClipboardData}
+            title={editMode ? 'Edit Practical Result' : 'Add Practical Result'}
+            subtitle={editMode ? 'Update the practical result.' : 'Fill in the practical result below.'}
+            onClose={() => {
                     setShowModal(false);
                     setEditMode(false);
                     setCurrentResult(null);
@@ -7312,449 +6675,132 @@ const TestingModule = () => {
                     setFormData({ employeeId: '', employeeName: '', standard: '', standardFullName: '', totalQuestions: '100', correctAnswers: '', percentage: '', passingCriteria: '75' });
                     resetAttachment();
                   }}
-                  style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              <form onSubmit={handleSubmit}>
-                <div style={{ display: 'grid', gridTemplateColumns: twoColumnGrid, gap: '15px', marginBottom: '22px' }}>
-                  <div>
-                    <label style={{ 
-                      display: 'block', 
-                      marginBottom: '8px', 
-                      fontWeight: '600',
-                      color: colors.text,
-                      fontSize: '0.95em'
-                    }}>
-                      Employee ID:
-                    </label>
-                    <SearchableSelect
-                      value={formData.employeeId}
-                      required
-                      disabled={editMode}
-                      options={eligibleEmployeeIds}
-                      placeholder="Type to search…"
-                      onChange={(selectedId) => {
-                        const selectedEmp = eligibleEmployees.find(emp => String(emp.empId) === String(selectedId));
-                        setFormData({
-                          ...formData,
-                          employeeId: selectedId,
-                          employeeName: selectedEmp ? selectedEmp.empName : '',
-                          standard: '' // reset — standards depend on the selected employee
-                        });
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '12px 15px',
-                        border: `2px solid ${colors.inputBorder}`,
-                        borderRadius: '4px',
-                        fontSize: '15px',
-                        transition: 'border-color 0.2s ease',
-                        outline: 'none',
-                        boxSizing: 'border-box',
-                        backgroundColor: editMode ? colors.cardAltBg : colors.inputBg,
-                        color: colors.text,
-                        cursor: editMode ? 'not-allowed' : 'text',
-                        opacity: editMode ? 0.7 : 1
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ 
-                      display: 'block', 
-                      marginBottom: '8px', 
-                      fontWeight: '600',
-                      color: colors.text,
-                      fontSize: '0.95em'
-                    }}>
-                      Employee Name:
-                    </label>
-                    <SearchableSelect
-                      value={formData.employeeName || ''}
-                      required
-                      disabled={editMode}
-                      options={eligibleEmployeeNames}
-                      placeholder="Type to search…"
-                      onChange={(selectedName) => {
-                        const selectedEmp = eligibleEmployees.find(emp => emp.empName === selectedName);
-                        setFormData({
-                          ...formData,
-                          employeeName: selectedName,
-                          employeeId: selectedEmp ? selectedEmp.empId : '',
-                          standard: '' // reset — standards depend on the selected employee
-                        });
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '12px 15px',
-                        border: `2px solid ${colors.inputBorder}`,
-                        borderRadius: '4px',
-                        fontSize: '15px',
-                        transition: 'border-color 0.2s ease',
-                        outline: 'none',
-                        boxSizing: 'border-box',
-                        backgroundColor: editMode ? colors.cardAltBg : colors.inputBg,
-                        color: colors.text,
-                        cursor: editMode ? 'not-allowed' : 'text',
-                        opacity: editMode ? 0.7 : 1
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ marginBottom: '22px' }}>
-                  <label style={{ 
-                    display: 'block', 
-                    marginBottom: '8px', 
-                    fontWeight: '600',
-                    color: colors.text,
-                    fontSize: '0.95em'
-                  }}>
-                    Standard:
-                  </label>
-                  <SearchableSelect
-                    value={formData.standard}
-                    onChange={(v) => setFormData({ ...formData, standard: v })}
-                    required
-                    disabled={editMode || availableStandardsForEmployee.length === 0}
-                    options={availableStandardsForEmployee}
-                    placeholder={
-                      !formData.employeeId
-                        ? 'Select employee first'
-                        : (availableStandardsForEmployee.length === 0 ? 'No pending standards' : 'Type to search…')
-                    }
-                    style={{
-                      width: '100%',
-                      padding: '12px 15px',
-                      border: `2px solid ${colors.inputBorder}`,
-                      borderRadius: '4px',
-                        fontSize: '15px',
-                      transition: 'border-color 0.2s ease',
-                      outline: 'none',
-                      boxSizing: 'border-box',
-                      backgroundColor: editMode ? colors.cardAltBg : colors.inputBg,
-                      color: colors.text,
-                      cursor: editMode ? 'not-allowed' : 'text',
-                      opacity: editMode ? 0.7 : 1
-                    }}
-                  />
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: twoColumnGrid, gap: '15px', marginBottom: '22px' }}>
-                  <div>
-                    <label style={{ 
-                      display: 'block', 
-                      marginBottom: '8px', 
-                      fontWeight: '600',
-                      color: colors.text,
-                      fontSize: '0.95em'
-                    }}>
-                      Total Questions:
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={formData.totalQuestions}
-                      onChange={(e) => {
-                        setIsPracticalPercentageManuallyEdited(false);
-                        setFormData({ ...formData, totalQuestions: e.target.value });
-                      }}
-                      required
-                      style={{
-                        width: '100%',
-                        padding: '12px 15px',
-                        border: `2px solid ${colors.inputBorder}`,
-                        borderRadius: '4px',
-                        fontSize: '15px',
-                        transition: 'border-color 0.2s ease',
-                        outline: 'none',
-                        boxSizing: 'border-box',
-                        backgroundColor: colors.inputBg,
-                        color: colors.text
-                      }}
-                      onFocus={e => e.target.style.borderColor = '#1a1a2e'}
-                      onBlur={e => e.target.style.borderColor = colors.inputBorder}
-                      placeholder="100"
-                    />
-                  </div>
-                  <div>
-                    <label style={{ 
-                      display: 'block', 
-                      marginBottom: '8px', 
-                      fontWeight: '600',
-                      color: colors.text,
-                      fontSize: '0.95em'
-                    }}>
-                      Correct Answers:
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={formData.correctAnswers}
-                      onChange={(e) => {
-                        setIsPracticalPercentageManuallyEdited(false);
-                        setFormData({ ...formData, correctAnswers: e.target.value });
-                      }}
-                      required
-                      style={{
-                        width: '100%',
-                        padding: '12px 15px',
-                        border: `2px solid ${colors.inputBorder}`,
-                        borderRadius: '4px',
-                        fontSize: '15px',
-                        transition: 'border-color 0.2s ease',
-                        outline: 'none',
-                        boxSizing: 'border-box',
-                        backgroundColor: colors.inputBg,
-                        color: colors.text
-                      }}
-                      onFocus={e => e.target.style.borderColor = '#1a1a2e'}
-                      onBlur={e => e.target.style.borderColor = colors.inputBorder}
-                      placeholder="85"
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: twoColumnGrid, gap: '15px', marginBottom: '22px' }}>
-                  <div>
-                    <label style={{ 
-                      display: 'block', 
-                      marginBottom: '8px', 
-                      fontWeight: '600',
-                      color: colors.text,
-                      fontSize: '0.95em'
-                    }}>
-                      Percentage (%):
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      value={formData.percentage}
-                      onChange={(e) => {
-                        setIsPracticalPercentageManuallyEdited(true);
-                        setFormData({ ...formData, percentage: e.target.value });
-                      }}
-                      required
-                      style={{
-                        width: '100%',
-                        padding: '12px 15px',
-                        border: `2px solid ${colors.inputBorder}`,
-                        borderRadius: '4px',
-                        fontSize: '15px',
-                        transition: 'border-color 0.2s ease',
-                        outline: 'none',
-                        backgroundColor: colors.inputBg,
-                        color: colors.text,
-                        boxSizing: 'border-box'
-                      }}
-                      onFocus={e => e.target.style.borderColor = '#1a1a2e'}
-                      onBlur={e => e.target.style.borderColor = colors.inputBorder}
-                      placeholder="Auto calculated (editable)"
-                    />
-                    <div style={{ marginTop: '6px', fontSize: '12px', color: colors.textMuted }}>
-                      Auto formula: Correct / Total x 100
-                    </div>
-                  </div>
-                  <div>
-                    <label style={{ 
-                      display: 'block', 
-                      marginBottom: '8px', 
-                      fontWeight: '600',
-                      color: colors.text,
-                      fontSize: '0.95em'
-                    }}>
-                      Passing Criteria (%):
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={formData.passingCriteria}
-                      onChange={(e) => setFormData({ ...formData, passingCriteria: e.target.value })}
-                      required
-                      style={{
-                        width: '100%',
-                        padding: '12px 15px',
-                        border: `2px solid ${colors.inputBorder}`,
-                        borderRadius: '4px',
-                        fontSize: '15px',
-                        transition: 'border-color 0.2s ease',
-                        outline: 'none',
-                        boxSizing: 'border-box',
-                        backgroundColor: colors.inputBg,
-                        color: colors.text
-                      }}
-                      onFocus={e => e.target.style.borderColor = '#1a1a2e'}
-                      onBlur={e => e.target.style.borderColor = colors.inputBorder}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ marginBottom: '22px' }}>
-                  <label style={{
-                    display: 'block',
-                    marginBottom: '8px',
-                    fontWeight: '600',
-                    color: colors.text,
-                    fontSize: '0.95em'
-                  }}>
-                    Attachment (PDF, DOC, DOCX):
-                  </label>
-                  {editMode && currentResult && (String(currentResult.HAS_PRACTICAL_ATTACHMENT) === '1' || currentResult.HAS_PRACTICAL_ATTACHMENT === 1) && (
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '10px',
-                      padding: '10px 12px',
-                      borderRadius: '8px',
-                      backgroundColor: colors.cardAltBg,
-                      border: `1px solid ${colors.inputBorder}`,
-                      marginBottom: '10px'
-                    }}>
-                      <span style={{ color: colors.text, fontSize: '0.9em' }}>
-                        Current: {currentResult.PRACTICAL_ATTACHMENT_NAME || 'Attachment'}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => downloadPracticalAttachment(currentResult)}
-                        style={{
-                          padding: '6px 12px',
-                          backgroundColor: '#1a1a2e',
-                          color: '#fff',
-                          border: 'none',
-                          borderRadius: '20px',
-                          cursor: 'pointer',
-                          fontSize: '12px',
-                          fontWeight: '600'
-                        }}
-                      >
-                        Download
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removePracticalAttachment(currentResult)}
-                        style={{
-                          padding: '6px 12px',
-                          backgroundColor: '#d7263d',
-                          color: '#fff',
-                          border: 'none',
-                          borderRadius: '20px',
-                          cursor: 'pointer',
-                          fontSize: '12px',
-                          fontWeight: '600'
-                        }}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      onClick={() => attachmentInputRef.current?.click()}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.classList.add('grad-hover-outline');
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(192, 57, 43, 0.4)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.classList.remove('grad-hover-outline');
-                        e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow = 'none';
-                      }}
-                      style={{
-                        padding: '10px 16px',
-                        background: 'linear-gradient(120deg, #b91c3c, #d7263d)',
-                        color: '#fff',
-                        border: '2px solid transparent',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        fontSize: '13px',
-                        fontWeight: '600',
-                        transition: 'all 0.2s ease'
-                      }}
-                    >
-                      <span className="grad-label">Choose File</span>
-                    </button>
-                    <span style={{ fontSize: '12px', color: colors.textMuted }}>
-                      {attachmentFile ? attachmentFile.name : 'No file chosen'}
-                    </span>
-                  </div>
-                  <input
-                    ref={attachmentInputRef}
-                    type="file"
-                    accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    onChange={handleAttachmentChange}
-                    style={{ display: 'none' }}
-                  />
-                </div>
-
-                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '30px', paddingTop: '25px', borderTop: '2px solid #ecf0f1' }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowModal(false);
-                      setEditMode(false);
-                      setCurrentResult(null);
-                      setIsPracticalPercentageManuallyEdited(false);
-                      setFormData({ employeeId: '', employeeName: '', standard: '', standardFullName: '', totalQuestions: '100', correctAnswers: '', percentage: '', passingCriteria: '75' });
-                      resetAttachment();
-                    }}
-                    style={{
-                      padding: '12px 30px',
-                      backgroundColor: theme.bg.card,
-                      color: theme.text.secondary,
-                      border: `2px solid ${theme.border.default}`,
-                      borderRadius: '28px',
-                      cursor: 'pointer',
-                      fontSize: '15px',
-                      fontWeight: '600',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onMouseOver={(e) => {
-                      e.currentTarget.classList.add('grad-hover-outline');
-                    }}
-                    onMouseOut={(e) => {
-                      e.currentTarget.classList.remove('grad-hover-outline');
-                    }}
-                  >
-                    <span className="grad-label">Cancel</span>
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    style={{
-                      padding: '12px 30px',
-                      background: loading ? '#95a5a6' : 'linear-gradient(120deg, #b91c3c, #d7263d)',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '18px',
-                      cursor: loading ? 'not-allowed' : 'pointer',
-                      fontSize: '15px',
-                      fontWeight: '600',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onMouseOver={(e) => {
-                      if (!loading) {
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(215, 38, 61, 0.4)';
-                      }
-                    }}
-                    onMouseOut={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = 'none';
-                    }}
-                  >
-                    {loading ? (editMode ? 'Updating...' : 'Adding...') : (editMode ? 'Update Result' : 'Add Result')}
-                  </button>
-                </div>
-              </form>
+            onSubmit={handleSubmit}
+            dark={isDarkMode}
+            actions={<ModalButtons onCancel={() => {
+                    setShowModal(false);
+                    setEditMode(false);
+                    setCurrentResult(null);
+                    setIsPracticalPercentageManuallyEdited(false);
+                    setFormData({ employeeId: '', employeeName: '', standard: '', standardFullName: '', totalQuestions: '100', correctAnswers: '', percentage: '', passingCriteria: '75' });
+                    resetAttachment();
+                  }} busy={loading}
+              busyLabel={editMode ? 'Updating...' : 'Adding...'} label={editMode ? 'Update Result' : 'Add Result'} />}
+          >
+            <ModalSection Icon={BsPersonBadge} title="Employee" hint="Who took the practical" />
+            <div className="form-row">
+              <ModalField label="Employee" required span>
+                <SearchableSelect
+                  value={formData.employeeId}
+                  required
+                  disabled={editMode}
+                  options={eligibleEmployeeOptions}
+                  placeholder="Type to search…"
+                  onChange={(selectedId) => {
+                    const selectedEmp = eligibleEmployees.find(emp => String(emp.empId) === String(selectedId));
+                    setFormData({
+                      ...formData,
+                      employeeId: selectedId,
+                      employeeName: selectedEmp ? selectedEmp.empName : '',
+                      standard: '' // reset — standards depend on the selected employee
+                    });
+                  }}
+                  style={editMode ? modalFieldStyleDisabled : { ...modalFieldStyle, cursor: 'text' }}
+                />
+              </ModalField>
             </div>
-          </div>
+
+            <ModalSection Icon={BsJournalCheck} title="Test" hint="Standard" />
+            <div className="form-row">
+              <ModalField label="Standard" required span>
+                <SearchableSelect
+                  value={formData.standard}
+                  onChange={(v) => setFormData({ ...formData, standard: v })}
+                  required
+                  disabled={editMode || availableStandardsForEmployee.length === 0}
+                  options={availableStandardsForEmployee}
+                  placeholder={
+                    !formData.employeeId
+                      ? 'Select employee first'
+                      : (availableStandardsForEmployee.length === 0 ? 'No pending standards' : 'Type to search…')
+                  }
+                  style={editMode || availableStandardsForEmployee.length === 0 ? modalFieldStyleDisabled : { ...modalFieldStyle, cursor: 'text' }}
+                />
+              </ModalField>
+            </div>
+
+            <ModalSection Icon={BsBarChart} title="Marks" hint="Score & result" />
+            <div className="form-row">
+              <ModalField label="Total Questions" required>
+                <input
+                  type="number"
+                  min="1"
+                  value={formData.totalQuestions}
+                  onChange={(e) => {
+                    setIsPracticalPercentageManuallyEdited(false);
+                    setFormData({ ...formData, totalQuestions: e.target.value });
+                  }}
+                  required
+                  placeholder="100"
+                />
+              </ModalField>
+              <ModalField label="Correct Answers" required>
+                <input
+                  type="number"
+                  min="0"
+                  value={formData.correctAnswers}
+                  onChange={(e) => {
+                    setIsPracticalPercentageManuallyEdited(false);
+                    setFormData({ ...formData, correctAnswers: e.target.value });
+                  }}
+                  required
+                  placeholder="85"
+                />
+              </ModalField>
+              <ModalField label="Percentage (%)" required note="Auto formula: Correct / Total x 100">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={formData.percentage}
+                  onChange={(e) => {
+                    setIsPracticalPercentageManuallyEdited(true);
+                    setFormData({ ...formData, percentage: e.target.value });
+                  }}
+                  required
+                  placeholder="Auto calculated (editable)"
+                />
+              </ModalField>
+              <ModalField label="Passing Criteria (%)" required>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={formData.passingCriteria}
+                  onChange={(e) => setFormData({ ...formData, passingCriteria: e.target.value })}
+                  required
+                />
+              </ModalField>
+            </div>
+
+            <ModalSection Icon={BsPaperclip} title="Attachment" hint="PDF, DOC, DOCX" />
+            <ModalFilePick
+              current={editMode && currentResult && (String(currentResult.HAS_PRACTICAL_ATTACHMENT) === '1' || currentResult.HAS_PRACTICAL_ATTACHMENT === 1)
+                ? (currentResult.PRACTICAL_ATTACHMENT_NAME || 'Attachment') : null}
+              onDownload={() => downloadPracticalAttachment(currentResult)}
+              onRemove={() => removePracticalAttachment(currentResult)}
+              onChoose={() => attachmentInputRef.current?.click()}
+              fileName={attachmentFile ? attachmentFile.name : ''}
+            />
+            <input
+              ref={attachmentInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              onChange={handleAttachmentChange}
+              style={{ display: 'none' }}
+            />
+          </ModalFrame>
         )}
       </div>
     );
@@ -8048,62 +7094,23 @@ const TestingModule = () => {
                     <td style={{ padding: '12px', border: `1px solid ${colors.border}`, color: colors.text }}>{employee.ID}</td>
                     <td style={{ padding: '12px', border: `1px solid ${colors.border}`, color: colors.text }}>{employee.Name}</td>
                     <td style={{ padding: '12px', textAlign: 'center', border: `1px solid ${colors.border}` }}>
+<div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
                       <button
+                        className="ghost-btn small"
                         onClick={() => handleEdit(employee)}
-                        style={{
-                          padding: '8px',
-                          backgroundColor: '#1a1a2e',
-                          color: 'white',
-                          border: '2px solid #1a1a2e',
-                          borderRadius: '28px',
-                          cursor: 'pointer',
-                          marginRight: '8px',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          transition: 'all 0.2s ease'
-                        }}
                         title="Edit Employee"
-                        onMouseOver={e => {
-                          e.currentTarget.style.backgroundColor = '#e1e2e2ff';
-                          e.currentTarget.style.color = '#1a1a2e';
-                        }}
-                        onMouseOut={e => {
-                          e.currentTarget.style.backgroundColor = '#1a1a2e';
-                          e.currentTarget.style.color = 'white';
-                        }}
                       >
-                        <Edit2 size={16} />
+                        <Edit2 size={15} />
                       </button>
                       <button
+                        className="ghost-btn small"
                         onClick={() => handleDelete(employee.ID)}
-                        style={{
-                          padding: '8px',
-                          background: 'linear-gradient(120deg, #b91c3c, #d7263d)',
-                          color: 'white',
-                          border: '2px solid transparent',
-                          borderRadius: '28px',
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          transition: 'all 0.2s ease'
-                        }}
                         title="Delete Employee"
-                        onMouseOver={e => {
-                          e.currentTarget.style.background = '#e1e2e2ff';
-                          e.currentTarget.style.border = '2px solid #c0392b';
-                          e.currentTarget.style.color = '#c0392b';
-                        }}
-                        onMouseOut={e => {
-                          e.currentTarget.style.background = 'linear-gradient(120deg, #b91c3c, #d7263d)';
-                          e.currentTarget.style.border = '2px solid transparent';
-                          e.currentTarget.style.color = 'white';
-                        }}
                       >
-                        <Trash2 size={16} />
+                        <Trash2 size={15} />
                       </button>
-                    </td>
+                    </div>
+</td>
                   </tr>
                 ))}
                 {filteredEmployees.length === 0 && (

@@ -203,6 +203,7 @@ function DynamicField({ field, value, onChange, readOnly, employees = [], signer
           options={employees.map(emp => ({
             value: String(emp.id),
             label: `${emp.full_name || emp.name}${(emp.department_name || emp.department) ? ` — ${emp.department_name || emp.department}` : ''}`,
+            sub: emp.employee_id,
           }))}
           emptyOptionLabel="Select employee…"
           placeholder="Type to search…"
@@ -236,6 +237,7 @@ function DynamicField({ field, value, onChange, readOnly, employees = [], signer
             options={employees.filter(emp => !picked.includes(String(emp.id))).map(emp => ({
               value: String(emp.id),
               label: `${emp.full_name || emp.name}${(emp.department_name || emp.department) ? ` — ${emp.department_name || emp.department}` : ''}`,
+              sub: emp.employee_id,
             }))}
             emptyOptionLabel={picked.length ? 'Add another employee…' : 'Select employees…'}
             placeholder="Type to search…"

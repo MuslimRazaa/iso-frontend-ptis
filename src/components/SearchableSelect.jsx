@@ -8,6 +8,8 @@ import { createPortal } from 'react-dom'
 // `options` is the searchable list — plain strings (value === label), or
 // {value, label} objects when the two differ (e.g. an employee id with a
 // "Name — Department" label) — filtered by label text as the user types.
+// An option may also carry `sub` (e.g. an employee id): shown small and light under the label,
+// and searchable, but never part of the text shown once the option is picked.
 // `extraOptions` are fixed {value, label} entries (e.g. a sentinel like
 // "__UNMATCHED__") that stay pinned below the searchable list and are never
 // filtered out by the typed query.
@@ -46,13 +48,13 @@ function SearchableSelect({ value, onChange, options, extraOptions, placeholder 
 
   // Normalize plain strings and {value,label} objects to the same shape.
   const normalized = useMemo(() => options.map(o =>
-    (o != null && typeof o === 'object') ? { value: o.value, label: o.label } : { value: o, label: String(o) }
+    (o != null && typeof o === 'object') ? { value: o.value, label: o.label, sub: o.sub } : { value: o, label: String(o) }
   ), [options])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return normalized
-    return normalized.filter(o => o.label.toLowerCase().includes(q))
+    return normalized.filter(o => o.label.toLowerCase().includes(q) || (o.sub != null && String(o.sub).toLowerCase().includes(q)))
   }, [normalized, query])
 
   const isEmptySelected = String(value ?? '') === String(emptyOptionValue ?? '')
@@ -107,7 +109,7 @@ function SearchableSelect({ value, onChange, options, extraOptions, placeholder 
           )}
           {filtered.length === 0 ? (
             <div style={{ padding: '10px 14px', fontSize: 13, color: '#9a9aaa' }}>No matches</div>
-          ) : filtered.map(({ value: v, label }) => (
+          ) : filtered.map(({ value: v, label, sub }) => (
             <div
               key={v}
               onMouseDown={() => pick(v)}
@@ -119,7 +121,7 @@ function SearchableSelect({ value, onChange, options, extraOptions, placeholder 
               }}
               onMouseEnter={e => { e.currentTarget.style.background = '#fff5f6' }}
               onMouseLeave={e => { e.currentTarget.style.background = String(v) === String(value) ? '#fff5f6' : 'transparent' }}
-            >{label}</div>
+            >{label}{sub ? <div style={{ fontSize: 11, color: '#9a9aaa', fontWeight: 400, marginTop: 1 }}>{sub}</div> : null}</div>
           ))}
           {(extraOptions || []).map(({ value: v, label }) => (
             <div

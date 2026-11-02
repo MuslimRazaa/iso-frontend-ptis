@@ -871,9 +871,14 @@ function JobLogDescription() {
     jlrEmployees.forEach(e => { if (e.department) m.set(e.name, e.department) })
     return m
   }, [jlrEmployees])
+  const codeByName = useMemo(() => {
+    const m = new Map()
+    jlrEmployees.forEach(e => { if (e.empCode) m.set(e.name, e.empCode) })
+    return m
+  }, [jlrEmployees])
   const withDept = (name) => {
     const dept = departmentByName.get(name)
-    return { name, label: dept ? `${name} — ${dept}` : name }
+    return { name, label: dept ? `${name} — ${dept}` : name, sub: codeByName.get(name) }
   }
   // Dedupe by name (not by the whole {name,label} object — two entries for
   // the same name would otherwise both survive) while keeping each name's
@@ -889,7 +894,7 @@ function JobLogDescription() {
   // attendance since their name won't match any employee's full_name).
   const inspectorOptions = useMemo(
     () => dedupeByName([...jlrEmployees.map(e => withDept(e.name)), ...jlInspectors.map(i => withDept(i.name))]),
-    [jlrEmployees, jlInspectors, departmentByName]
+    [jlrEmployees, jlInspectors, departmentByName, codeByName]
   )
 
   // Team Member options = the same, plus the team-member roster (seeded +
@@ -900,7 +905,7 @@ function JobLogDescription() {
       ...jlInspectors.map(i => withDept(i.name)),
       ...jlTeams.map(t => withDept(t.name)),
     ]),
-    [jlrEmployees, jlInspectors, jlTeams, departmentByName]
+    [jlrEmployees, jlInspectors, jlTeams, departmentByName, codeByName]
   )
 
   const appendInspector = (field, name) => {
@@ -1259,8 +1264,11 @@ function JobLogDescription() {
     const newArr = splitNames(changeNewValue)
     const oldArr = splitNames(changeOldValue)
 
-    if (newArr.length === 0 || !changeStart || !changeEnd) {
-      setChangeError('At least one inspector/team member and both dates are required.')
+    // With no job end date yet, the end date can stay empty — it follows the job's later.
+    if (newArr.length === 0 || !changeStart || (!changeEnd && modalState.endDate)) {
+      setChangeError(modalState.endDate
+        ? 'At least one inspector/team member and both dates are required.'
+        : 'At least one inspector/team member and the start date are required.')
       return
     }
 
@@ -1290,7 +1298,7 @@ function JobLogDescription() {
           old_value: job.old_value,
           new_value: job.new_value,
           start_date: changeStart,
-          end_date: changeEnd,
+          end_date: changeEnd || null,
           reason: changeReason.trim() || null,
         }))
       }
@@ -1826,11 +1834,11 @@ function JobLogDescription() {
                     const changes = entry.inspectorChanges || []
                     const inspectorReplaceReason = changes
                       .filter(c => c.fieldType === 'inspector' && c.changeType === 'replace')
-                      .map(c => `${c.oldValue} → ${c.newValue} (${c.startDate} – ${c.endDate})\n${c.reason || ''}`.trim())
+                      .map(c => `${c.oldValue} → ${c.newValue} (${c.startDate} – ${c.endDate || 'ongoing'})\n${c.reason || ''}`.trim())
                       .join('\n\n')
                     const teamReplaceReason = changes
                       .filter(c => c.fieldType === 'team' && c.changeType === 'replace')
-                      .map(c => `${c.oldValue} → ${c.newValue} (${c.startDate} – ${c.endDate})\n${c.reason || ''}`.trim())
+                      .map(c => `${c.oldValue} → ${c.newValue} (${c.startDate} – ${c.endDate || 'ongoing'})\n${c.reason || ''}`.trim())
                       .join('\n\n')
                     const isExpanded = expandedRows.has(entry.id)
                     // In progress rows glow amber and incomplete ones red, as expiring and
@@ -1951,7 +1959,7 @@ function JobLogDescription() {
                               <span style={{ fontWeight: 600, color: '#1f1f27' }}>
                                 {c.changeType === 'replace' ? `${c.oldValue} → ${c.newValue}` : c.changeType === 'remove' ? `− ${c.oldValue}` : `+ ${c.newValue}`}
                               </span>
-                              <span style={{ color: '#595966' }}>{c.changeType === 'remove' ? `on the job ${c.startDate} – ${c.endDate}` : `${c.startDate} – ${c.endDate}`}</span>
+                              <span style={{ color: '#595966' }}>{c.changeType === 'remove' ? `on the job ${c.startDate} – ${c.endDate}` : `${c.startDate} – ${c.endDate || 'ongoing'}`}</span>
                               {c.reason && <InfoTooltip text={c.reason} />}
                             </div>
                           </td>
@@ -2472,11 +2480,16 @@ function JobLogDescription() {
                       <StyledDatePicker value={changeStart} style={modalSelectStyle} onChange={setChangeStart}
                         min={changeMode === 'remove' ? (modalState.startDate || undefined) : undefined}
                         max={changeMode === 'remove' ? (modalState.endDate || undefined) : undefined} /></label>
-                    <label><span>{changeMode === 'remove' ? 'Last day on the job *' : 'End Date *'}</span>
+                    <label><span>{changeMode === 'remove' ? 'Last day on the job *' : modalState.endDate ? 'End Date *' : 'End Date (optional)'}</span>
                       <StyledDatePicker value={changeEnd} style={modalSelectStyle} onChange={setChangeEnd}
                         min={changeMode === 'remove' ? (changeStart || modalState.startDate || undefined) : undefined}
                         max={changeMode === 'remove' ? (modalState.endDate || undefined) : undefined} /></label>
                   </div>
+                  {changeMode !== 'remove' && !modalState.endDate && (
+                    <p style={{ margin: '4px 0 0', fontSize: 12, color: '#9a9aaa' }}>
+                      This job has no end date yet, so you can leave the end date empty. It is filled in automatically when the job's end date is set.
+                    </p>
+                  )}
                   {changeMode === 'remove' && (
                     <p style={{ margin: '4px 0 0', fontSize: 12, color: '#9a9aaa' }}>
                       Field attendance for this person is counted only from the first date to the last date here (Sundays and holidays in between included, unless they are on leave). Days after the last date no longer count for them; the rest of the team is not affected.
@@ -2506,7 +2519,7 @@ function JobLogDescription() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {inspectorChangesList.map(c => {
                       const today = localToday()
-                      const isActiveReplacement = c.changeType === 'replace' && c.endDate >= today
+                      const isActiveReplacement = c.changeType === 'replace' && (!c.endDate || c.endDate >= today)
                       return (
                       <div key={c.id} style={{
                         display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', flexWrap: 'wrap',
@@ -2523,7 +2536,7 @@ function JobLogDescription() {
                         <span style={{ flex: 1, fontWeight: 600 }}>
                           {c.changeType === 'replace' ? `${c.oldValue} → ${c.newValue}` : c.changeType === 'remove' ? `− ${c.oldValue}` : `+ ${c.newValue}`}
                         </span>
-                        <span style={{ color: '#595966' }}>{c.changeType === 'remove' ? `on the job ${c.startDate} – ${c.endDate}` : `${c.startDate} – ${c.endDate}`}</span>
+                        <span style={{ color: '#595966' }}>{c.changeType === 'remove' ? `on the job ${c.startDate} – ${c.endDate}` : `${c.startDate} – ${c.endDate || 'ongoing'}`}</span>
                         {c.reason && <InfoTooltip text={c.reason} />}
                         {isActiveReplacement && canEdit('operations') && (
                           <button type="button" className="ghost-btn" onClick={() => endReplacementNow(c)}

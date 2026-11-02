@@ -34,6 +34,7 @@ function EmployeeMultiPicker({ value, onChange, employees = [], style, emptyLabe
         options={employees.filter(emp => !picked.includes(String(emp.id))).map(emp => ({
           value: String(emp.id),
           label: `${empName(emp)}${(emp.department_name || emp.department) ? ` — ${emp.department_name || emp.department}` : ''}`,
+          sub: emp.employee_id,
         }))}
         emptyOptionLabel={emptyLabel || (picked.length ? 'Add another employee…' : 'Select employees…')}
         placeholder="Type to search…"

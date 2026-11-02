@@ -28,6 +28,7 @@ function MultiSelect({ value, onChange, options, placeholder = 'Select…', sear
   // actually gets stored/toggled (e.g. JLR's Inspector Name/Team, where it
   // must stay the exact employee name the ERP's attendance matching depends
   // on). Selected chips always show the plain name, never the label.
+  // An option may carry `sub` (e.g. an employee id), shown small and light under its row.
   const normalized = options.map(o => (typeof o === 'string' ? { name: o, label: o } : o))
 
   const computeRect = useCallback(() => {
@@ -113,7 +114,7 @@ function MultiSelect({ value, onChange, options, placeholder = 'Select…', sear
   }
 
   const filtered = normalized.filter(
-    o => o.label.toLowerCase().includes(query.toLowerCase()) || selected.includes(o.name)
+    o => o.label.toLowerCase().includes(query.toLowerCase()) || (o.sub != null && String(o.sub).toLowerCase().includes(query.toLowerCase())) || selected.includes(o.name)
   )
 
   return (
@@ -187,7 +188,7 @@ function MultiSelect({ value, onChange, options, placeholder = 'Select…', sear
           {filtered.length === 0 && !canAdd && (
             <div style={{ padding: '12px 14px', color: '#9a9aaa', fontSize: 13 }}>No matches</div>
           )}
-          {filtered.map(({ name, label }) => {
+          {filtered.map(({ name, label, sub }) => {
             const isSel = selected.includes(name)
             return (
               <div key={name} onClick={() => toggle(name)}
@@ -200,7 +201,7 @@ function MultiSelect({ value, onChange, options, placeholder = 'Select…', sear
                 onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = '#fff' }}
               >
                 <input type="checkbox" readOnly checked={isSel} style={{ accentColor: '#d7263d' }} />
-                {label}
+                <div>{label}{sub ? <div style={{ fontSize: 11, color: '#9a9aaa', fontWeight: 400, marginTop: 1 }}>{sub}</div> : null}</div>
               </div>
             )
           })}
