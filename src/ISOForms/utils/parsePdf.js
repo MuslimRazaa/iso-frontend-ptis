@@ -1426,6 +1426,40 @@ export async function parsePdf(file) {
   }
   fields.push(...regionFields)
 
+  // An "OK" cell and a "Not OK" cell of the same heading on the same row ("Cleaning" over
+  // OK | Not OK) are one choice, not two boxes to type in: one field, the mark going in
+  // the box of the one picked.
+  for (let i = fields.length - 1; i >= 0; i--) {
+    const ok = fields[i]
+    const m = /^(.*?)\s*OK$/.exec(String(ok.label))
+    if (!m || /\bnot\s*$/i.test(m[1]) || !ok.pdfCoords || /^(radio|checkbox-group)$/.test(ok.type)) continue
+    const stem = m[1]
+    const notAt = fields.findIndex(r => r !== ok && r.pdfCoords && r.pdfCoords.page === ok.pdfCoords.page &&
+      !/^(radio|checkbox-group)$/.test(r.type) &&
+      String(r.label).toLowerCase() === `${stem} Not OK`.trim().toLowerCase() &&
+      Math.abs(r.pdfCoords.y - ok.pdfCoords.y) <= 6)
+    if (notAt < 0) continue
+    const no = fields[notAt]
+    const mark = (r, text) => {
+      const c = r.pdfCoords, size = Math.max(6, Math.min(12, c.height - 4, c.width - 4))
+      return { label: text, box: { x: c.x + (c.width - size) / 2, y: c.y + (c.height - size) / 2, width: size, height: size } }
+    }
+    const first = ok.pdfCoords.x < no.pdfCoords.x ? ok : no, second = first === ok ? no : ok
+    const keep = Math.min(i, notAt)
+    fields[keep] = {
+      ...first,
+      label: stem || 'OK / Not OK',
+      type: 'radio',
+      options: 'OK, Not OK',
+      pdfCoords: {
+        ...first.pdfCoords,
+        x: first.pdfCoords.x, width: second.pdfCoords.x + second.pdfCoords.width - first.pdfCoords.x,
+        optionMarks: first === ok ? [mark(ok, 'OK'), mark(no, 'Not OK')] : [mark(no, 'OK'), mark(ok, 'Not OK')],
+      },
+    }
+    fields.splice(Math.max(i, notAt), 1)
+  }
+
   // Deduplicate by label (table structures repeat the same label text, and a
   // box both passes independently found carries the same label from each).
   // Two fields with one name but standing in different places are two inputs (a
