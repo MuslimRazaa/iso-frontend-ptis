@@ -65,6 +65,8 @@ function FormFiller() {
 
 
   const [submitting, setSubmitting] = useState(false)
+  const [askLabel, setAskLabel] = useState(false)
+  const [labelDraft, setLabelDraft] = useState('')
   const [error, setError] = useState('')
   const [offline, setOffline] = useState(false)
 
@@ -236,7 +238,9 @@ function FormFiller() {
   const removeAttachment = (index) =>
     setAttachments(prev => prev.filter((_, i) => i !== index))
 
-  const handleSubmit = async (e) => {
+  // `label` is the optional name asked for when a new form is submitted; undefined means
+  // "not asked yet", so the prompt opens once the form itself has passed validation.
+  const handleSubmit = async (e, label) => {
     e.preventDefault()
     setError('')
 
@@ -253,6 +257,8 @@ function FormFiller() {
     const roles = template.requiresApproval === false ? [] : (template.approvalRoles?.length ? template.approvalRoles : [{ key: 'approver', label: 'Approver' }])
     const missingRole = roles.find(r => !roleApprovers[r.key])
     if (missingRole) { setError(`Please select who fills the "${missingRole.label || missingRole.key}" role.`); return }
+    if (!isEdit && label === undefined) { setLabelDraft(''); setAskLabel(true); return }
+    setAskLabel(false)
 
     setSubmitting(true)
     // One row per role — who it's assigned to, by name (the backend has no
@@ -321,10 +327,12 @@ function FormFiller() {
 
     const createdBy = resolvedEmployeeId || getActorId()
     const createdByName = getActorName()
+    // "First Aid Box Checklist" + "First Floor" -> "First Aid Box Checklist (First Floor)"
+    const entryName = label && label.trim() ? `${template.name || ''} (${label.trim()})` : (template.name || '')
     try {
       const formData = new FormData()
       formData.append('template_id', template.id)
-      formData.append('template_name', template.name || '')
+      formData.append('template_name', entryName)
       formData.append('form_data', JSON.stringify(signedValues))
       formData.append('approvals', JSON.stringify(approvals))
       if (createdBy) formData.append('created_by', createdBy)
@@ -348,7 +356,7 @@ function FormFiller() {
       addOfflineEntry({
         id: `local-${Date.now()}`,
         template_id: template.id,
-        template_name: template.name,
+        template_name: entryName,
         form_data: JSON.stringify(signedValues),
         related_employee_id: primary.approver_employee_id || '',
         related_employee_name: primary.approver_employee_name || '',
@@ -607,6 +615,37 @@ function FormFiller() {
           </button>
         </div>
       </form>
+
+      {askLabel && (
+        <div className="modal-overlay" onClick={() => setAskLabel(false)}>
+          <div className="modal-content" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 style={{ margin: 0, fontSize: 20 }}>Name this form?</h2>
+            </div>
+            <form
+              className="modal-form"
+              onSubmit={(e) => { e.preventDefault(); handleSubmit(e, labelDraft) }}
+            >
+              <p style={{ margin: '0 0 12px', fontSize: 14, color: '#7a7a8c' }}>
+                Optional. It is shown in brackets after the form name, e.g. {template?.name || 'Form'} ({labelDraft.trim() || 'First Floor'}).
+              </p>
+              <input
+                type="text"
+                autoFocus
+                value={labelDraft}
+                maxLength={80}
+                placeholder="e.g. First Floor"
+                onChange={(e) => setLabelDraft(e.target.value)}
+                style={{ width: '100%', boxSizing: 'border-box', margin: 0 }}
+              />
+              <div className="modal-actions">
+                <button type="button" className="ghost-btn" onClick={() => handleSubmit(new Event('submit'), '')}>Skip</button>
+                <button type="submit" className="primary-btn" disabled={submitting}>Submit Form</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

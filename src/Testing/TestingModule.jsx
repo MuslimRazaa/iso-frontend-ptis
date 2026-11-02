@@ -36,6 +36,19 @@ import {
 import { Links, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTheme } from './contexts/ThemeContext';
 import { localToday } from '../utils/localDate';
+
+// Deletes one result. The key goes in the query string, which survives a "/" in the standard's
+// name (an encoded slash in the path is refused by Apache). A server that has not been updated
+// yet has no such route and answers 404 without a JSON body, so the old path form is tried then.
+const deleteLegacyResult = async (base, result, actorId, actorName) => {
+  const actor = `actorId=${encodeURIComponent(actorId)}&actorName=${encodeURIComponent(actorName)}`;
+  const key = [result.ID, result.STANDARD, result.DATE].map(encodeURIComponent);
+  const res = await fetch(`${base}/api/test-results/legacy?id=${key[0]}&standard=${key[1]}&date=${key[2]}&${actor}`, { method: 'DELETE' });
+  if (res.status !== 404) return res;
+  const body = await res.clone().json().catch(() => null);
+  if (body && body.error) return res;
+  return fetch(`${base}/api/test-results/legacy/${key.join('/')}?${actor}`, { method: 'DELETE' });
+};
 import { ModalFrame, ModalSection, ModalField, ModalButtons, ModalFilePick, modalFieldStyle, modalFieldStyleDisabled } from '../components/FormModalKit';
 import { BsClipboardData, BsPencilSquare, BsPersonBadge, BsJournalCheck, BsCalendar3, BsBarChart, BsPaperclip } from 'react-icons/bs';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from 'recharts';
@@ -5214,16 +5227,16 @@ const TestingModule = () => {
                               try {
                                 const actorId = getActorId();
                                 const actorName = getActorName();
-                                const response = await fetch(
-                                  `${API_BASE_URL}/api/test-results/legacy?id=${encodeURIComponent(result.ID)}&standard=${encodeURIComponent(result.STANDARD)}&date=${encodeURIComponent(result.DATE)}&actorId=${encodeURIComponent(actorId)}&actorName=${encodeURIComponent(actorName)}`,
-                                  { method: 'DELETE' }
-                                );
-                                if (!response.ok) throw new Error('Delete failed');
+                                const response = await deleteLegacyResult(API_BASE_URL, result, actorId, actorName);
+                                if (!response.ok) {
+                                  const body = await response.json().catch(() => null);
+                                  throw new Error(`Delete failed (HTTP ${response.status})${body && body.error ? `: ${body.error}` : ''}`);
+                                }
                                 showToast('Result deleted successfully!', 'success');
                                 loadResults(true);
                               } catch (error) {
                                 console.error('Error deleting result:', error);
-                                showToast('Failed to delete result', 'error');
+                                showToast(`Failed to delete result${error.message ? ` — ${error.message}` : ''}`, 'error');
                               }
                             };
 
@@ -6315,10 +6328,7 @@ const TestingModule = () => {
       try {
         const actorId = getActorId();
         const actorName = getActorName();
-        const response = await fetch(
-          `${API_BASE_URL}/api/test-results/legacy?id=${encodeURIComponent(result.ID)}&standard=${encodeURIComponent(result.STANDARD)}&date=${encodeURIComponent(result.DATE)}&actorId=${encodeURIComponent(actorId)}&actorName=${encodeURIComponent(actorName)}`,
-          { method: 'DELETE' }
-        );
+        const response = await deleteLegacyResult(API_BASE_URL, result, actorId, actorName);
 
         if (response.ok) {
           showToast('Practical result deleted successfully!', 'success');
