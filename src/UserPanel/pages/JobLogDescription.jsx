@@ -407,7 +407,7 @@ const FIELD_DEPT = {
   it: 'it', remarkIt: 'it',
 }
 
-const PAGE_SIZE = 100
+const PAGE_SIZE = 50
 
 const calculateDays = (startDate, endDate) => {
   if (!startDate || !endDate) return ''
@@ -636,7 +636,13 @@ function JobLogDescription() {
   }
 
   /* ── State ──────────────────────────────────────────────── */
+  // The server sends one filtered, sorted page at a time — `entries` is just the page on
+  // screen. Totals, stat-card counts and the register-wide facts (count, highest S#,
+  // regions, statuses) come alongside it.
   const [entries, setEntries] = useState([])
+  const [serverTotal, setServerTotal] = useState(0)
+  const [serverStats, setServerStats] = useState({ total: 0, completed: 0, inProgress: 0, incomplete: 0 })
+  const [serverMeta, setServerMeta] = useState({ count: 0, maxSNo: 0, sources: [], statuses: [] })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -745,6 +751,12 @@ function JobLogDescription() {
   const [dateFrom, setDateFrom] = useState('') // entry-date range filter (inclusive)
   const [dateTo, setDateTo] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
+  // The search box is sent to the server, so it waits for a pause in typing first.
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 300)
+    return () => clearTimeout(t)
+  }, [searchTerm])
   const csvInputRef = useRef(null)
 
   /* ── CSV / Excel export (admin) ─────────────────────────── */
@@ -758,48 +770,106 @@ function JobLogDescription() {
   const [deleteError, setDeleteError] = useState('')
   const [deleteCountdown, setDeleteCountdown] = useState(5)
 
-  // Rows whose entry date falls in the From–To range (both inclusive; blank
-  // bound = open-ended). Rows with no entry date are excluded once a bound is
-  // set; with both bounds blank, everything is exported.
-  const exportRows = useMemo(() => {
-    return entries.filter(e => {
-      if (!exportFrom && !exportTo) return true
-      if (!e.entryDate) return false
-      if (exportFrom && e.entryDate < exportFrom) return false
-      if (exportTo && e.entryDate > exportTo) return false
-      return true
-    })
-  }, [entries, exportFrom, exportTo])
+  // How many entries fall in the From–To range (both inclusive; blank bound =
+  // open-ended). Rows with no entry date are excluded once a bound is set; with
+  // both bounds blank, everything is exported. Counted by the server (null = counting).
+  const [exportCount, setExportCount] = useState(null)
+  useEffect(() => {
+    if (!showExport) return undefined
+    let stale = false
+    setExportCount(null)
+    const qs = new URLSearchParams({ limit: '1' })
+    if (exportFrom) qs.set('from', exportFrom)
+    if (exportTo) qs.set('to', exportTo)
+    fetch(`${API_ENDPOINTS.JOB_LOG}/page?${qs}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => { if (!stale) setExportCount(j ? j.total : 0) })
+      .catch(() => { if (!stale) setExportCount(0) })
+    return () => { stale = true }
+  }, [showExport, exportFrom, exportTo])
+
+  // Every entry the given filters match — the export is not limited to the page on screen.
+  const fetchExportRows = async (params) => {
+    const res = await fetch(`${API_ENDPOINTS.JOB_LOG}/export?${new URLSearchParams(params)}`)
+    if (!res.ok) throw new Error(`Server error ${res.status}`)
+    const json = await res.json()
+    return (json.data ?? []).map(fromDB)
+  }
 
   // Date-range export (from the modal, used when no table filters are active).
-  const handleExport = () => {
-    if (exportRows.length === 0) return
+  const handleExport = async () => {
+    if (!exportCount) return
     const label = (exportFrom || exportTo)
       ? `${exportFrom || 'start'}_to_${exportTo || 'end'}`
       : 'All'
-    const fname = downloadJlrCsv(exportRows, label)
-    setShowExport(false)
-    const msg = `Exported ${exportRows.length} entr${exportRows.length === 1 ? 'y' : 'ies'} → ${fname}`
-    showToast(msg, 'success')
+    try {
+      const rows = await fetchExportRows({ ...(exportFrom && { from: exportFrom }), ...(exportTo && { to: exportTo }) })
+      const fname = downloadJlrCsv(rows, label)
+      setShowExport(false)
+      const msg = `Exported ${rows.length} entr${rows.length === 1 ? 'y' : 'ies'} → ${fname}`
+      showToast(msg, 'success')
+    } catch (err) {
+      showToast(`Export failed: ${err.message}`, 'error')
+    }
   }
 
-  /* ── Fetch all entries from API ─────────────────────────── */
+  /* ── Fetch the current page of entries from the API ─────── */
+  // The page, filters and sort live in state; this reads them through a ref so the
+  // many "reload after saving" calls below always ask for what is on screen.
+  const queryRef = useRef(null)
+  queryRef.current = {
+    page: currentPage, search: debouncedSearch, status: statusFilter, source: sourceFilter,
+    sort: sortBy, from: dateFrom, to: dateTo,
+  }
+  const filterParams = (q) => {
+    const params = {}
+    if (q.search) params.search = q.search
+    if (q.status && q.status !== 'all') params.status = q.status === STATUS_PENDING_ANY ? 'pending' : q.status
+    if (q.source && q.source !== 'all') params.source = q.source
+    if (q.from) params.from = q.from
+    if (q.to) params.to = q.to
+    if (q.sort) params.sort = q.sort
+    return params
+  }
+  const fetchSeq = useRef(0)
+  const loadedOnce = useRef(false)
   const fetchEntries = useCallback(async () => {
+    const seq = ++fetchSeq.current
+    const q = queryRef.current
     try {
-      setLoading(true); setError(null)
-      const res = await fetch(API_ENDPOINTS.JOB_LOG)
+      // The full-page spinner is for the first load only; later pages swap in place.
+      if (!loadedOnce.current) setLoading(true)
+      setError(null)
+      const qs = new URLSearchParams({ ...filterParams(q), page: String(q.page), limit: String(PAGE_SIZE) })
+      const res = await fetch(`${API_ENDPOINTS.JOB_LOG}/page?${qs}`)
       if (!res.ok) throw new Error(`Server error ${res.status}`)
       const json = await res.json()
-      const rows = json.data ?? json
-      setEntries(Array.isArray(rows) ? rows.map(fromDB) : [])
+      if (seq !== fetchSeq.current) return // a newer request is on its way
+      setEntries((json.data ?? []).map(fromDB))
+      setServerTotal(json.total ?? 0)
+      setServerStats(json.stats ?? { total: 0, completed: 0, inProgress: 0, incomplete: 0 })
+      setServerMeta(json.meta ?? { count: 0, maxSNo: 0, sources: [], statuses: [] })
+      if (json.page && json.page !== q.page) setCurrentPage(json.page)
+      loadedOnce.current = true
     } catch (err) {
-      setError(err.message)
+      if (seq === fetchSeq.current) setError(err.message)
     } finally {
-      setLoading(false)
+      if (seq === fetchSeq.current) setLoading(false)
     }
   }, [])
 
-  useEffect(() => { fetchEntries() }, [fetchEntries])
+  // Reload when the page or any filter changes. A filter change goes back to page 1
+  // first (that change reloads), so it does not ask for a page that may not exist.
+  const filterKey = [debouncedSearch, statusFilter, sourceFilter, sortBy, dateFrom, dateTo].join('\u0001')
+  const prevFilterKey = useRef(filterKey)
+  useEffect(() => {
+    if (prevFilterKey.current !== filterKey) {
+      prevFilterKey.current = filterKey
+      if (currentPage !== 1) { setCurrentPage(1); return }
+    }
+    fetchEntries()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterKey, currentPage, fetchEntries])
 
   /* ── Managed dropdown lists: Customers, Locations, Inspectors ── */
   const [customers, setCustomers] = useState([])      // [{ id, name }]
@@ -940,41 +1010,15 @@ function JobLogDescription() {
     }
   }
 
-  const nextSerial = useMemo(() => {
-    const max = entries.reduce((a, e) => Math.max(a, Number(e.sNo) || 0), 0)
-    return max + 1
-  }, [entries])
+  const nextSerial = serverMeta.maxSNo + 1
 
-  // Everything except the status filter itself — the stats bar reacts to
-  // region/date/search so its counts always match what's on screen, but
-  // still shows all four statuses side by side rather than zeroing the
+  // Counted by the server over everything except the status filter itself — the
+  // stats bar reacts to region/date/search so its counts always match what's on
+  // screen, but still shows all four statuses side by side rather than zeroing the
   // other three out the moment one status card is clicked.
-  const statsBaseEntries = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase()
-    return entries.filter(e => {
-      if (sourceFilter !== 'all' && e.source !== sourceFilter) return false
-      if (dateFrom && (!e.entryDate || e.entryDate < dateFrom)) return false
-      if (dateTo && (!e.entryDate || e.entryDate > dateTo)) return false
-      if (!q) return true
-      return [
-        e.sNo, e.entryDate, e.client, e.workOrder, e.inspectorName, e.inspectorTeam,
-        e.reference, e.location, e.natureOfJob, e.startDate, e.endDate, e.vehicleUsed,
-        e.days, e.calculatedDays, e.manPower, e.manHours, e.drivenKm,
-        e.jmps, e.tra, e.equipCL, e.vLog, e.tbt, e.status, e.completionDate,
-        e.rept, e.exp, e.accounts, e.it, e.submissionDate, e.source,
-        e.remark, e.remarks, e.stockRequisition, e.goodsIssueNote, e.consumption, e.gatePass,
-      ].filter(Boolean).join(' ').toLowerCase().includes(q)
-    })
-  }, [entries, sourceFilter, dateFrom, dateTo, searchTerm])
+  const stats = serverStats
 
-  const stats = useMemo(() => ({
-    total: statsBaseEntries.length,
-    completed: statsBaseEntries.filter(e => e.status?.toLowerCase() === 'completed').length,
-    inProgress: statsBaseEntries.filter(e => e.status?.toLowerCase() === 'in progress').length,
-    incomplete: statsBaseEntries.filter(e => e.status?.toLowerCase() === 'incomplete').length,
-  }), [statsBaseEntries])
-
-  const statusOptions = useMemo(() => [...new Set(entries.map(e => e.status).filter(Boolean))], [entries])
+  const statusOptions = serverMeta.statuses
   // Cards know a status by name; the rows spell it however it was entered.
   const statusValueFor = useCallback(
     (name) => statusOptions.find(s => s.toLowerCase() === name) || name,
@@ -1012,40 +1056,7 @@ function JobLogDescription() {
     setSearchParams(prev => { const next = new URLSearchParams(prev); next.delete('q'); return next }, { replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
-  const sourceOptions = useMemo(() => [...new Set(entries.map(e => e.source).filter(Boolean))], [entries])
-
-  const filteredEntries = useMemo(() => {
-    const list = statsBaseEntries.filter(e => {
-      if (statusFilter === STATUS_PENDING_ANY) {
-        if (!['pending', ''].includes((e.status || '').toLowerCase())) return false
-      } else if (statusFilter !== 'all' && e.status !== statusFilter) return false
-      return true
-    })
-
-    // Sorting (default: entry date newest first).
-    // Entry-date comparator: rows with NO entry date ALWAYS sink to the bottom,
-    // regardless of direction. `dir` orders the real dates (-1 newest first, 1 oldest first).
-    const cmpEntry = (x, y, dir) => {
-      const a = x.entryDate, b = y.entryDate
-      if (!a && !b) return 0
-      if (!a) return 1   // x has no date → x goes last
-      if (!b) return -1  // y has no date → y goes last
-      return a < b ? -dir : a > b ? dir : 0
-    }
-    const num = v => (v === '' || v == null ? NaN : Number(v))
-    const sorted = [...list]
-    sorted.sort((x, y) => {
-      switch (sortBy) {
-        case 'entryAsc':  return cmpEntry(x, y, 1)
-        case 'entryDesc': return cmpEntry(x, y, -1)
-        case 'sNoAsc':    return (num(x.sNo) || 0) - (num(y.sNo) || 0)
-        case 'sNoDesc':   return (num(y.sNo) || 0) - (num(x.sNo) || 0)
-        case 'clientAsc': return String(x.client).localeCompare(String(y.client))
-        default:          return cmpEntry(x, y, -1)
-      }
-    })
-    return sorted
-  }, [statsBaseEntries, statusFilter, sortBy])
+  const sourceOptions = serverMeta.sources
 
   // Any active table filter/search? (sort order isn't a filter.) When true, the
   // Export button switches to "Export by Filter" and exports exactly the rows
@@ -1054,28 +1065,30 @@ function JobLogDescription() {
     searchTerm.trim() !== '' || statusFilter !== 'all' || sourceFilter !== 'all' ||
     dateFrom !== '' || dateTo !== ''
 
-  const handleExportClick = () => {
+  const handleExportClick = async () => {
     if (hasActiveFilters) {
-      if (filteredEntries.length === 0) return
-      const fname = downloadJlrCsv(filteredEntries, 'Filtered')
-      const msg = `Exported ${filteredEntries.length} filtered entr${filteredEntries.length === 1 ? 'y' : 'ies'} → ${fname}`
-      showToast(msg, 'success')
+      if (serverTotal === 0) return
+      try {
+        // The search box is sent as typed, not as the debounced copy the table is showing.
+        const rows = await fetchExportRows(filterParams({ ...queryRef.current, search: searchTerm.trim() }))
+        if (rows.length === 0) return
+        const fname = downloadJlrCsv(rows, 'Filtered')
+        const msg = `Exported ${rows.length} filtered entr${rows.length === 1 ? 'y' : 'ies'} → ${fname}`
+        showToast(msg, 'success')
+      } catch (err) {
+        showToast(`Export failed: ${err.message}`, 'error')
+      }
     } else {
       // No filters → the from/to date-range modal (default behaviour).
       setExportFrom(''); setExportTo(''); setShowExport(true)
     }
   }
 
-  const totalEntries = filteredEntries.length
+  const totalEntries = serverTotal
   const totalPages = Math.max(1, Math.ceil(totalEntries / PAGE_SIZE))
   const safePage = Math.min(currentPage, totalPages)
   const pageStartIdx = (safePage - 1) * PAGE_SIZE
-  const paginatedEntries = useMemo(() =>
-    filteredEntries.slice(pageStartIdx, pageStartIdx + PAGE_SIZE),
-    [filteredEntries, pageStartIdx])
-
-  useEffect(() => { setCurrentPage(1) }, [searchTerm, statusFilter, sourceFilter, sortBy, dateFrom, dateTo])
-  useEffect(() => { if (currentPage !== safePage) setCurrentPage(safePage) }, [currentPage, safePage])
+  const paginatedEntries = entries
 
   const openAddModal = () => {
     setModalMode('add'); setEditingId(null)
@@ -1359,7 +1372,7 @@ function JobLogDescription() {
     try {
       const res = await fetch(`${API_ENDPOINTS.JOB_LOG}/${id}?${actorQuery()}`, { method: 'DELETE' })
       if (!res.ok) throw new Error(`Server error ${res.status}`)
-      setEntries(p => p.filter(e => e.id !== id))
+      fetchEntries() // the page, its totals and the stat cards all change
       showToast('Entry deleted successfully!', 'success')
     } catch (err) {
       showToast(`Delete failed: ${err.message}`, 'error')
@@ -1383,7 +1396,7 @@ function JobLogDescription() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || `Server error ${res.status}`)
       const rows = json.data ?? []
-      setEntries(Array.isArray(rows) ? rows.map(fromDB) : [])
+      await fetchEntries()
       const modeLabel = csvMode === 'replace' ? 'replaced all data with' : 'added'
       const msg = `${modeLabel} ${json.inserted} record(s) — total: ${Array.isArray(rows) ? rows.length : '?'}`
       showToast(msg, 'success')
@@ -1415,7 +1428,7 @@ function JobLogDescription() {
       const res = await fetch(`${API_ENDPOINTS.JOB_LOG}/clear-all?${actorQuery()}`, { method: 'DELETE' })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || `Server error ${res.status}`)
-      setEntries([])
+      await fetchEntries()
       showToast('All entries deleted.', 'success')
     } catch (err) {
       showToast(`Delete all failed: ${err.message}`, 'error')
@@ -1606,19 +1619,19 @@ function JobLogDescription() {
           {/* Read-only, unlike Import/Delete: it downloads exactly what is
               already on screen, so any user who can see the register — not
               only admins / full JLR access — can export it. */}
-          {entries.length > 0 && (
+          {serverMeta.count > 0 && (
             <button
               type="button"
               className="ghost-btn"
               onClick={handleExportClick}
-              disabled={loading || entries.length === 0}
+              disabled={loading || serverMeta.count === 0}
               title={hasActiveFilters ? 'Export the currently filtered/searched rows' : 'Export by date range'}
               style={{ display: 'flex', alignItems: 'center', gap: 8 }}
             >
               <Download size={16} /> {hasActiveFilters ? 'Export by Filter' : 'Export'}
             </button>
           )}
-          {entries.length > 0 && (isAdminContext || jlrPerms?.full) && (
+          {serverMeta.count > 0 && (isAdminContext || jlrPerms?.full) && (
             <button
               type="button"
               onClick={handleDeleteAll}
@@ -1815,7 +1828,7 @@ function JobLogDescription() {
                       </div>
                     </td>
                   </tr>
-                ) : filteredEntries.length === 0 ? (
+                ) : entries.length === 0 ? (
                   <tr>
                     <td colSpan={37} style={{ padding: '60px 32px', textAlign: 'center' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
@@ -2647,20 +2660,22 @@ function JobLogDescription() {
 
               <div style={{
                 marginTop: 4, padding: '12px 16px', borderRadius: 12,
-                background: exportRows.length ? 'linear-gradient(135deg,#e8fff3,#d4f8e3)' : '#f4f4f7',
-                border: `1px solid ${exportRows.length ? '#c3ecd4' : '#e0e0e6'}`,
-                color: exportRows.length ? '#1d814c' : '#7a7a8c',
+                background: exportCount ? 'linear-gradient(135deg,#e8fff3,#d4f8e3)' : '#f4f4f7',
+                border: `1px solid ${exportCount ? '#c3ecd4' : '#e0e0e6'}`,
+                color: exportCount ? '#1d814c' : '#7a7a8c',
                 fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8,
               }}>
                 <ClipboardList size={16} />
-                {exportRows.length > 0
-                  ? `${exportRows.length} entr${exportRows.length === 1 ? 'y' : 'ies'} will be exported`
-                  : 'No entries fall in this date range'}
+                {exportCount === null
+                  ? 'Counting entries…'
+                  : exportCount > 0
+                    ? `${exportCount} entr${exportCount === 1 ? 'y' : 'ies'} will be exported`
+                    : 'No entries fall in this date range'}
               </div>
 
               <div className="modal-actions">
                 <button type="button" className="ghost-btn" onClick={() => setShowExport(false)}>Cancel</button>
-                <button type="button" className="primary-btn" onClick={handleExport} disabled={exportRows.length === 0}
+                <button type="button" className="primary-btn" onClick={handleExport} disabled={!exportCount}
                   style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                   <Download size={16} /> Export CSV
                 </button>
@@ -2690,7 +2705,7 @@ function JobLogDescription() {
                     {deleteStep === 'countdown' && 'Deleting All Data…'}
                   </h2>
                   <p style={{ margin: 0, fontSize: 13, color: '#7a7a8c' }}>
-                    {deleteStep === 'countdown' ? 'You can still undo.' : `${entries.length} entries in the Job Log`}
+                    {deleteStep === 'countdown' ? 'You can still undo.' : `${serverMeta.count} entries in the Job Log`}
                   </p>
                 </div>
               </div>
@@ -2704,7 +2719,7 @@ function JobLogDescription() {
               {deleteStep === 'confirm1' && (
                 <>
                   <p style={{ margin: '4px 0 0', fontSize: 14, color: '#3a3a44', lineHeight: 1.6 }}>
-                    Are you sure you want to delete <strong>ALL {entries.length}</strong> entries?
+                    Are you sure you want to delete <strong>ALL {serverMeta.count}</strong> entries?
                     This wipes the entire Job Log.
                   </p>
                   <div className="modal-actions">
@@ -2741,7 +2756,7 @@ function JobLogDescription() {
               {deleteStep === 'confirm2' && (
                 <>
                   <p style={{ margin: '4px 0 0', fontSize: 14, color: '#3a3a44', lineHeight: 1.6 }}>
-                    Password verified. Do you really want to <strong>delete all {entries.length} entries</strong>?
+                    Password verified. Do you really want to <strong>delete all {serverMeta.count} entries</strong>?
                     After you confirm, you'll get a 5-second window to undo.
                   </p>
                   <div className="modal-actions">

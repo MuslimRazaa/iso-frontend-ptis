@@ -38,7 +38,16 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 100;
+  const itemsPerPage = 50;
+
+  // The server sends one filtered page at a time; `questions` is just the page on screen.
+  const [serverTotal, setServerTotal] = useState(0);
+  // The search box is sent to the server, so it waits for a pause in typing first.
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
   // True DB counts (from /api/questions/count)
   const [totalDbCount, setTotalDbCount] = useState(null);
@@ -88,97 +97,81 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
     fetchData();
   }, []);
 
+  // The filters the server applies. "Unmatched" has nothing to show: every stored question
+  // belongs to a standard.
+  const filterParams = () => {
+    const p = {};
+    if (filterStandard && filterStandard !== '__UNMATCHED__') p.standard = filterStandard;
+    if (debouncedSearch) p.search = debouncedSearch;
+    if (filterDateFrom) p.from = filterDateFrom;
+    if (filterDateTo) p.to = filterDateTo;
+    return p;
+  };
+  const queryRef = useRef(null);
+  queryRef.current = { page: currentPage, filters: filterParams, unmatched: filterStandard === '__UNMATCHED__' };
+  const fetchSeq = useRef(0);
+
+  const fetchPage = async () => {
+    const seq = ++fetchSeq.current;
+    const q = queryRef.current;
+    if (q.unmatched) { setQuestions([]); setServerTotal(0); return; }
+    const qs = new URLSearchParams({ ...q.filters(), page: String(q.page), limit: String(itemsPerPage) });
+    const res = await fetch(`${API_BASE_URL}/api/questions/legacy/page?${qs}`);
+    if (!res.ok) throw new Error('Failed to fetch data from server');
+    const json = await res.json();
+    if (seq !== fetchSeq.current) return; // a newer request is on its way
+    setQuestions(Array.isArray(json.data) ? json.data : []);
+    setServerTotal(json.total ?? 0);
+    if (json.page && json.page !== q.page) setCurrentPage(json.page);
+  };
+
+  // Standards, the overall count and the current page — also what runs after any change.
   const fetchData = async () => {
     try {
-      const [questionsRes, standardsRes, countRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/questions/legacy`),
+      const [standardsRes, countRes] = await Promise.all([
         fetch(`${API_BASE_URL}/api/standards/legacy`),
         fetch(`${API_BASE_URL}/api/questions/legacy/count`)
       ]);
-      
-      if (!questionsRes.ok || !standardsRes.ok) {
+      if (!standardsRes.ok) {
         throw new Error('Failed to fetch data from server');
       }
-      
-      const [questionsData, standardsData] = await Promise.all([
-        questionsRes.json(),
-        standardsRes.json()
-      ]);
+      const standardsData = await standardsRes.json();
 
       if (countRes.ok) {
         const countData = await countRes.json();
         setTotalDbCount(countData.total ?? null);
         setUnmatchedCount(countData.unmatched ?? null);
       }
-      
+
       // Ensure data is array
       setStandards(Array.isArray(standardsData) ? standardsData : []);
-      setQuestions(Array.isArray(questionsData) ? questionsData : []);
+      await fetchPage();
       setLoading(false);
     } catch (error) {
       console.error('Error fetching data:', error);
       if (showToast) showToast('Failed to load questions data', 'error');
       setStandards([]);
       setQuestions([]);
+      setServerTotal(0);
       setLoading(false);
     }
   };
 
-  // Set of known standard names (trimmed+lowercased) for unmatched detection
-  const knownStandardSet = useMemo(
-    () => new Set(standards.map(s => (s.Standard_List || '').trim().toLowerCase())),
-    [standards]
-  );
-
-  const filteredQuestions = useMemo(() => {
-    const filtered = questions.filter(q => {
-      const questionStandard = (q.Standard_List || q.Standard || '').trim().toLowerCase();
-      let matchesStandard;
-      if (!filterStandard) {
-        matchesStandard = true;
-      } else if (filterStandard === '__UNMATCHED__') {
-        // Show questions whose standard is empty OR not in the known standards list
-        matchesStandard = !questionStandard || !knownStandardSet.has(questionStandard);
-      } else {
-        matchesStandard = questionStandard === filterStandard.trim().toLowerCase();
-      }
-      const matchesSearch = !searchQuery ||
-        q.Question?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        q.Opt_A?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        q.Opt_B?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        q.Opt_C?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        q.Opt_D?.toLowerCase().includes(searchQuery.toLowerCase());
-
-      // Date-only comparison — a question's created_at carries a time, but
-      // the From/To pickers only collect a date, so both sides are compared
-      // as calendar days rather than exact timestamps.
-      let matchesDate = true;
-      if (q.Created_At && (filterDateFrom || filterDateTo)) {
-        const questionDate = new Date(q.Created_At).toISOString().slice(0, 10);
-        if (filterDateFrom && questionDate < filterDateFrom) matchesDate = false;
-        if (filterDateTo && questionDate > filterDateTo) matchesDate = false;
-      } else if (!q.Created_At && (filterDateFrom || filterDateTo)) {
-        matchesDate = false;
-      }
-
-      return matchesStandard && matchesSearch && matchesDate;
-    });
-    return filtered;
-  }, [questions, filterStandard, searchQuery, filterDateFrom, filterDateTo, knownStandardSet]);
-
-  // Paginated questions
-  const paginatedQuestions = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    return filteredQuestions.slice(startIndex, endIndex);
-  }, [filteredQuestions, currentPage, itemsPerPage]);
-
-  const totalPages = Math.ceil(filteredQuestions.length / itemsPerPage);
-
-  // Reset to page 1 when filter changes
+  // Reload the page when the page number or a filter changes. A filter change goes back to
+  // page 1 first (that change reloads), so it never asks for a page that may not exist.
+  const filterKey = [filterStandard, debouncedSearch, filterDateFrom, filterDateTo].join('');
+  const prevFilterKey = useRef(null);
   useEffect(() => {
-    setCurrentPage(1);
-  }, [filterStandard, searchQuery, filterDateFrom, filterDateTo]);
+    if (prevFilterKey.current === null) { prevFilterKey.current = filterKey; return; } // first load is fetchData's
+    if (prevFilterKey.current !== filterKey) {
+      prevFilterKey.current = filterKey;
+      if (currentPage !== 1) { setCurrentPage(1); return; }
+    }
+    fetchPage().catch(() => { if (showToast) showToast('Failed to load questions data', 'error'); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterKey, currentPage]);
+
+  const totalPages = Math.max(1, Math.ceil(serverTotal / itemsPerPage));
 
   const handleAdd = () => {
     setEditMode(false);
@@ -258,11 +251,16 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
     }
   };
 
-  const handleSelectAll = (checked) => {
-    if (checked) {
-      setSelectedNos(new Set(filteredQuestions.map(q => q.NO)));
-    } else {
-      setSelectedNos(new Set());
+  // "Select all" covers every question the filters match, not only the page on screen.
+  const handleSelectAll = async (checked) => {
+    if (!checked) { setSelectedNos(new Set()); return; }
+    try {
+      const qs = new URLSearchParams(filterParams());
+      const res = await fetch(`${API_BASE_URL}/api/questions/legacy/ids?${qs}`);
+      if (!res.ok) throw new Error('Failed to select questions');
+      setSelectedNos(new Set(await res.json()));
+    } catch (error) {
+      if (showToast) showToast(error.message, 'error');
     }
   };
 
@@ -275,10 +273,21 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
     });
   };
 
-  const exportCSV = () => {
+  const exportCSV = async () => {
+    // The export is not limited to the page on screen: ask the server for everything the
+    // filters match, then keep only the ticked ones if any are ticked.
+    let matching = [];
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/questions/legacy/export?${new URLSearchParams(filterParams())}`);
+      if (!res.ok) throw new Error('Export failed');
+      matching = await res.json();
+    } catch (error) {
+      if (showToast) showToast(error.message, 'error');
+      return;
+    }
     const source = selectedNos.size > 0
-      ? filteredQuestions.filter(q => selectedNos.has(q.NO))
-      : filteredQuestions;
+      ? matching.filter(q => selectedNos.has(q.NO))
+      : matching;
     if (source.length === 0) { if (showToast) showToast('No questions to export', 'error'); return; }
     const header = ['NO', 'Question', 'Opt_A', 'Opt_B', 'Opt_C', 'Opt_D', 'Answer', 'Standard'];
     const rows = source.map(q => [
@@ -577,7 +586,7 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M9 11H3m6 0a3 3 0 0 1 6 0m-6 0a3 3 0 0 0 6 0m6 0h-6"></path>
             </svg>
-            {filteredQuestions.length} / {totalDbCount != null ? totalDbCount : questions.length} Questions
+            {serverTotal} / {totalDbCount != null ? totalDbCount : serverTotal} Questions
             {totalDbCount != null && unmatchedCount > 0 && (
               <span style={{ fontSize: '0.78em', opacity: 0.8, marginLeft: '4px' }}>
                 ({unmatchedCount} unmatched)
@@ -738,7 +747,7 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
             {/* Export CSV Button */}
             <button
               onClick={exportCSV}
-              title={selectedNos.size > 0 ? `Export ${selectedNos.size} selected questions` : `Export all ${filteredQuestions.length} filtered questions`}
+              title={selectedNos.size > 0 ? `Export ${selectedNos.size} selected questions` : `Export all ${serverTotal} filtered questions`}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -776,7 +785,7 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
                 <polyline points="7 10 12 15 17 10"></polyline>
                 <line x1="12" y1="15" x2="12" y2="3"></line>
               </svg>
-              {selectedNos.size > 0 ? `Export Selected (${selectedNos.size})` : `Export CSV (${filteredQuestions.length})`}
+              {selectedNos.size > 0 ? `Export Selected (${selectedNos.size})` : `Export CSV (${serverTotal})`}
             </button>
 
             {/* Bulk Delete Button — only when rows selected */}
@@ -1034,7 +1043,7 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
                   <input
                     type="checkbox"
                     title="Select all visible questions"
-                    checked={filteredQuestions.length > 0 && filteredQuestions.every(q => selectedNos.has(q.NO))}
+                    checked={questions.length > 0 && questions.every(q => selectedNos.has(q.NO))}
                     onChange={e => handleSelectAll(e.target.checked)}
                     style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#3b82f6' }}
                   />
@@ -1047,7 +1056,7 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
               </tr>
             </thead>
             <tbody>
-              {paginatedQuestions.map((question, index) => (
+              {questions.map((question, index) => (
                 <tr key={question.NO} style={{ borderBottom: `1px solid ${colors.border}`, backgroundColor: selectedNos.has(question.NO) ? (isDarkMode ? '#1e3a5f' : '#eff6ff') : 'inherit' }}>
                   <td style={{ padding: '12px', textAlign: 'center', border: `1px solid ${colors.border}` }}>
                     <input
@@ -1093,7 +1102,7 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
 </td>
                 </tr>
               ))}
-              {filteredQuestions.length === 0 && (
+              {questions.length === 0 && (
                 <tr>
                   <td colSpan={6} style={{ padding: '30px', textAlign: 'center', color: colors.textMuted }}>
                     No questions found matching your filters.
@@ -1105,7 +1114,7 @@ const QuestionsAdminPage = ({ onBack, showToast }) => {
           <PaginationBar
             page={currentPage}
             totalPages={totalPages}
-            totalItems={filteredQuestions.length}
+            totalItems={serverTotal}
             pageSize={itemsPerPage}
             onPageChange={setCurrentPage}
             itemLabel="questions"

@@ -63,21 +63,17 @@ const UserDashboard = () => {
     // name against the inspector/team fields the register actually records.
     const fetchJobLogMetric = async () => {
         try {
-            const res = await fetch(API_ENDPOINTS.JOB_LOG);
+            // Counted by the server — the full register is thousands of rows.
+            const userFullName = (localStorage.getItem('userFullName') || '').trim();
+            const res = await fetch(`${API_ENDPOINTS.JOB_LOG}/summary?inspector=${encodeURIComponent(userFullName)}`);
             if (!res.ok) return;
             const json = await res.json();
-            const rows = Array.isArray(json?.data) ? json.data : (Array.isArray(json) ? json : []);
-            if (!rows.length) { setJobLogMetric('No job entries yet'); return; }
-            const userFullName = (localStorage.getItem('userFullName') || '').toLowerCase().trim();
-            const mine = userFullName
-                ? rows.filter(e =>
-                    (e.inspector_name || '').toLowerCase().includes(userFullName) ||
-                    (e.inspector_team || '').toLowerCase().includes(userFullName)
-                ).length
-                : 0;
+            const total = json?.stats?.total ?? 0;
+            if (!total) { setJobLogMetric('No job entries yet'); return; }
+            const mine = json?.mine ?? 0;
             setJobLogMetric(mine > 0
                 ? `${mine} of your job entries logged`
-                : `${rows.length} job entries logged company-wide`);
+                : `${total} job entries logged company-wide`);
         } catch (error) {
             console.error('Error fetching Job Log metric:', error);
         }

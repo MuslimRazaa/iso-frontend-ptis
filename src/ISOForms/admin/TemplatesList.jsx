@@ -36,6 +36,8 @@ const createdDay = (t) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 const fieldCountOf = (t) => {
+  // The list from the server carries just the count; the offline copies carry the fields.
+  if (typeof t.fieldCount === 'number') return t.fieldCount
   try {
     const f = typeof t.fields === 'string' ? JSON.parse(t.fields) : t.fields
     return Array.isArray(f) ? f.length : 0
