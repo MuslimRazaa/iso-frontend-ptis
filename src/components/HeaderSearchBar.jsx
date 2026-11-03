@@ -77,6 +77,7 @@ const HeaderSearchBar = ({ onSearch, placeholder = 'Search…', minChars = 2, on
         </svg>
         <input
           type="text"
+          aria-label={placeholder || 'Search'}
           placeholder={placeholder}
           value={query}
           onChange={(e) => {

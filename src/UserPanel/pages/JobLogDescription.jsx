@@ -301,7 +301,8 @@ const todayYmd = () => { const d = new Date(); return `${d.getFullYear()}-${Stri
 const autoStatusOf = (e) => {
   const end = String(e.endDate || '').slice(0, 10)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(end) || end > todayYmd()) return 'In Progress'
-  return REQUIRED_KEYS.some(k => !String(e[k] ?? '').trim()) ? 'Incomplete' : 'Completed'
+  // The long dash "—" is an empty cell, a typed "-" is an answer (see utils/jlrStatus.js).
+  return REQUIRED_KEYS.some(k => /^[–—]*$/.test(String(e[k] ?? '').trim())) ? 'Incomplete' : 'Completed'
 }
 
 // ── CSV / Excel export ───────────────────────────────────────

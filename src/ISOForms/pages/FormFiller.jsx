@@ -21,6 +21,13 @@ import { getActorId, getActorName } from '../../utils/actorIdentity'
 const FIELD_COLUMNS = 'repeat(auto-fit, minmax(340px, 1fr))'
 
 
+// A saved form's name is the template's name plus the submitter's label in brackets:
+// "First Aid Box Checklist (First Floor)" -> { base: "First Aid Box Checklist", label: "First Floor" }.
+const splitEntryName = (name) => {
+  const m = /^(.*?)\s*\(([^()]*)\)\s*$/.exec(String(name || ''))
+  return m && m[1] ? { base: m[1], label: m[2].trim() } : { base: String(name || ''), label: '' }
+}
+
 function FormFiller() {
   // The same screen fills a new form (`new/:templateId`) and revises a
   // submitted one (`entries/:id/edit`) — the fields, validation and layout are
@@ -65,6 +72,8 @@ function FormFiller() {
 
 
   const [submitting, setSubmitting] = useState(false)
+  // The optional name shown in brackets after the form name (edit mode keeps it editable).
+  const [editLabel, setEditLabel] = useState('')
   const [askLabel, setAskLabel] = useState(false)
   const [labelDraft, setLabelDraft] = useState('')
   const [error, setError] = useState('')
@@ -98,6 +107,7 @@ function FormFiller() {
       .then(json => {
         if (!active) return
         setEntry(json)
+        setEditLabel(splitEntryName(json.template_name).label)
         const parsed = typeof json.form_data === 'string' ? JSON.parse(json.form_data || '{}') : (json.form_data || {})
         setValues(parsed && typeof parsed === 'object' ? parsed : {})
         const approvals = Array.isArray(json.approvals) ? json.approvals : []
@@ -298,6 +308,9 @@ function FormFiller() {
         const body = new FormData()
         body.append('form_data', JSON.stringify(signedValues))
         body.append('approvals', JSON.stringify(approvals))
+        const { base: baseName } = splitEntryName(entry?.template_name || template.name)
+        const trimmedLabel = editLabel.trim()
+        body.append('template_name', trimmedLabel ? `${baseName} (${trimmedLabel})` : baseName)
         body.append('keep_attachments', JSON.stringify(storedAttachments.map(a => a.file_path)))
         if (isAdmin) body.append('admin', '1')
         if (resolvedEmployeeId || localStorage.getItem('userEmail')) {
@@ -513,6 +526,24 @@ function FormFiller() {
       )}
 
       <form onSubmit={handleSubmit}>
+        {isEdit && (
+          <article className="panel" style={{ padding: 24, marginBottom: 20 }}>
+            <label style={{ display: 'block', marginBottom: 12, fontWeight: 600, fontSize: 14 }}>
+              Name (optional)
+            </label>
+            <input
+              type="text"
+              value={editLabel}
+              maxLength={80}
+              placeholder="e.g. First Floor"
+              onChange={(e) => setEditLabel(e.target.value)}
+              style={{ width: '100%', padding: '12px 15px', border: '2px solid #e0e0e6', borderRadius: 12, fontSize: 14, boxSizing: 'border-box', margin: 0 }}
+            />
+            <p style={{ margin: '12px 0 0', fontSize: 12, color: '#7a7a8c' }}>
+              Shown in brackets after the form name: {splitEntryName(entry?.template_name || template.name).base} ({editLabel.trim() || '…'}). Leave empty for no name.
+            </p>
+          </article>
+        )}
         <FormLayoutView
           fields={template.fields}
           renderField={renderField}
@@ -536,7 +567,7 @@ function FormFiller() {
               : ''
             return (
               <article className="panel" style={{ padding: 24 }} key={role.key}>
-                <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, fontSize: 14 }}>
+                <label style={{ display: 'block', marginBottom: 16, fontWeight: 600, fontSize: 14 }}>
                   {role.label || role.key}{!locked && <span style={{ color: '#d7263d' }}> *</span>}
                 </label>
                 {locked ? (
@@ -553,7 +584,7 @@ function FormFiller() {
                     style={{ width: '100%', padding: '12px 15px', border: '2px solid #e0e0e6', borderRadius: 12, fontSize: 14, cursor: 'text', boxSizing: 'border-box' }}
                   />
                 )}
-                <p style={{ margin: '8px 0 0', fontSize: 12, color: '#7a7a8c' }}>
+                <p style={{ margin: '12px 0 0', fontSize: 12, color: '#7a7a8c' }}>
                   The people picked here are all told, and any one of them can approve or reject the form once submitted.
                 </p>
               </article>

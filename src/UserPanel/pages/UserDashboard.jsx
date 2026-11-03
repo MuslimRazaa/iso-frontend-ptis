@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api';
 import { findExpiringCertificates, certificateLink } from '../../Testing/certificateExpiry';
 import ExpiringCertificatesBanner from '../../components/ExpiringCertificatesBanner';
@@ -326,18 +326,14 @@ const UserDashboard = () => {
         const selected = dashboardTiles.find((tile) => tile.id === moduleId);
         if (selected?.external) {
             window.open(selected.link, "_blank", "noopener,noreferrer");
+        } else if (selected?.link) {
+            navigate(selected.link);
         }
     };
 
     return (
         <div className="dashboard-shell">
             <main className="dashboard-content">
-                {isManager && (
-                    <ExpiringCertificatesBanner
-                        items={expiringCerts}
-                        onOpenCertificate={userPermissions.testing_admin ? (item) => navigate(certificateLink(item, '/user/testing')) : undefined}
-                    />
-                )}
                 <section className="hero-row">
                     <article className="intro-panel">
                         <p className="eyebrow">Hello {userName}</p>
@@ -348,6 +344,15 @@ const UserDashboard = () => {
                         </p>
                     </article>
                 </section>
+
+                {/* Below the hero, not above it: it only appears once the testing data has loaded,
+                    and above the hero it pushed the whole page down when it did. */}
+                {isManager && (
+                    <ExpiringCertificatesBanner
+                        items={expiringCerts}
+                        onOpenCertificate={userPermissions.testing_admin ? (item) => navigate(certificateLink(item, '/user/testing')) : undefined}
+                    />
+                )}
 
                 <section>
                     <div className="section-heading">
@@ -379,7 +384,7 @@ const UserDashboard = () => {
                                     key={tile.id}
                                     className={`module-card ${tile.status}`}
                                     onClick={() => handleModuleClick(tile.id)}
-                                    aria-label={`Open ${tile.title} dashboard`}
+                                    aria-label={tile.external ? `Open ${tile.title} in a new window` : `Open ${tile.title} dashboard`}
                                 >
                                     <div className="module-top-row">
                                         <div className="module-icon" style={{ position: 'relative' }}>
@@ -408,33 +413,15 @@ const UserDashboard = () => {
                                     </div>
                                     <div className="module-footer">
                                         <span className="module-metric">{tile.metric}</span>
-                                        {tile.external ? (
-                                            // The card's own onClick already opens this in a new
-                                            // tab; without stopping the click here it would bubble
-                                            // up and open a second one.
-                                            <a
-                                                href={tile.link}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                onClick={(e) => e.stopPropagation()}
-                                            >
-                                                <span className="module-link">
-                                                    Open in New Window
-                                                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                                                        <path d="M5 12h14M13 6l6 6-6 6" />
-                                                    </svg>
-                                                </span>
-                                            </a>
-                                        ) : (
-                                            <Link to={tile.link}>
-                                                <span className="module-link">
-                                                    Open Module
-                                                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                                                        <path d="M5 12h14M13 6l6 6-6 6" />
-                                                    </svg>
-                                                </span>
-                                            </Link>
-                                        )}
+                                        {/* The whole card is the one button (a link inside a button is
+                                            invalid and hides it from keyboards and screen readers), so
+                                            this is only the visual cue; the card's onClick opens it. */}
+                                        <span className="module-link" aria-hidden="true">
+                                            {tile.external ? 'Open in New Window' : 'Open Module'}
+                                            <svg viewBox="0 0 24 24">
+                                                <path d="M5 12h14M13 6l6 6-6 6" />
+                                            </svg>
+                                        </span>
                                     </div>
                                 </button>
                             ))}
