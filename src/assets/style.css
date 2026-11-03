@@ -6,11 +6,27 @@
 
 @font-face {
   font-family: "montserrat";
-  src: url("Montserrat/static/Montserrat-Medium.ttf") format("truetype");
+  /* The woff2 is the Latin subset (27 KB against the 330 KB .ttf); the .ttf stays as the
+     fallback for a browser without woff2. swap shows text in a fallback font straight away
+     instead of leaving it invisible until the font arrives. */
+  src: url("Montserrat/static/Montserrat-Medium.woff2") format("woff2"),
+       url("Montserrat/static/Montserrat-Medium.ttf") format("truetype");
+  font-display: swap;
+}
+
+/* What shows until Montserrat arrives: Arial stretched to Montserrat's width and line height,
+   so the text does not change size or wrap differently (and shift the page) when it swaps in. */
+@font-face {
+  font-family: "montserrat-fallback";
+  src: local("Arial"), local("Helvetica"), local("Liberation Sans");
+  size-adjust: 116.31%;
+  ascent-override: 83.23%;
+  descent-override: 21.58%;
+  line-gap-override: 0%;
 }
 
 body {
-  font-family: "montserrat";
+  font-family: "montserrat", "montserrat-fallback", sans-serif;
 }
 
 .login-backdrop {
@@ -809,6 +825,8 @@ body {
   margin-top: 26px;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
+  /* Every row as tall as the tallest card, so all the cards are one size. */
+  grid-auto-rows: 1fr;
   gap: 18px;
 }
 

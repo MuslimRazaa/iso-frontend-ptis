@@ -174,6 +174,8 @@ const NotificationBell = ({ email, onOpen, closeSignal }) => {
       <button
         className="ghost-btn"
         type="button"
+        aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+        aria-expanded={showNotifications}
         onClick={() => {
           const next = !showNotifications;
           setShowNotifications(next);
@@ -281,6 +283,7 @@ const NotificationBell = ({ email, onOpen, closeSignal }) => {
                     className="notif-delete-btn"
                     onClick={(e) => deleteNotification(e, notif.id)}
                     title="Delete notification"
+                    aria-label="Delete notification"
                     style={{
                       position: 'absolute', top: 10, right: 10,
                       width: 20, height: 20, borderRadius: '50%',

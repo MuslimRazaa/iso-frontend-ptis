@@ -18,6 +18,9 @@ import { createPortal } from 'react-dom'
 // read off the input's own bounding box, so it can never be clipped by a
 // scrollable ancestor (a table wrapper, a modal body) — it always draws on
 // top instead.
+const PANEL_MAX = 240
+const PANEL_MIN = 200
+
 function SearchableSelect({ value, onChange, options, extraOptions, placeholder = 'Type to search…', emptyOptionLabel, emptyOptionValue = '', disabled, required, style }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -28,7 +31,15 @@ function SearchableSelect({ value, onChange, options, extraOptions, placeholder 
   const updateRect = useCallback(() => {
     if (!wrapperRef.current) return
     const r = wrapperRef.current.getBoundingClientRect()
-    setRect({ top: r.bottom + 4, left: r.left, width: r.width })
+    // Room for about three options plus the header row is the least that is worth opening
+    // into; near the bottom of the screen the list opens upward instead of being cut off.
+    const below = window.innerHeight - r.bottom - 12
+    const above = r.top - 12
+    if (below < PANEL_MIN && above > below) {
+      setRect({ bottom: window.innerHeight - r.top + 4, left: r.left, width: r.width, maxHeight: Math.min(PANEL_MAX, above) })
+    } else {
+      setRect({ top: r.bottom + 4, left: r.left, width: r.width, maxHeight: Math.min(PANEL_MAX, Math.max(below, 120)) })
+    }
   }, [])
 
   useLayoutEffect(() => {
@@ -89,9 +100,9 @@ function SearchableSelect({ value, onChange, options, extraOptions, placeholder 
         <div
           ref={panelRef}
           style={{
-            position: 'fixed', top: rect.top, left: rect.left, width: rect.width, zIndex: 10500,
+            position: 'fixed', top: rect.top, bottom: rect.bottom, left: rect.left, width: rect.width, zIndex: 10500,
             background: '#fff', border: '1px solid #e0e0e6', borderRadius: 12,
-            boxShadow: '0 12px 32px rgba(0,0,0,0.14)', maxHeight: 240, overflowY: 'auto',
+            boxShadow: '0 12px 32px rgba(0,0,0,0.14)', maxHeight: rect.maxHeight, overflowY: 'auto',
           }}
         >
           {emptyOptionLabel && (

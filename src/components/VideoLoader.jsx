@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React from 'react'
 // Imported from src/assets so Vite fingerprints it (logoLoader-<hash>.mp4). A
 // hashed filename means updating the video busts the browser/CDN cache — no more
 // stale "old loader" on live. (Do NOT move back to /public: public keeps the
@@ -6,13 +6,10 @@ import React, { useState } from 'react'
 import logoVideo from '../assets/logoLoader.mp4'
 
 function VideoLoader({ onLoadingComplete }) {
-  const [videoEnded, setVideoEnded] = useState(false)
-
+  // No hold on the last frame: the app is already loaded underneath, so there is nothing
+  // to wait for once the video ends.
   const handleVideoEnd = () => {
-    setVideoEnded(true)
-    setTimeout(() => {
-      onLoadingComplete()
-    }, 2000)
+    onLoadingComplete()
   }
 
   const handleSkip = () => {

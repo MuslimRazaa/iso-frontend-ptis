@@ -164,9 +164,9 @@ function App() {
   return (
     <>
       <ToastHost />
-      {showLoader && !hasSeenLoader ? (
-        <VideoLoader onLoadingComplete={handleLoadingComplete} />
-      ) : (
+      {/* The intro video plays on top of the app instead of in place of it, so the router and
+          the first page's code and data load while it plays rather than after it ends. */}
+      {showLoader && !hasSeenLoader && <VideoLoader onLoadingComplete={handleLoadingComplete} />}
         <Router>
           <WelcomeToast />
           <Suspense fallback={<RouteFallback />}>
@@ -318,7 +318,6 @@ function App() {
           </Routes>
           </Suspense>
         </Router>
-      )}
     </>
   )
 }

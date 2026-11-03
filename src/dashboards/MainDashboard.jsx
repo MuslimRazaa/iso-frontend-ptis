@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import "../assets/style.css";
 import ptisLogo from "/ptisLogo.png";
 import SystemMap from "../components/SystemMap";
@@ -584,7 +584,6 @@ function MainDashboard() {
       </header>
 
       <main className="dashboard-content">
-        <ExpiringCertificatesBanner items={expiringCerts} onOpenCertificate={(item) => navigate(certificateLink(item, '/testing'))} />
         <section className="hero-row">
           <article className="intro-panel">
             <p className="eyebrow">Welcome back</p>
@@ -603,9 +602,14 @@ function MainDashboard() {
             <h2>Operational Status</h2>
             <ul>
               {loadingStats ? (
-                <li className="status-pill ok">
-                  <span>Loading...</span>
-                </li>
+                // Three rows while loading, as many as the loaded list has, so the panel
+                // (and everything under it) does not change height when the numbers arrive.
+                ['Active Courses', 'Total Employees', 'Standards'].map((label) => (
+                  <li key={label} className="status-pill ok">
+                    <span>{label}</span>
+                    <strong>…</strong>
+                  </li>
+                ))
               ) : (
                 quickStats.map((item) => (
                   <li key={item.label} className={`status-pill ${item.status}`}>
@@ -621,6 +625,10 @@ function MainDashboard() {
             </div>
           </article>
         </section>
+
+        {/* Below the hero, not above it: it only appears once the testing data has loaded, and
+            above the hero it pushed the whole page down when it did. */}
+        <ExpiringCertificatesBanner items={expiringCerts} onOpenCertificate={(item) => navigate(certificateLink(item, '/testing'))} />
 
         <section>
           <div className="section-heading">
@@ -653,7 +661,7 @@ function MainDashboard() {
                 key={tile.id}
                 className={`module-card ${status}`}
                 onClick={() => handleModuleClick(tile.id)}
-                aria-label={`Open ${tile.title} dashboard`}
+                aria-label={tile.external ? `Open ${tile.title} in a new window` : `Open ${tile.title} dashboard`}
               >
                 <div className="module-top-row">
                   <div className="module-icon">{renderTileIcon(tile.id)}</div>
@@ -667,31 +675,15 @@ function MainDashboard() {
                 </div>
                <div className="module-footer">
                   <span className="module-metric">{tileMetrics[tile.id] || tile.metric}</span>
-                  {tile.external ? (
-                    // The card's own onClick already opens this in a new tab;
-                    // without stopping the click here it would bubble up and
-                    // open a second one.
-                    <a
-                      href={tile.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <span className="module-link">
-                        Open in New Window
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M5 12h14M13 6l6 6-6 6" />
-                        </svg>
-                      </span>
-                    </a>
-                  ) : (
-                    <Link to={tile.link}><span className="module-link">
-                      Enter Dashboard
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M5 12h14M13 6l6 6-6 6" />
-                      </svg>
-                    </span></Link>
-                  )}
+                  {/* The whole card is the one button (a link inside a button is invalid
+                      and hides it from keyboards and screen readers), so this is only the
+                      visual cue; the card's onClick does the opening. */}
+                  <span className="module-link" aria-hidden="true">
+                    {tile.external ? 'Open in New Window' : 'Enter Dashboard'}
+                    <svg viewBox="0 0 24 24">
+                      <path d="M5 12h14M13 6l6 6-6 6" />
+                    </svg>
+                  </span>
                 </div>
               </button>
               )
@@ -705,7 +697,7 @@ function MainDashboard() {
             <div className="modal-content" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
                 <h2>Customize Grid</h2>
-                <button className="close-modal-btn" onClick={() => setShowCustomize(false)}>✕</button>
+                <button type="button" className="close-modal-btn" aria-label="Close" onClick={() => setShowCustomize(false)}><span aria-hidden="true">✕</span></button>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto' }}>
@@ -735,13 +727,15 @@ function MainDashboard() {
                           disabled={index === 0}
                           onClick={() => moveTile(tile.id, -1)}
                           title="Move up"
-                        >↑</button>
+                          aria-label={`Move ${tile.title} up`}
+                        ><span aria-hidden="true">↑</span></button>
                         <button
                           type="button" className="ghost-btn small"
                           disabled={index === orderedTiles.length - 1}
                           onClick={() => moveTile(tile.id, 1)}
                           title="Move down"
-                        >↓</button>
+                          aria-label={`Move ${tile.title} down`}
+                        ><span aria-hidden="true">↓</span></button>
                       </div>
                     </div>
                   );
