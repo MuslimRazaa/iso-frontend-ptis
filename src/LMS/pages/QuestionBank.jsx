@@ -1,9 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Upload, Loader2 } from 'lucide-react'
 import { API_ENDPOINTS } from '../../config/api'
 import SearchableSelect from '../../components/SearchableSelect'
 import ClearFilterButton from '../../components/ClearFilterButton'
 import { showToast } from '../../components/Toast'
+import PaginationBar from '../../components/PaginationBar'
+
+const PAGE_SIZE = 50
 
 const formSelectStyle = {
   border: '1px solid #dcdce3', borderRadius: 14, padding: '12px 14px',
@@ -13,7 +16,11 @@ const formSelectStyle = {
 
 function QuestionBank({ defaultTab = 'add' }) {
   const [activeTab, setActiveTab] = useState(defaultTab)
+  // One page of the library at a time — the server filters and pages it.
   const [questions, setQuestions] = useState([])
+  const [questionsTotal, setQuestionsTotal] = useState(0)
+  const [questionsPage, setQuestionsPage] = useState(1)
+  const [questionsLoading, setQuestionsLoading] = useState(false)
   const [standards, setStandards] = useState([])
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState(null)
@@ -39,15 +46,9 @@ function QuestionBank({ defaultTab = 'add' }) {
   const fetchAllData = async () => {
     try {
       setLoading(true)
-      const [questionsRes, standardsRes] = await Promise.all([
-        fetch(API_ENDPOINTS.QUESTIONS),
-        fetch(API_ENDPOINTS.STANDARDS)
-      ])
-
-      const questionsData = await questionsRes.json()
+      const standardsRes = await fetch(API_ENDPOINTS.STANDARDS)
       const standardsData = await standardsRes.json()
 
-      setQuestions(questionsData)
       setStandards(standardsData)
       
       // Set default standard
@@ -85,20 +86,37 @@ function QuestionBank({ defaultTab = 'add' }) {
     }
   }
 
-  const filteredQuestions = useMemo(() => {
-    if (!filterStandard) return []
-    if (filterStandard === 'all') {
-      return questions.map(convertQuestionFromDB)
+  // Loads the page of questions the Standard filter and page number ask for.
+  const questionsSeq = useRef(0)
+  const loadQuestions = useCallback(async (standard = filterStandard, page = questionsPage) => {
+    if (!standard) { setQuestions([]); setQuestionsTotal(0); return }
+    const seq = ++questionsSeq.current
+    try {
+      setQuestionsLoading(true)
+      const qs = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) })
+      if (standard === 'recent') qs.set('recent', '1')
+      else if (standard !== 'all') qs.set('standardId', standard)
+      const res = await fetch(`${API_ENDPOINTS.QUESTIONS}/browse?${qs}`)
+      if (!res.ok) throw new Error('Failed to load questions')
+      const json = await res.json()
+      if (seq !== questionsSeq.current) return // a newer request is on its way
+      setQuestions(json.data || [])
+      setQuestionsTotal(json.total || 0)
+      if (json.page && json.page !== page) setQuestionsPage(json.page)
+    } catch (error) {
+      console.error('Error fetching questions:', error)
+      if (seq === questionsSeq.current) setFeedback({ type: 'error', text: 'Failed to load questions. Please refresh.' })
+    } finally {
+      if (seq === questionsSeq.current) setQuestionsLoading(false)
     }
-    if (filterStandard === 'recent') {
-      return questions
-        .slice(0, 10)
-        .map(convertQuestionFromDB)
-    }
-    return questions
-      .filter((q) => q.standard_id.toString() === filterStandard)
-      .map(convertQuestionFromDB)
-  }, [questions, filterStandard])
+  }, [filterStandard, questionsPage])
+
+  // A different standard starts again at page 1.
+  const changeStandard = (value) => { setFilterStandard(value); setQuestionsPage(1) }
+
+  useEffect(() => { loadQuestions() }, [loadQuestions])
+
+  const filteredQuestions = useMemo(() => questions.map(convertQuestionFromDB), [questions])
 
   const setOptionValue = (index, value) => {
     setFormState((prev) => {
@@ -197,7 +215,7 @@ function QuestionBank({ defaultTab = 'add' }) {
       }
 
       // Refresh questions
-      await fetchAllData()
+      await Promise.all([fetchAllData(), loadQuestions()])
       resetForm()
 
       // Clear feedback after 3 seconds
@@ -237,8 +255,7 @@ function QuestionBank({ defaultTab = 'add' }) {
         return
       }
 
-      // Remove from local state
-      setQuestions(prev => prev.filter(q => q.id !== id))
+      loadQuestions() // the page, its total and any page after it all shift
       
       if (editingId === id) {
         resetForm(false)
@@ -298,7 +315,7 @@ function QuestionBank({ defaultTab = 'add' }) {
       )
 
       // Refresh questions list
-      await fetchAllData()
+      await Promise.all([fetchAllData(), loadQuestions()])
       setFeedback({ type: 'success', text: `Successfully imported ${result.successful} questions!` })
       setTimeout(() => setFeedback(null), 5000)
 
@@ -438,7 +455,7 @@ function QuestionBank({ defaultTab = 'add' }) {
                 <span>Filter by Standard</span>
                 <SearchableSelect
                   value={filterStandard}
-                  onChange={setFilterStandard}
+                  onChange={changeStandard}
                   disabled={loading}
                   options={standards.map((standard) => ({ value: standard.id.toString(), label: standard.standard_name }))}
                   emptyOptionLabel="-- Select Standard --"
@@ -450,10 +467,10 @@ function QuestionBank({ defaultTab = 'add' }) {
                   style={formSelectStyle}
                 />
               </label>
-              <ClearFilterButton visible={Boolean(filterStandard)} onClick={() => setFilterStandard('')} />
+              <ClearFilterButton visible={Boolean(filterStandard)} onClick={() => changeStandard('')} />
             </div>
 
-            {loading ? (
+            {loading || (questionsLoading && questions.length === 0) ? (
               <div className="empty-state-card">
                 <p className="empty-state-text">Loading questions...</p>
               </div>
@@ -468,7 +485,7 @@ function QuestionBank({ defaultTab = 'add' }) {
             ) : (
               <div className="question-table-wrapper">
                 <div className="results-info">
-                  <p>Showing {filteredQuestions.length} question(s)</p>
+                  <p>Showing {filteredQuestions.length} of {questionsTotal} question(s)</p>
                 </div>
                 <table className="question-table">
                   <thead>
@@ -484,7 +501,7 @@ function QuestionBank({ defaultTab = 'add' }) {
                     {filteredQuestions.map((question, index) => {
                       return (
                         <tr key={question.id}>
-                          <td className="text-center">{index + 1}</td>
+                          <td className="text-center">{(questionsPage - 1) * PAGE_SIZE + index + 1}</td>
                           <td>
                             <span className="standard-badge">{question.standardName}</span>
                           </td>
@@ -519,6 +536,16 @@ function QuestionBank({ defaultTab = 'add' }) {
                     })}
                   </tbody>
                 </table>
+                {filterStandard !== 'recent' && (
+                  <PaginationBar
+                    page={questionsPage}
+                    totalPages={Math.max(1, Math.ceil(questionsTotal / PAGE_SIZE))}
+                    totalItems={questionsTotal}
+                    pageSize={PAGE_SIZE}
+                    onPageChange={setQuestionsPage}
+                    itemLabel="questions"
+                  />
+                )}
               </div>
             )}
           </div>

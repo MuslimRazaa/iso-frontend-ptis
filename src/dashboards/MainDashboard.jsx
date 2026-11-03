@@ -356,7 +356,7 @@ function MainDashboard() {
       try {
         const [progressRes, jobLogRes, testingRes, standardsRes, isoTemplatesRes, isoPendingRes, courseRequestsRes] = await Promise.all([
           fetch(`${API_ENDPOINTS.COURSE_PROGRESS}/admin/all`),
-          fetch(API_ENDPOINTS.JOB_LOG),
+          fetch(`${API_ENDPOINTS.JOB_LOG}/summary`), // counts only — the full register is thousands of rows
           fetch(`${API_BASE_URL}/api/test-results/legacy`),
           fetch(API_ENDPOINTS.STANDARDS),
           fetch(API_ENDPOINTS.ISO_FORMS_TEMPLATES),
@@ -384,11 +384,10 @@ function MainDashboard() {
         const pendingCourseRequests = courseRequestsList.filter(r => r.status === 'pending').length;
 
         const jobLogJson = jobLogRes.ok ? await jobLogRes.json() : null;
-        const jobLogRows = Array.isArray(jobLogJson?.data) ? jobLogJson.data : (Array.isArray(jobLogJson) ? jobLogJson : []);
-        const norm = (s) => (s || '').toString().toLowerCase();
-        const pendingJobs = jobLogRows.filter(e => ['pending', ''].includes(norm(e.status))).length;
-        const jobLogMetric = jobLogRows.length
-          ? `${pendingJobs} pending · ${jobLogRows.length} total entries`
+        const jobLogTotal = jobLogJson?.stats?.total ?? 0;
+        const pendingJobs = jobLogJson?.stats?.pending ?? 0;
+        const jobLogMetric = jobLogTotal
+          ? `${pendingJobs} pending · ${jobLogTotal} total entries`
           : "No job entries yet";
 
         const testingRows = testingRes.ok ? await testingRes.json() : [];
@@ -450,7 +449,8 @@ function MainDashboard() {
       fetch(API_ENDPOINTS.ISO_FORMS_ENTRIES).then(r => r.ok ? r.json() : { data: [] }).catch(() => ({ data: [] })),
       fetch(API_ENDPOINTS.ISO_FORMS_TEMPLATES).then(r => r.ok ? r.json() : []).catch(() => []),
       fetch(API_ENDPOINTS.COURSES).then(r => r.ok ? r.json() : []).catch(() => []),
-      fetch(API_ENDPOINTS.JOB_LOG).then(r => r.ok ? r.json() : { data: [] }).catch(() => ({ data: [] })),
+      // The server does the matching and sends only the first few hits.
+      fetch(`${API_ENDPOINTS.JOB_LOG}/page?limit=20&search=${encodeURIComponent(query)}`).then(r => r.ok ? r.json() : { data: [] }).catch(() => ({ data: [] })),
     ]);
 
     const entries = Array.isArray(entriesJson?.data) ? entriesJson.data : (Array.isArray(entriesJson) ? entriesJson : []);
@@ -494,8 +494,6 @@ function MainDashboard() {
 
     const jobLogRows = Array.isArray(jobLogJson?.data) ? jobLogJson.data : (Array.isArray(jobLogJson) ? jobLogJson : []);
     const jobLogResults = jobLogRows
-      .filter(j => [j.client, j.work_order, j.reference, j.nature_of_job, j.inspector_name]
-        .filter(Boolean).join(' ').toLowerCase().includes(q))
       .map(j => ({
         type: 'Job Log',
         icon: '🗂️',

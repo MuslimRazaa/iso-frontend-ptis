@@ -57,7 +57,8 @@ const UserHeader = () => {
       fetch(`${API_ENDPOINTS.TASK_ALLOCATIONS}/employee/${myEmployeeId}`)
         .then(r => r.ok ? r.json() : []).catch(() => []),
       canSeeJobLog
-        ? fetch(API_ENDPOINTS.JOB_LOG).then(r => r.ok ? r.json() : { data: [] }).catch(() => ({ data: [] }))
+        // The server does the matching and sends only the first few hits.
+        ? fetch(`${API_ENDPOINTS.JOB_LOG}/page?limit=20&search=${encodeURIComponent(query)}`).then(r => r.ok ? r.json() : { data: [] }).catch(() => ({ data: [] }))
         : { data: [] },
       fetch(API_ENDPOINTS.COURSES).then(r => r.ok ? r.json() : []).catch(() => []),
     ]);
@@ -124,8 +125,6 @@ const UserHeader = () => {
 
     const jobLogRows = jobLog.data || jobLog || [];
     const jobLogResults = (Array.isArray(jobLogRows) ? jobLogRows : [])
-      .filter(j => [j.client, j.work_order, j.reference, j.nature_of_job, j.inspector_name]
-        .filter(Boolean).join(' ').toLowerCase().includes(q))
       .map(j => ({
         type: 'Job Log',
         icon: '🗂️',

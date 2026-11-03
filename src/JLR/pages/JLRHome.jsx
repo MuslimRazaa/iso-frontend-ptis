@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { BsCalendar2Date, BsClipboardData } from "react-icons/bs"
 import { LuUserRoundCheck } from "react-icons/lu"
@@ -43,33 +43,26 @@ function JLRHome() {
   // Keep every link inside the correct space so a user is never sent to admin.
   const base = isUser ? '/user/job-log' : '/job-log'
 
-  const [entries, setEntries] = useState([])
+  const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let active = true
-    fetch(API_ENDPOINTS.JOB_LOG)
+    // Counts only — the server adds them up instead of sending every entry.
+    fetch(`${API_ENDPOINTS.JOB_LOG}/summary`)
       .then(res => (res.ok ? res.json() : null))
-      .then(json => {
-        // API may return a bare array or { data: [...] }
-        const rows = json?.data ?? json
-        if (active) setEntries(Array.isArray(rows) ? rows : [])
-      })
-      .catch(() => { if (active) setEntries([]) })
+      .then(json => { if (active) setStats(json?.stats ?? null) })
+      .catch(() => { if (active) setStats(null) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [])
 
-  // Counts derived live from the Job Log entries
-  const counts = useMemo(() => {
-    const norm = (s) => (s || '').toString().toLowerCase()
-    return {
-      total:      entries.length,
-      completed:  entries.filter(e => ['completed', 'closed'].includes(norm(e.status))).length,
-      inProgress: entries.filter(e => norm(e.status) === 'in progress').length,
-      incomplete: entries.filter(e => norm(e.status) === 'incomplete').length,
-    }
-  }, [entries])
+  const counts = {
+    total:      stats?.total ?? 0,
+    completed:  stats?.completed ?? 0,
+    inProgress: stats?.inProgress ?? 0,
+    incomplete: stats?.incomplete ?? 0,
+  }
 
   const heroPills = [
     { label: 'Total Entries', value: counts.total },
