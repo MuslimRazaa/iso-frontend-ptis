@@ -25,6 +25,8 @@ export const makeSignature = (name) => ({
  * revision corrects what a form says, it does not re-sign it.
  */
 export const stampSignature = (value, fallbackName) => {
+  // A form filled while this field was still plain text holds a string; that is a name, not a stamp.
+  if (typeof value === 'string') value = { name: value }
   if (value?.at) return value
   const typed = String(value?.name || '').trim()
   return makeSignature(typed || fallbackName)
