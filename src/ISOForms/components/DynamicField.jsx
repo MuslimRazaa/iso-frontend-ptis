@@ -36,7 +36,11 @@ function DynamicField({ field, value, onChange, readOnly, employees = [], signer
   const options = (field.options || '').split(',').map(o => o.trim()).filter(Boolean)
 
   if (field.type === 'signature') {
-    const sealed = Boolean(value?.at)
+    // A field that used to be plain text still holds a string on forms filled back then.
+    // (A string has an .at() method, so `value?.at` alone would call it "sealed".) The old
+    // text is the name to sign as, until the form is next submitted.
+    if (typeof value === 'string') value = value.trim() ? { name: value.trim() } : undefined
+    const sealed = Boolean(value && typeof value === 'object' && value.at)
     const lines = signatureLines(value)
 
     // Already sealed — on a submitted form, or on one being revised. It reads
