@@ -11,8 +11,26 @@ import { Navigate, useLocation } from 'react-router-dom'
 // on a first-ever page load) so Login can send them straight back the
 // moment they sign in, instead of dropping them on the generic dashboard
 // and losing the link they clicked.
+//
+// Links in e-mails carry `login=1`. The browser keeps the last login for good,
+// so without it a click from an e-mail opened straight onto whoever happened to
+// be signed in. With it, that login is dropped and the person signs in first;
+// the address they are sent back to no longer carries the flag, so it opens.
+const AUTH_KEYS = ['userType', 'userEmail', 'userEmployeeId', 'userFullName', 'userPermissions', 'adminPassword']
+
 const RequireAuth = ({ children }) => {
   const location = useLocation()
+  const params = new URLSearchParams(location.search)
+  const fromEmail = params.get('login') === '1'
+
+  if (fromEmail) {
+    AUTH_KEYS.forEach(k => localStorage.removeItem(k))
+    params.delete('login')
+    const rest = params.toString()
+    const intendedPath = location.pathname + (rest ? `?${rest}` : '')
+    return <Navigate to={`/?redirect=${encodeURIComponent(intendedPath)}`} replace />
+  }
+
   const isLoggedIn = Boolean(localStorage.getItem('userEmail')) || localStorage.getItem('userType') === 'admin'
 
   if (!isLoggedIn) {

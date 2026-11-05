@@ -219,7 +219,7 @@ function App() {
             <Route path="/learning-management-system/add-employee"  element={<Navigate to="/employees/add-employee" replace />} />
 
             {/* Admin — Testing Module (standalone, integrated from ptis-lms) */}
-            <Route path="/testing" element={<TestingModulePage />} />
+            <Route path="/testing" element={<RequireAuth><TestingModulePage /></RequireAuth>} />
 
             {/* User — Testing Module (same module, host auth decides role).
                 When opened from a course (from=course) it also records to the

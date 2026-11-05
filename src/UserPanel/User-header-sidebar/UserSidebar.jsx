@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import ptisLogo from '/ptisLogo.png';
+import SidebarBrand from '../../components/SidebarBrand'
 
 const iconPaths = {
   dashboard: "M3 10h7V3H3zm11 0h7V3h-7zm0 11h7v-8h-7zm-11 0h7v-5H3z",
@@ -59,12 +59,7 @@ const UserSidebar = () => {
       onMouseLeave={() => setIsExpanded(false)}
     >
       {/* Brand */}
-      <div className="user-sidebar-brand">
-        <div className="user-sidebar-logo">
-          <img src={ptisLogo} alt="PTIS" />
-        </div>
-        <span className="user-sidebar-brand-text">PTIS Portal</span>
-      </div>
+      <SidebarBrand variant="dark" to="/user/dashboard" label="PTIS Portal" />
 
       {/* Nav */}
       <nav className="user-sidebar-nav">

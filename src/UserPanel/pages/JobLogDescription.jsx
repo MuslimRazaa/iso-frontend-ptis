@@ -9,6 +9,7 @@ import WorkOrderTagInput from '../../components/WorkOrderTagInput'
 import WorkOrderCell from '../../components/WorkOrderCell'
 import StyledDatePicker from '../../components/StyledDatePicker'
 import InfoTooltip from '../../components/InfoTooltip'
+import SpellField from '../../ISOForms/components/SpellField'
 import { showToast } from '../../components/Toast'
 import { getActorId, getActorName } from '../../utils/actorIdentity'
 import { localToday } from '../../utils/localDate'
@@ -303,6 +304,20 @@ const autoStatusOf = (e) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(end) || end > todayYmd()) return 'In Progress'
   // The long dash "—" is an empty cell, a typed "-" is an answer (see utils/jlrStatus.js).
   return REQUIRED_KEYS.some(k => /^[–—]*$/.test(String(e[k] ?? '').trim())) ? 'Incomplete' : 'Completed'
+}
+
+// What an Incomplete entry is still missing, by the department that has to fill it in:
+// [{ dept: 'QHSE', fields: ['TRA', 'V. Log'] }, …] — empty when nothing is missing.
+const REQUIRED_LABELS = {
+  tra: 'TRA', equipCL: 'Equip C/L', vLog: 'V. Log', tbt: 'TBT', rept: 'REPT', accounts: 'Accounts', it: 'IT',
+  stockRequisition: 'Stock Requisition', goodsIssueNote: 'Goods Issue Note', consumption: 'Consumption', gatePass: 'Gate Pass',
+}
+const DEPT_ORDER = [['qhse', 'QHSE'], ['inventory', 'Inventory'], ['accounts', 'Accounts'], ['it', 'IT']]
+const missingByDept = (e) => {
+  const missing = REQUIRED_KEYS.filter(k => /^[–—]*$/.test(String(e[k] ?? '').trim()))
+  return DEPT_ORDER
+    .map(([key, dept]) => ({ dept, fields: missing.filter(k => FIELD_DEPT[k] === key).map(k => REQUIRED_LABELS[k]) }))
+    .filter(d => d.fields.length)
 }
 
 // ── CSV / Excel export ───────────────────────────────────────
@@ -1908,7 +1923,19 @@ function JobLogDescription() {
                         <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.equipCL} /></td>
                         <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.vLog} /></td>
                         <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.tbt} /></td>
-                        <td><StatusBadge value={entry.status} /></td>
+                        <td>
+                          <StatusBadge value={entry.status} />
+                          {String(entry.status || '').toLowerCase() === 'incomplete' && (() => {
+                            const gaps = missingByDept(entry)
+                            if (!gaps.length) return null
+                            return (
+                              <div title={gaps.map(g => `${g.dept}: ${g.fields.join(', ')}`).join('\n')}
+                                style={{ marginTop: 3, fontSize: 9.5, lineHeight: 1.25, color: '#c62828', maxWidth: 150, whiteSpace: 'normal' }}>
+                                Missing: {gaps.map(g => g.dept).join(', ')}
+                              </div>
+                            )
+                          })()}
+                        </td>
                         <td className="all-records-cell-date">{rv(entry.completionDate)}</td>
                         <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.rept} /></td>
                         <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.exp} /></td>
@@ -2237,7 +2264,7 @@ function JobLogDescription() {
                     disabled={!canEdit('operations')}
                     options={[]}
                     extraOptions={[
-                      { value: AUTO, label: `Automatic — ${autoStatusOf(modalState)}` },
+                      { value: AUTO, label: `Automatic — ${autoStatusOf(modalState)}${autoStatusOf(modalState) === 'Incomplete' && missingByDept(modalState).length ? ` (missing: ${missingByDept(modalState).map(g => g.dept).join(', ')})` : ''}` },
                       ...STATUS_CHOICES.map(s => ({ value: s, label: s })),
                     ]}
                     style={modalSelectStyle}
@@ -2262,10 +2289,10 @@ function JobLogDescription() {
               </div>
 
               <label><span>Operations Remarks</span>
-                <textarea rows="2" value={modalState.remarkOperations}
+                <SpellField as="textarea" rows={2} spellCheck lang="en" style={{ width: '100%', boxSizing: 'border-box' }} value={modalState.remarkOperations}
                   placeholder="Operations notes…"
                   disabled={!canEdit('operations')}
-                  onChange={e => handleModalChange('remarkOperations', e.target.value)} />
+                  onChange={v => handleModalChange('remarkOperations', v)} />
               </label>
 
               <ModalSection Icon={MdOutlineHealthAndSafety} title="QHSE" hint="Safety & compliance" />
@@ -2303,10 +2330,10 @@ function JobLogDescription() {
                     onChange={v => handleModalChange('submissionDate', v)} /></label>
               </div>
               <label><span>QHSE Remarks</span>
-                <textarea rows="2" value={modalState.remarkQhse}
+                <SpellField as="textarea" rows={2} spellCheck lang="en" style={{ width: '100%', boxSizing: 'border-box' }} value={modalState.remarkQhse}
                   placeholder="QHSE notes…"
                   disabled={!canEdit('qhse')}
-                  onChange={e => handleModalChange('remarkQhse', e.target.value)} />
+                  onChange={v => handleModalChange('remarkQhse', v)} />
               </label>
 
               <ModalSection Icon={BsBoxSeam} title="Inventory" hint="Stock & materials" />
@@ -2333,10 +2360,10 @@ function JobLogDescription() {
                     onChange={e => handleModalChange('gatePass', e.target.value)} /></label>
               </div>
               <label><span>Inventory Remarks</span>
-                <textarea rows="2" value={modalState.remarkInventory}
+                <SpellField as="textarea" rows={2} spellCheck lang="en" style={{ width: '100%', boxSizing: 'border-box' }} value={modalState.remarkInventory}
                   placeholder="Inventory notes…"
                   disabled={!canEdit('inventory')}
-                  onChange={e => handleModalChange('remarkInventory', e.target.value)} />
+                  onChange={v => handleModalChange('remarkInventory', v)} />
               </label>
 
               <ModalSection Icon={BsWallet2} title="Accounts" hint="Expenses & sign-off" />
@@ -2355,10 +2382,10 @@ function JobLogDescription() {
                 ))}
               </div>
               <label><span>Accounts Remarks</span>
-                <textarea rows="2" value={modalState.remarkAccounts}
+                <SpellField as="textarea" rows={2} spellCheck lang="en" style={{ width: '100%', boxSizing: 'border-box' }} value={modalState.remarkAccounts}
                   placeholder="Accounts notes…"
                   disabled={!canEdit('accounts')}
-                  onChange={e => handleModalChange('remarkAccounts', e.target.value)} />
+                  onChange={v => handleModalChange('remarkAccounts', v)} />
               </label>
 
               <ModalSection Icon={BsLaptop} title="IT" hint="IT sign-off" />
@@ -2374,10 +2401,10 @@ function JobLogDescription() {
                   /></label>
               </div>
               <label><span>IT Remarks</span>
-                <textarea rows="2" value={modalState.remarkIt}
+                <SpellField as="textarea" rows={2} spellCheck lang="en" style={{ width: '100%', boxSizing: 'border-box' }} value={modalState.remarkIt}
                   placeholder="IT notes…"
                   disabled={!canEdit('it')}
-                  onChange={e => handleModalChange('remarkIt', e.target.value)} />
+                  onChange={v => handleModalChange('remarkIt', v)} />
               </label>
 
               <div className="modal-actions">

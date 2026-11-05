@@ -1,0 +1,24 @@
+/* Hover and focus for the sidebar brand (SidebarBrand.jsx). Deliberately small: the sidebar
+   itself already animates open on hover, and two loud animations at once read as noise. */
+
+/* Light module sidebars */
+.sidebar-brand .brand-logo a img { transition: transform 0.18s ease; }
+.sidebar-brand .brand-logo a:hover img { transform: scale(1.05); }
+
+.brand-home-link { display: block; text-decoration: none; color: inherit; border-radius: 6px; }
+.brand-home-link > span,
+.brand-home-link > div { transition: color 0.18s ease; }
+/* The colours are set inline on the two lines, so the hover has to outrank them. */
+.brand-home-link:hover > span { color: #b81f33 !important; }
+.brand-home-link:hover > div { color: #6a6a7a !important; }
+
+.sidebar-brand a:focus-visible { outline: 2px solid #d7263d; outline-offset: 2px; border-radius: 6px; }
+
+/* Employee panel (dark sidebar) */
+.user-sidebar-logo,
+.user-sidebar-brand-text { text-decoration: none; }
+.user-sidebar-logo { transition: background 0.18s, transform 0.18s; }
+.user-sidebar-logo:hover { background: #fff; transform: scale(1.04); }
+.user-sidebar-brand-text:hover { color: #ff9aa8; }
+.user-sidebar-logo:focus-visible,
+.user-sidebar-brand-text:focus-visible { outline: 2px solid #ff9aa8; outline-offset: 2px; border-radius: 6px; }

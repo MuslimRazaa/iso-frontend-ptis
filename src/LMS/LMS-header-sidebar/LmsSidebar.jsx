@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { Link, NavLink, useLocation } from "react-router-dom";
-import ptisLogo from "/ptisLogo.png";
+import { NavLink, useLocation } from "react-router-dom";
+import SidebarBrand from '../../components/SidebarBrand'
 
 const iconPaths = {
   dashboard: "M3 10h7V3H3zm11 0h7V3h-7zm0 11h7v-8h-7zm-11 0h7v-5H3z",
@@ -76,15 +76,7 @@ function LmsSidebar() {
       onMouseEnter={() => setIsExpanded(true)}
       onMouseLeave={() => setIsExpanded(false)}
     >
-      <div className="sidebar-brand">
-        <div className="brand-logo" aria-hidden="true">
-         <Link to={dashboardPath}><img src={ptisLogo} alt="PTIS" /></Link>
-        </div>
-        <div className="sidebar-fade-text" style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}>
-          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '1.4px', textTransform: 'uppercase', color: '#d7263d' }}>Learning</span>
-          <div style={{ fontSize: 11, color: '#9a9aaa', marginTop: 1 }}>Management System</div>
-        </div>
-      </div>
+      <SidebarBrand to={dashboardPath} label="Learning" caption="Management System" />
       <nav className="sidebar-menu">
         <div className="sidebar-fade-text" style={{ padding: '16px 18px 6px', overflow: 'hidden', whiteSpace: 'nowrap', pointerEvents: 'none' }}>
           <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '1.6px', textTransform: 'uppercase', color: '#b0b0c0' }}>Navigation</span>
