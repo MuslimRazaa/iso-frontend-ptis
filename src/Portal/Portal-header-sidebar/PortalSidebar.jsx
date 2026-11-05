@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { Link, NavLink } from "react-router-dom";
-import ptisLogo from "/ptisLogo.png";
+import { NavLink } from "react-router-dom";
+import SidebarBrand from '../../components/SidebarBrand'
 
 const iconPaths = {
   dashboard: "M3 10h7V3H3zm11 0h7V3h-7zm0 11h7v-8h-7zm-11 0h7v-5H3z",
@@ -67,11 +67,7 @@ function PortalSidebar() {
       onMouseEnter={() => setIsExpanded(true)}
       onMouseLeave={() => setIsExpanded(false)}
     >
-      <div className="sidebar-brand">
-        <div className="brand-logo" aria-hidden="true">
-          <Link to="/dashboard"><img src={ptisLogo} alt="PTIS" /></Link>
-        </div>
-      </div>
+      <SidebarBrand to="/dashboard" label="Reporting Portal" caption="Management System" />
       <nav className="sidebar-menu">
         {menuConfig.map((menu) => (
           <div key={menu.id} className="menu-group">

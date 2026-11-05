@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
-import { Link, NavLink } from 'react-router-dom'
-import ptisLogo from '/ptisLogo.png'
+import { NavLink } from 'react-router-dom'
+import SidebarBrand from '../components/SidebarBrand'
 
 const BASE = '/user/learning-management-system'
 const DASHBOARD = '/user/dashboard'
@@ -36,27 +36,7 @@ function UserLmsSidebar() {
       onMouseLeave={() => setIsExpanded(false)}
     >
       {/* Brand */}
-      <div className="sidebar-brand">
-        <div className="brand-logo" aria-hidden="true">
-          <Link to={DASHBOARD}>
-            <img src={ptisLogo} alt="PTIS" />
-          </Link>
-        </div>
-        <div style={{
-          overflow: 'hidden',
-          opacity: isExpanded ? 1 : 0,
-          transition: 'opacity 0.22s',
-          whiteSpace: 'nowrap',
-        }}>
-          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '1.4px',
-            textTransform: 'uppercase', color: '#d7263d' }}>
-            LMS
-          </span>
-          <div style={{ fontSize: 11, color: '#9a9aaa', marginTop: 1 }}>
-            Learning Portal
-          </div>
-        </div>
-      </div>
+      <SidebarBrand to={DASHBOARD} label="LMS" caption="Learning Portal" />
 
       {/* Section label */}
       <nav className="sidebar-menu">

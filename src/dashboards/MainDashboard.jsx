@@ -582,6 +582,7 @@ function MainDashboard() {
       </header>
 
       <main className="dashboard-content">
+        <ExpiringCertificatesBanner items={expiringCerts} onOpenCertificate={(item) => navigate(certificateLink(item, '/testing'))} />
         <section className="hero-row">
           <article className="intro-panel">
             <p className="eyebrow">Welcome back</p>
@@ -623,10 +624,6 @@ function MainDashboard() {
             </div>
           </article>
         </section>
-
-        {/* Below the hero, not above it: it only appears once the testing data has loaded, and
-            above the hero it pushed the whole page down when it did. */}
-        <ExpiringCertificatesBanner items={expiringCerts} onOpenCertificate={(item) => navigate(certificateLink(item, '/testing'))} />
 
         <section>
           <div className="section-heading">

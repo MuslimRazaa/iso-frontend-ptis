@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
-import { Link, NavLink, useLocation } from 'react-router-dom'
-import ptisLogo from '/ptisLogo.png'
+import { NavLink, useLocation } from 'react-router-dom'
+import SidebarBrand from '../components/SidebarBrand'
 
 const iconPaths = {
   home:    'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',
@@ -40,30 +40,7 @@ function JLRSidebar() {
       onMouseLeave={() => setIsExpanded(false)}
     >
       {/* Brand / Logo */}
-      <div className="sidebar-brand">
-        <div className="brand-logo" aria-hidden="true">
-          <Link to={dashboardPath}>
-            <img src={ptisLogo} alt="PTIS" />
-          </Link>
-        </div>
-        {/* Module label — only visible when expanded */}
-        <div style={{
-          overflow: 'hidden',
-          opacity: isExpanded ? 1 : 0,
-          transition: 'opacity 0.22s',
-          whiteSpace: 'nowrap',
-        }}>
-          <span style={{
-            fontSize: 10, fontWeight: 800, letterSpacing: '1.4px',
-            textTransform: 'uppercase', color: '#d7263d',
-          }}>
-            Job Log
-          </span>
-          <div style={{ fontSize: 11, color: '#9a9aaa', marginTop: 1 }}>
-            Description
-          </div>
-        </div>
-      </div>
+      <SidebarBrand to={dashboardPath} label="Job Log" caption="Description" />
 
       {/* Navigation */}
       <nav className="sidebar-menu">

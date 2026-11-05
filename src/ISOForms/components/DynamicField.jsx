@@ -5,6 +5,7 @@ import StyledSelect from '../../components/StyledSelect'
 import SearchableSelect from '../../components/SearchableSelect'
 import StyledDatePicker from '../../components/StyledDatePicker'
 import StyledTimePicker from '../../components/StyledTimePicker'
+import SpellField from './SpellField'
 
 const BASE_INPUT = {
   width: '100%', padding: '12px 15px', border: '2px solid #e0e0e6',
@@ -106,7 +107,7 @@ function DynamicField({ field, value, onChange, readOnly, employees = [], signer
 
   switch (field.type) {
     case 'textarea':
-      return <textarea rows={4} {...common} style={{ ...inputStyle, resize: 'vertical' }} />
+      return <SpellField as="textarea" rows={4} spellCheck lang="en" {...common} onChange={onChange} style={{ ...inputStyle, resize: 'vertical' }} />
     case 'number':
       return <input type="number" {...common} />
     case 'date':
@@ -251,7 +252,7 @@ function DynamicField({ field, value, onChange, readOnly, employees = [], signer
       )
     }
     default:
-      return <input type="text" {...common} />
+      return <SpellField type="text" spellCheck lang="en" {...common} onChange={onChange} />
   }
 }
 

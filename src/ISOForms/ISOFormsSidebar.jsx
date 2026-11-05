@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
-import ptisLogo from '/ptisLogo.png'
 import { API_ENDPOINTS } from '../config/api'
 import { getCurrentEmployeeId } from './utils/currentEmployee'
 import { getOfflineEntries } from './utils/offlineStore'
+import SidebarBrand from '../components/SidebarBrand'
 
 const iconPaths = {
   home:      'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',
@@ -71,17 +71,7 @@ function ISOFormsSidebar() {
       onMouseLeave={() => setIsExpanded(false)}
     >
       {/* Brand / Logo */}
-      <div className="sidebar-brand">
-        <div className="brand-logo" aria-hidden="true">
-          <Link to={dashboardPath}>
-            <img src={ptisLogo} alt="PTIS" />
-          </Link>
-        </div>
-        <div className="sidebar-fade-text" style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}>
-          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '1.4px', textTransform: 'uppercase', color: '#d7263d' }}>ISO</span>
-          <div style={{ fontSize: 11, color: '#9a9aaa', marginTop: 1 }}>Forms</div>
-        </div>
-      </div>
+      <SidebarBrand to={dashboardPath} label="ISO" caption="Forms" />
 
       {/* Navigation */}
       <nav className="sidebar-menu">
