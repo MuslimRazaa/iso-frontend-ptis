@@ -1861,6 +1861,33 @@ body {
   gap: 18px;
 }
 
+/* "Programs to amplify" is one row: whatever does not fit on the first line is collapsed. */
+.spotlight-grid .spotlight-cards {
+  /* At most 4 across; fewer when the screen is too narrow for 240px cards. */
+  grid-template-columns: repeat(auto-fit, minmax(max(240px, calc((100% - 54px) / 4)), 1fr));
+  grid-template-rows: auto;
+  grid-auto-rows: 0;
+  row-gap: 0;
+  column-gap: 18px;
+  overflow: hidden;
+  padding-bottom: 28px;
+  margin-bottom: -28px;
+}
+
+/* All Courses: the same cards, as many rows as there are courses. */
+.spotlight-cards.all-course-cards { margin: 18px 0; }
+.all-course-desc {
+  margin: 0;
+  color: #595966;
+  font-size: 13.5px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.all-course-meta { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; color: #7a7a8c; }
+.all-course-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
 .spotlight-card {
   background: #fff;
   border: 1px solid #ececf0;

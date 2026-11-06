@@ -212,15 +212,16 @@ const drawControlledDocumentNotice = (pages, font) => {
 }
 
 /**
- * Marks the unused rows at the end of a register table with a dash.
+ * Covers the unused rows at the end of a register table.
  *
- * A register template prints far more rows than most forms fill. The rows stay on
- * the page, as printed, and each empty cell of the unused ones gets a dash, so a
- * blank row reads as "nothing here" rather than as something forgotten. Only the run
- * of empty rows at the END of a table is marked. A table with nothing filled in at
- * all is left as the template has it.
+ * A register template prints far more rows than most forms fill. Rows cannot be
+ * taken out of the template's PDF, so each unused one is painted over in white
+ * instead — but only the run of empty rows at the END of a table, since a white
+ * band in the middle would look like a hole. The cover starts just under the last
+ * used row's bottom line, so that line stays and becomes the table's new edge.
+ * A table with nothing filled in at all is left whole.
  */
-const markUnusedRows = (pages, fields, allValues, font) => {
+const hideUnusedRows = (pages, fields, allValues) => {
   const rowMap = new Map()
   for (const f of fields || []) {
     const box = f.pdfCoords?.rowBox
@@ -254,15 +255,28 @@ const markUnusedRows = (pages, fields, allValues, font) => {
     if (firstUnused === 0 || firstUnused === table.length) continue   // all empty, or none to hide
 
     const page = pages[table[0].page]
-    for (const row of table.slice(firstUnused)) {
-      for (const f of row.fields) {
-        const c = normalizePdfCoords(f.pdfCoords)
-        if (!c || ![c.x, c.y, c.width, c.height].every(Number.isFinite)) continue
-        const size = Math.min(DEFAULT_FONT_SIZE, Math.max(6, c.height - 2))
-        const w = font.widthOfTextAtSize('-', size)
-        page?.drawText('-', { x: c.x + (c.width - w) / 2, y: c.y + (c.height - size) / 2 + size * 0.2, size, font, color: TEXT_COLOR })
-      }
-    }
+    const top = table[firstUnused].box
+    const bottom = table[table.length - 1].box
+    // The line between the last used row and the first unused one. Where exactly
+    // it was drawn varies by a fraction of a point from table to table, so the
+    // cover starts a little below it and the line is then drawn again over the
+    // top, which keeps the table closed whichever way the edge fell.
+    const edge = top.y + top.height
+    const coverTop = edge - 0.6
+    const coverBottom = bottom.y - 1.2
+    page?.drawRectangle({
+      x: top.x - 1.5,
+      y: coverBottom,
+      width: top.width + 3,
+      height: coverTop - coverBottom,
+      color: rgb(1, 1, 1),
+    })
+    page?.drawLine({
+      start: { x: top.x - 0.3, y: edge },
+      end: { x: top.x + top.width + 0.3, y: edge },
+      thickness: 0.7,
+      color: rgb(0.1, 0.1, 0.1),
+    })
   }
 }
 
@@ -287,7 +301,7 @@ export async function fillOriginalPdf(base64, fields, formValues, approverValues
 
   const allValues = { ...formValues, ...approverValues }
   const skipped = []
-  markUnusedRows(pages, fields, allValues, font)
+  hideUnusedRows(pages, fields, allValues)
 
   // If the template PDF is itself a fillable form, values go into its own
   // fields and the form is then flattened. That uses the appearance the form's

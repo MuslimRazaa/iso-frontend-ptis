@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import axios from 'axios'
+import { useNavigate } from 'react-router-dom'
+import useLmsBase from '../useLmsBase'
 import { Pencil, Trash2, Search } from 'lucide-react'
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api'
 import PaginationBar from '../../components/PaginationBar'
@@ -20,6 +22,8 @@ import dataAnalystThumb from '../../assets/thumbnails/1.jpg'
 const PAGE_SIZE = 100
 
 function AllCourses() {
+  const navigate = useNavigate()
+  const lmsBase = useLmsBase()
   const [courses, setCourses] = useState([])
   const [currentPage, setCurrentPage] = useState(1)
   const [loading, setLoading] = useState(false)
@@ -392,54 +396,43 @@ function AllCourses() {
       )}
 
       {!loading && filteredCourses.length > 0 && (
-        <div className="table-wrapper">
-          <table className="course-table">
-            <thead>
-              <tr>
-                <th>Course</th>
-                <th>Owner</th>
-                <th>Category</th>
-                <th>Standard</th>
-                <th>Status</th>
-                <th>Last Update</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedCourses.map((row) => (
-                <tr key={row.id}>
-                  <td>
-                    <div className="course-cell">
-                      <img src={row.thumbnail} alt={row.title} className="course-thumb" loading="lazy" />
-                      <div className="course-info">
-                        <strong>{row.title}</strong>
-                        <span>{row.description}</span>
+        <div>
+          <div className="spotlight-cards all-course-cards">
+            {paginatedCourses.map((row) => (
+              <article
+                className="spotlight-card"
+                key={row.id}
+                onClick={() => navigate(`${lmsBase}/course/${row.id}`)}
+                title="Open course"
+              >
+                <div className="spotlight-thumb">
+                  <img src={row.thumbnail} alt={`${row.title} thumbnail`} loading="lazy" />
+                </div>
+                <div className="spotlight-body">
+                  <div>
+                    <p className="eyebrow">{[row.category, row.standard !== 'N/A' ? row.standard : null].filter(Boolean).join(' · ') || 'Course'}</p>
+                    <h3>{row.title}</h3>
+                    <p className="all-course-desc">{row.description}</p>
+                  </div>
+                  <div className="all-course-meta">
+                    <span>{row.owner}</span>
+                    <span>CH {row.creditHours || 0} · {row.updated}</span>
+                  </div>
+                  <div className="all-course-foot">
+                    <span className={`status-pill small ${row.status.toLowerCase()}`}>{row.status}</span>
+                    <div className="action-buttons" onClick={(e) => e.stopPropagation()}>
+                      <button className="action-btn edit" onClick={() => startEdit(row)} title="Edit">
+                        <Pencil size={16} />
+                      </button>
+                      <button className="action-btn delete" onClick={() => handleDelete(row.id)} title="Delete">
+                        <Trash2 size={16} />
+                      </button>
                     </div>
                   </div>
-                </td>
-                <td>{row.owner}</td>
-                <td>{row.category}</td>
-                <td>{row.standard}</td>
-                <td>
-                  <span className={`status-pill small ${row.status.toLowerCase()}`}>
-                    {row.status}
-                  </span>
-                </td>
-                <td>{row.updated}</td>
-                <td>
-                  <div className="action-buttons">
-                    <button className="action-btn edit" onClick={() => startEdit(row)} title="Edit">
-                      <Pencil size={16} />
-                    </button>
-                    <button className="action-btn delete" onClick={() => handleDelete(row.id)} title="Delete">
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
+                </div>
+              </article>
             ))}
-          </tbody>
-        </table>
+          </div>
         <PaginationBar
           page={safePage}
           totalPages={totalPages}
