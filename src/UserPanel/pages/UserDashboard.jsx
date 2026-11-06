@@ -178,7 +178,9 @@ const UserDashboard = () => {
             status: "online",
             statusLabel: "Live",
             metric: jobLogMetric,
-            permission: userPermissions.cvs,
+            // Any Job Log department permission (Operations, QHSE, …) opens the module; it does
+            // not depend on CV Library access, which is its own module below.
+            permission: Object.values(userPermissions.jlr || {}).some(Boolean),
             icon: "cv"
         },
         {
@@ -205,7 +207,9 @@ const UserDashboard = () => {
             metric: userPermissions.testing_admin
                 ? "Manage results, practicals and certificates"
                 : "Take your assigned tests",
-            permission: userPermissions.testing || userPermissions.testing_admin,
+            // Plain "Testing" access is not a module of its own: an employee reaches their tests
+            // from the LMS once a course is done. Only Testing (Admin) gets the module card.
+            permission: Boolean(userPermissions.testing_admin),
             icon: "certificates"
         },
         {

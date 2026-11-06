@@ -775,18 +775,32 @@ export async function parsePdf(file) {
         ci = cj
       }
     }
-    const inGroup = new Map(choiceGroups.flatMap(span => span.map(k => [k, span])))
+    // Neighbouring narrow columns whose headings are printed on their side ("Physical cond." |
+    // "Nut & bolt" | …) are a checklist's tick columns: each row is one multi-select group,
+    // its options those columns, and any number of them can be ticked.
+    const tickColumn = (x) => x && x.fillable && x.sideways && x.w <= 24 && !(x.choices && x.choices.length >= 2)
+    const tickGroups = []
+    for (let ci = 0; ci < t.columns.length; ci++) {
+      if (!tickColumn(t.columns[ci]) || choiceGroups.some(span => span.includes(t.columns[ci].index))) continue
+      let cj = ci
+      while (cj + 1 < t.columns.length && tickColumn(t.columns[cj + 1])) cj++
+      if (cj > ci) tickGroups.push(t.columns.slice(ci, cj + 1).map(x => x.index))
+      ci = cj
+    }
+    const multi = new Set(tickGroups.flat())
+    const inGroup = new Map([...choiceGroups, ...tickGroups].flatMap(span => span.map(k => [k, span])))
     return t.rows.flatMap((row, ri) => t.columns.flatMap((col, ci) => {
       const span = inGroup.get(ci)
       if (span) {
         if (span[0] !== ci) return []
-        const marks = span.map(k => ({ label: t.columns[k].own, t: row.ticks?.[k], cell: row.cells[k] })).filter(m => m.cell)
+        const isMulti = multi.has(ci)
+        const marks = span.map(k => ({ label: isMulti ? t.columns[k].caption.replace(/,/g, ' ') : t.columns[k].own, t: row.ticks?.[k], cell: row.cells[k] })).filter(m => m.cell)
         if (!marks.length) return []
         const first = marks[0].cell, last = marks[marks.length - 1].cell
         return [{
           id: `f_reg_${t.page}_${ti}_${ri}_${ci}_${Date.now().toString(36)}`,
-          label: `${row.title || `Row ${row.number}`} — ${col.group}`,
-          type: 'radio',
+          label: `${row.title || `Row ${row.number}`} — ${col.group || (isMulti ? 'Checks' : '')}`,
+          type: isMulti ? 'checkbox-group' : 'radio',
           required: false,
           owner: 'requester',
           options: marks.map(m => m.label).join(', '),

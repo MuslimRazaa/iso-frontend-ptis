@@ -246,7 +246,7 @@ const NotificationBell = ({ email, onOpen, closeSignal }) => {
               }}>{unreadCount} unread</span>
             )}
           </div>
-          <div style={{ maxHeight: '340px', overflowY: 'auto' }}>
+          <div className="no-scrollbar" style={{ maxHeight: '340px', overflowY: 'auto' }}>
             {notifications.length === 0 ? (
               <div style={{ padding: '24px', textAlign: 'center', color: 'rgba(255,255,255,0.6)' }}>
                 <div style={{ fontSize: '28px', marginBottom: '8px' }}>🔔</div>

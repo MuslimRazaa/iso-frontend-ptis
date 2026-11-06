@@ -18,8 +18,7 @@ function ISOFormsLayout() {
           display: 'flex',
           flexDirection: 'column',
           minWidth: 0,
-          overflowX: 'hidden',
-          overflowY: 'auto',
+          overflowX: 'clip',
           position: 'relative',
         }}>
           <Outlet />

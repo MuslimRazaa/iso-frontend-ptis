@@ -76,7 +76,7 @@ function CourseCategories() {
 
   const startEdit = (category) => {
     setEditingId(category.id)
-    setFormData({ name: category.name, description: category.description })
+    setFormData({ name: category.name, description: category.description || '' })
   }
 
   const saveEdit = async (id) => {

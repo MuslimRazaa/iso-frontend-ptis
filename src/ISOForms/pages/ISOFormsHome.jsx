@@ -186,7 +186,7 @@ function ISOFormsHome() {
             <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.15em', color: SUBTLE }}>Activity</p>
             <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: INK }}>Recently Submitted</h2>
           </div>
-          <Link to={`${base}/entries`} style={{ fontSize: 13, color: BRAND, fontWeight: 700, textDecoration: 'none' }}>View all →</Link>
+          <Link to={`${base}/entries`} className="view-all-link">View all <span aria-hidden="true">→</span></Link>
         </div>
 
         <article className="panel" style={{ padding: 0, overflow: 'hidden' }}>
@@ -200,6 +200,7 @@ function ISOFormsHome() {
                 <Link
                   key={entry.id}
                   to={`${base}/entries/${entry.id}`}
+                  className="recent-entry-row"
                   style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
                     padding: '16px 22px', borderTop: `1px solid ${BORDER}`, textDecoration: 'none', color: 'inherit',

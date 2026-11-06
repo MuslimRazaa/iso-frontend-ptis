@@ -357,7 +357,7 @@ function AllCourses() {
           onChange={onStatusChange}
           options={[]}
           extraOptions={[
-            { value: 'all', label: 'All statuses' },
+            { value: 'all', label: 'All status' },
             { value: 'Active', label: 'Active' },
             { value: 'Draft', label: 'Draft' },
           ]}

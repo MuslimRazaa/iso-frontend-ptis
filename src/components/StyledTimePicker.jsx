@@ -7,6 +7,41 @@ const MINUTES = Array.from({ length: 60 }, (_, i) => i)
 const PERIODS = ['AM', 'PM']
 const pad = (n) => String(n).padStart(2, '0')
 
+const ROW = 34          // one row (32px + 2px gap) in a column
+const VIEW = 190        // height of a column
+const COPIES = 5
+
+// A column that never ends: the numbers repeat, so after 59 comes 00 again (and 00 follows
+// back past 59 when scrolling up). The list is drawn several times over and the scroll
+// position is moved by exactly one whole list whenever it drifts out of the middle, which
+// looks the same, so the wheel just keeps turning.
+function LoopColumn({ title, values, selected, onPick, cell }) {
+  const ref = useRef(null)
+  const span = values.length * ROW
+
+  useLayoutEffect(() => {
+    const at = Math.max(0, values.indexOf(selected))
+    if (ref.current) ref.current.scrollTop = span * 2 + at * ROW - (VIEW / 2 - ROW / 2)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const keepInMiddle = () => {
+    const el = ref.current
+    if (!el) return
+    if (el.scrollTop < span) el.scrollTop += span
+    else if (el.scrollTop >= span * 3) el.scrollTop -= span
+  }
+
+  return (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: '#9a9aaa', padding: '2px 0 6px' }}>{title}</div>
+      <div ref={ref} onScroll={keepInMiddle} className="no-scrollbar" style={{ maxHeight: VIEW, overflowY: 'auto', display: 'grid', gap: 2 }}>
+        {Array.from({ length: COPIES }, (_, c) => values.map(v => cell(pad(v), selected === v, () => onPick(v), `${c}-${v}`, true)))}
+      </div>
+    </div>
+  )
+}
+
 // "HH:mm" (24-hour, what the native input stores) → { hour: 1-12, minute, period }.
 function parse(value) {
   const m = /^(\d{1,2}):(\d{2})/.exec(String(value || '').trim())
@@ -87,13 +122,13 @@ function StyledTimePicker({ value, onChange, placeholder = 'Select time', disabl
 
   const set = (part) => onChange(format({ hour: 12, minute: 0, period: 'AM', ...(current || {}), ...part }))
 
-  const cell = (label, selected, onPick, key) => (
+  const cell = (label, selected, onPick, key, loop) => (
     <div
       key={key ?? label}
-      data-active={selected ? 'true' : undefined}
+      data-active={selected && !loop ? 'true' : undefined}
       onMouseDown={(e) => { e.preventDefault(); onPick() }}
       style={{
-        textAlign: 'center', padding: '8px 0', fontSize: 13, borderRadius: 8, cursor: 'pointer',
+        textAlign: 'center', height: 32, lineHeight: '32px', boxSizing: 'border-box', fontSize: 13, borderRadius: 8, cursor: 'pointer',
         color: selected ? '#d7263d' : '#14141c', fontWeight: selected ? 700 : 400,
         background: selected ? '#fff5f6' : 'transparent',
       }}
@@ -141,8 +176,8 @@ function StyledTimePicker({ value, onChange, placeholder = 'Select time', disabl
           }}
         >
           <div style={{ display: 'flex', gap: 8 }}>
-            {column('Hour', HOURS.map(h => cell(pad(h), current?.hour === h, () => set({ hour: h }))))}
-            {column('Min', MINUTES.map(m => cell(pad(m), current?.minute === m, () => set({ minute: m }))))}
+            <LoopColumn title="Hour" values={HOURS} selected={current?.hour} onPick={(h) => set({ hour: h })} cell={cell} />
+            <LoopColumn title="Min" values={MINUTES} selected={current?.minute} onPick={(m) => set({ minute: m })} cell={cell} />
             {column('', PERIODS.map(p => cell(p, current?.period === p, () => set({ period: p }))))}
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, paddingTop: 8, borderTop: '1px solid #efeff3' }}>

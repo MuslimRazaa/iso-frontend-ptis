@@ -522,7 +522,7 @@ function TaskAllocation() {
               onChange={onTaskStatusChange}
               options={[]}
               extraOptions={[
-                { value: 'all', label: 'All statuses' },
+                { value: 'all', label: 'All status' },
                 { value: 'Completed', label: 'Completed' },
                 { value: 'Overdue', label: 'Overdue' },
                 { value: 'In Progress', label: 'In Progress' },

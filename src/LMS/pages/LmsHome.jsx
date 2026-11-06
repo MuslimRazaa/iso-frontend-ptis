@@ -325,7 +325,7 @@ function LmsHome() {
             <p className="eyebrow">Spotlight</p>
             <h2>Programs to amplify</h2>
           </div>
-          <Link to={`${lmsBase}/all-courses`}>View catalog</Link>
+          <Link to={`${lmsBase}/all-courses`} className="view-all-link">View catalog <span aria-hidden="true">→</span></Link>
         </header>
         <div className="spotlight-cards">
           {loadingCourses ? (

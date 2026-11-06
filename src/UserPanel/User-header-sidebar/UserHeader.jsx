@@ -33,7 +33,7 @@ const UserHeader = () => {
   // rather than showing hits for data the sidebar itself would hide.
   const userPermissions = JSON.parse(localStorage.getItem('userPermissions') || '{}');
   const canSeeIsoForms = userPermissions.iso_forms || userPermissions.iso_forms_admin;
-  const canSeeJobLog = userPermissions.cvs || Object.values(userPermissions.jlr || {}).some(Boolean);
+  const canSeeJobLog = Object.values(userPermissions.jlr || {}).some(Boolean);
 
   // Global search across every module this user actually has data in or
   // access to — ISO Forms entries (submitted + awaiting their decision),

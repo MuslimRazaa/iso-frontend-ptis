@@ -1,10 +1,11 @@
 import React, { useMemo, useState, useEffect } from 'react'
 import axios from 'axios'
-import { Trash2 } from 'lucide-react'
+import { Trash2, Pencil, BookOpen } from 'lucide-react'
 import { API_ENDPOINTS } from '../../config/api'
 import StyledSelect from '../../components/StyledSelect'
 import SearchableSelect from '../../components/SearchableSelect'
 import { showToast } from '../../components/Toast'
+import { ModalFrame, ModalField, ModalButtons } from '../../components/FormModalKit'
 
 const timeLimitPresets = [30, 45, 60, 75, 90, 120]
 
@@ -19,6 +20,10 @@ function SetStandards() {
     time_limit: '',
   })
   const [selectedStandardId, setSelectedStandardId] = useState('all')
+  // The standard open in the edit modal (null = closed), with its fields as typed so far.
+  const [editing, setEditing] = useState(null)
+  const [editForm, setEditForm] = useState({})
+  const [saving, setSaving] = useState(false)
 
   // Fetch standards from backend
   useEffect(() => {
@@ -55,6 +60,48 @@ function SetStandards() {
 
   const resetForm = () => {
     setFormData({ standard_name: '', short_name: '', conducted_questions: '', passing_criteria: '', time_limit: '' })
+  }
+
+  const handleEdit = (standard) => {
+    setEditing(standard)
+    setEditForm({
+      standard_name: standard.standard_name || '',
+      short_name: standard.short_name || '',
+      conducted_questions: String(standard.conducted_questions ?? ''),
+      passing_criteria: String(standard.passing_criteria ?? ''),
+      time_limit: String(standard.time_limit ?? ''),
+    })
+  }
+
+  const handleEditSubmit = async (event) => {
+    event.preventDefault()
+    const { standard_name, short_name, conducted_questions, passing_criteria, time_limit } = editForm
+    if (!String(standard_name).trim() || !String(short_name).trim() || !conducted_questions || !passing_criteria || !time_limit) {
+      showToast('Fill in all required fields to update the standard.', 'error')
+      return
+    }
+    if (Number(passing_criteria) < 1 || Number(passing_criteria) > 100) {
+      showToast('Passing criteria must be between 1 and 100', 'error')
+      return
+    }
+    setSaving(true)
+    try {
+      await axios.put(`${API_ENDPOINTS.STANDARDS}/${editing.id}`, {
+        standard_name: String(standard_name).trim(),
+        short_name: String(short_name).trim(),
+        conducted_questions: Number(conducted_questions),
+        passing_criteria: Number(passing_criteria),
+        time_limit: Number(time_limit),
+      })
+      showToast('Standard updated.', 'success')
+      setEditing(null)
+      await fetchStandards()
+    } catch (error) {
+      console.error('Error updating standard:', error)
+      showToast(error.response?.data?.error || 'Failed to update standard. Please try again.', 'error')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleSubmit = async (event) => {
@@ -178,8 +225,9 @@ function SetStandards() {
             </label>
           </div>
 
-          <label>
-            <span>Time Limit (minutes) *</span>
+          {/* A div, not a label: a label sends a click anywhere on it to the first control inside (the preset dropdown). */}
+          <div>
+            <span style={{ display: 'block', marginBottom: 8 }}>Time Limit (minutes) *</span>
             <div className="time-limit-row">
               <StyledSelect
                 value={timeLimitPresets.includes(Number(formData.time_limit)) ? formData.time_limit : ''}
@@ -197,7 +245,7 @@ function SetStandards() {
                 onChange={(e) => handleChange('time_limit', e.target.value)}
               />
             </div>
-          </label>
+          </div>
 
           <div className="form-actions">
             <button type="button" className="ghost-btn" onClick={resetForm}>
@@ -254,6 +302,15 @@ function SetStandards() {
                     <p className="eyebrow">{standard.short_name}</p>
                     <h4>{standard.standard_name}</h4>
                   </div>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                  <button
+                    className="action-btn edit"
+                    onClick={() => handleEdit(standard)}
+                    title="Edit"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem' }}
+                  >
+                    <Pencil size={16} />
+                  </button>
                   <button 
                     className="action-btn delete" 
                     onClick={() => handleDelete(standard.id)}
@@ -262,6 +319,7 @@ function SetStandards() {
                   >
                     <Trash2 size={16} />
                   </button>
+                  </div>
                 </header>
                 <dl>
                   <div>
@@ -282,6 +340,38 @@ function SetStandards() {
           </div>
         )}
       </section>
+
+      {editing && (
+        <ModalFrame
+          Icon={BookOpen}
+          title="Edit Standard"
+          subtitle={editing.short_name}
+          onClose={() => setEditing(null)}
+          onSubmit={handleEditSubmit}
+          maxWidth={640}
+          actions={<ModalButtons onCancel={() => setEditing(null)} busy={saving} label="Update Standard" busyLabel="Saving…" />}
+        >
+          <div className="form-row">
+            <ModalField label="Standard Name" required>
+              <input type="text" value={editForm.standard_name} onChange={(e) => setEditForm((p) => ({ ...p, standard_name: e.target.value }))} />
+            </ModalField>
+            <ModalField label="Short Name" required>
+              <input type="text" maxLength={12} value={editForm.short_name} onChange={(e) => setEditForm((p) => ({ ...p, short_name: e.target.value }))} />
+            </ModalField>
+          </div>
+          <div className="form-row">
+            <ModalField label="Conducted Questions" required>
+              <input type="number" min="1" value={editForm.conducted_questions} onChange={(e) => setEditForm((p) => ({ ...p, conducted_questions: e.target.value }))} />
+            </ModalField>
+            <ModalField label="Passing Criteria (%)" required>
+              <input type="number" min="1" max="100" value={editForm.passing_criteria} onChange={(e) => setEditForm((p) => ({ ...p, passing_criteria: e.target.value }))} />
+            </ModalField>
+            <ModalField label="Time Limit (minutes)" required>
+              <input type="number" min="1" value={editForm.time_limit} onChange={(e) => setEditForm((p) => ({ ...p, time_limit: e.target.value }))} />
+            </ModalField>
+          </div>
+        </ModalFrame>
+      )}
     </div>
   )
 }

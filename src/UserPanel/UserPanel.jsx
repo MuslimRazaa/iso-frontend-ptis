@@ -9,7 +9,7 @@ const UserPanel = () => {
     <div style={{ display: 'flex', minHeight: '100vh', background: '#0e0f14' }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <UserHeader />
-        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0 }}>
+        <div style={{ flex: 1, overflowX: 'clip', minWidth: 0 }}>
           <Outlet />
         </div>
       </div>

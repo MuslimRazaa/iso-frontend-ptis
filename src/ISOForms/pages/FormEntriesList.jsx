@@ -324,7 +324,7 @@ function FormEntriesList() {
               { value: 'rejected', label: 'Rejected' },
               { value: 'submitted', label: 'Submitted (no approval)' },
             ]}
-            emptyOptionLabel="All Statuses"
+            emptyOptionLabel="All Status"
           />
         )}
 
