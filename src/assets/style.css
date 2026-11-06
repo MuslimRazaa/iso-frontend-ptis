@@ -1194,6 +1194,8 @@ body {
   top: 0;
   align-self: flex-start;
   height: 100vh;
+  /* Vertical bar only when the menu is taller than the screen; none sideways while the width animates. */
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -1407,8 +1409,11 @@ body {
   flex-direction: column;
   padding: 60px clamp(24px, 5vw, 96px);
   position: relative;
-  overflow-x: hidden;
-  overflow-y: visible;
+  /* clip, not hidden: hidden would turn this box into its own scroller (overflow-y becomes auto). */
+  overflow-x: clip;
+  /* A flex item only stops growing with a wide table inside if it is a scroll container or says so;
+     clip is not a scroll container, so without this the page widens and the sidebar misbehaves. */
+  min-width: 0;
   max-width: 100%;
 }
 
@@ -1501,11 +1506,9 @@ body {
   display: flex;
   flex-direction: column;
   gap: 44px;
-  overflow-x: hidden;
-  /* overflow-x alone forces the browser to compute overflow-y as `auto` too,
-     which clips anything that lifts above the top edge on hover (e.g. the
-     stat cards, the very first thing inside this box on some tabs). */
-  overflow-y: visible;
+  /* No clipping here: .lms-main already stops sideways overflow, and clipping at this box cut the
+     cards' shadows (and hover lift) off at its edges, which read as a container around the page. */
+  min-width: 0;
   max-width: 100%;
 }
 
@@ -1886,7 +1889,9 @@ body {
   overflow: hidden;
 }
 .all-course-meta { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; color: #7a7a8c; }
-.all-course-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+/* Cards in a row are the same height; the status and the buttons sit at the bottom of every one. */
+.all-course-cards .spotlight-body { flex: 1; }
+.all-course-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; }
 
 .spotlight-card {
   background: #fff;
@@ -4784,18 +4789,17 @@ body {
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  overflow-x: hidden;
-  overflow-y: visible;
+  overflow-x: clip;
 }
 
 .job-log-page {
-  overflow-x: hidden;
+  overflow-x: clip;
   min-width: 0;
 }
 
 .job-log-page .all-records-header,
 .job-log-page .all-records-filters {
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 .job-log-table-shell {
@@ -5781,3 +5785,30 @@ table thead th {
 .back-link:focus-visible {
   color: #14141c;
 }
+
+/* Still scrolls by wheel, touch and keyboard; only the bar is not drawn. */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* "View all" text link beside a section heading: the arrow nudges forward on hover. */
+.view-all-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #d7263d;
+  text-decoration: none;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+.view-all-link span { transition: transform 0.18s ease; }
+.view-all-link:hover { background: #fdf2f3; color: #b81f33; }
+.view-all-link:hover span { transform: translateX(3px); }
+.view-all-link:focus-visible { outline: 2px solid #d7263d; outline-offset: 2px; }
+
+/* Rows of the "Recently Submitted" list on the ISO Forms overview. */
+.recent-entry-row { transition: background 0.18s ease, box-shadow 0.18s ease; }
+.recent-entry-row:hover { background: #fdf6f7; box-shadow: inset 3px 0 0 #d7263d; }
+.recent-entry-row:focus-visible { outline: 2px solid #d7263d; outline-offset: -2px; background: #fdf6f7; }

@@ -23,6 +23,8 @@ const SvgIcon = ({ id }) => (
 const UserSidebar = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [permissions, setPermissions] = useState({});
+  // Job Log opens with any of its department permissions; CV Library access is separate.
+  const canSeeJobLog = Object.values(permissions.jlr || {}).some(Boolean);
   const navigate = useNavigate();
 
   const userEmail = localStorage.getItem('userEmail') || '';
@@ -56,6 +58,7 @@ const UserSidebar = () => {
     <aside
       className={`user-sidebar ${isExpanded ? 'expanded' : 'collapsed'}`}
       onMouseEnter={() => setIsExpanded(true)}
+      onMouseMove={() => { if (!isExpanded) setIsExpanded(true) }}
       onMouseLeave={() => setIsExpanded(false)}
     >
       {/* Brand */}
@@ -69,13 +72,13 @@ const UserSidebar = () => {
           {navItem('/user/dashboard', 'dashboard', 'Dashboard')}
         </div>
 
-        {(permissions.lms || permissions.portal || permissions.cvs || permissions.reports || permissions.testing) && (
+        {(permissions.lms || permissions.portal || canSeeJobLog || permissions.reports || permissions.testing_admin) && (
           <div className="user-nav-section">
             <span className="user-nav-section-title">MODULES</span>
             {permissions.lms     && navItem('/user/learning-management-system', 'courses', 'LMS')}
-            {permissions.testing && navItem('/user/testing', 'cert', 'Testing')}
+            {permissions.testing_admin && navItem('/user/testing', 'cert', 'Testing')}
             {permissions.portal  && navItem('/user/portal',  'portal', 'PTIS Portal')}
-            {permissions.cvs     && navItem('/user/job-log', 'cv',     'Job Log')}
+            {canSeeJobLog        && navItem('/user/job-log', 'cv',     'Job Log')}
             {permissions.reports && navItem('/user/reports', 'reports','Reports')}
           </div>
         )}

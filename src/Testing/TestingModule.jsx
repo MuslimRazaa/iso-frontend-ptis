@@ -68,6 +68,7 @@ import MultiSelect from '../components/MultiSelect';
 import { useLinkedEmployeeFilter, employeeMatches } from './useLinkedEmployeeFilter';
 import { certificateValidity } from './certificateExpiry';
 import StyledDatePicker from '../components/StyledDatePicker';
+import StyledTimePicker from '../components/StyledTimePicker';
 import SidebarBrand from '../components/SidebarBrand'
 
 // HomePage Component - Moved outside to prevent re-creation
@@ -4434,7 +4435,7 @@ const TestingModule = () => {
                     <article className="panel" style={{ padding: 28 }}>
                       <h3 style={{ margin: '0 0 20px' }}>Pass / Fail Distribution</h3>
                       {chartData.length === 0 ? <p style={{ color: '#9a9aaa' }}>No data available</p> : (
-                        <ResponsiveContainer width="100%" height={280}>
+                        <ResponsiveContainer width="100%" height={280} debounce={250}>
                           <PieChart>
                             <Pie
                               data={[{ name: 'Passed', value: piePassed }, { name: 'Failed', value: pieFailed }]}
@@ -4455,7 +4456,7 @@ const TestingModule = () => {
                     <article className="panel" style={{ padding: 28 }}>
                       <h3 style={{ margin: '0 0 20px' }}>Performance by Standard</h3>
                       {chartData.length === 0 ? <p style={{ color: '#9a9aaa' }}>No data available</p> : (
-                        <ResponsiveContainer width="100%" height={280}>
+                        <ResponsiveContainer width="100%" height={280} debounce={250}>
                           <BarChart data={barData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                             <CartesianGrid vertical={false} stroke="#ececf0" />
                             <XAxis dataKey="standard" {...axStyle} />
@@ -4488,7 +4489,7 @@ const TestingModule = () => {
                     <article className="panel" style={{ padding: 28 }}>
                       <h3 style={{ margin: '0 0 20px' }}>Score Distribution</h3>
                       {chartData.length === 0 ? <p style={{ color: '#9a9aaa' }}>No data available</p> : (
-                        <ResponsiveContainer width="100%" height={280}>
+                        <ResponsiveContainer width="100%" height={280} debounce={250}>
                           <BarChart data={histData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                             <CartesianGrid vertical={false} stroke="#ececf0" />
                             <XAxis dataKey="range" {...axStyle} />
@@ -4515,7 +4516,7 @@ const TestingModule = () => {
                     <article className="panel" style={{ padding: 28 }}>
                       <h3 style={{ margin: '0 0 20px' }}>Performance Trend (Latest 20)</h3>
                       {chartData.length === 0 ? <p style={{ color: '#9a9aaa' }}>No data available</p> : (
-                        <ResponsiveContainer width="100%" height={280}>
+                        <ResponsiveContainer width="100%" height={280} debounce={250}>
                           <AreaChart
                             data={areaData}
                             margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
@@ -5042,7 +5043,7 @@ const TestingModule = () => {
                       <article className="panel" style={{ padding: 28 }}>
                         <h3 style={{ margin: '0 0 20px' }}>Pass / Fail Distribution</h3>
                         {rfData.length === 0 ? <p style={{ color: '#9a9aaa' }}>No data available</p> : (
-                          <ResponsiveContainer width="100%" height={280}>
+                          <ResponsiveContainer width="100%" height={280} debounce={250}>
                             <PieChart>
                               <Pie
                                 data={[{ name: 'Passed', value: fPassed }, { name: 'Failed', value: fFailed }]}
@@ -5063,7 +5064,7 @@ const TestingModule = () => {
                       <article className="panel" style={{ padding: 28 }}>
                         <h3 style={{ margin: '0 0 20px' }}>Performance by Standard</h3>
                         {rfData.length === 0 ? <p style={{ color: '#9a9aaa' }}>No data available</p> : (
-                          <ResponsiveContainer width="100%" height={280}>
+                          <ResponsiveContainer width="100%" height={280} debounce={250}>
                             <BarChart data={fBarData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                               <CartesianGrid vertical={false} stroke="#ececf0" />
                               <XAxis dataKey="standard" {...axStyle} />
@@ -5096,7 +5097,7 @@ const TestingModule = () => {
                       <article className="panel" style={{ padding: 28 }}>
                         <h3 style={{ margin: '0 0 20px' }}>Score Distribution</h3>
                         {rfData.length === 0 ? <p style={{ color: '#9a9aaa' }}>No data available</p> : (
-                          <ResponsiveContainer width="100%" height={280}>
+                          <ResponsiveContainer width="100%" height={280} debounce={250}>
                             <BarChart data={fHistData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                               <CartesianGrid vertical={false} stroke="#ececf0" />
                               <XAxis dataKey="range" {...axStyle} />
@@ -5123,7 +5124,7 @@ const TestingModule = () => {
                       <article className="panel" style={{ padding: 28 }}>
                         <h3 style={{ margin: '0 0 20px' }}>Performance Trend (Latest 20)</h3>
                         {rfData.length === 0 ? <p style={{ color: '#9a9aaa' }}>No data available</p> : (
-                          <ResponsiveContainer width="100%" height={280}>
+                          <ResponsiveContainer width="100%" height={280} debounce={250}>
                             <AreaChart
                               data={fAreaData}
                               margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
@@ -5467,11 +5468,10 @@ const TestingModule = () => {
                         />
                       </ModalField>
                       <ModalField label="Result Time" required>
-                        <input
-                          type="time"
+                        <StyledTimePicker
                           value={resultFormData.resultTime}
-                          onChange={(e) => setResultFormData({ ...resultFormData, resultTime: e.target.value })}
-                          required
+                          onChange={(v) => setResultFormData({ ...resultFormData, resultTime: v })}
+                          style={modalFieldStyle}
                         />
                       </ModalField>
                     </div>

@@ -68,6 +68,7 @@ function ISOFormsSidebar() {
     <aside
       className={`lms-sidebar ${isExpanded ? 'expanded' : 'collapsed'}`}
       onMouseEnter={() => setIsExpanded(true)}
+      onMouseMove={() => { if (!isExpanded) setIsExpanded(true) }}
       onMouseLeave={() => setIsExpanded(false)}
     >
       {/* Brand / Logo */}

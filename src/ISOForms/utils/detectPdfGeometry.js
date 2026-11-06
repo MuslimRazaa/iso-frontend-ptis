@@ -997,6 +997,8 @@ export function detectRegisterTables(rects, textItems) {
       .filter(({ k }) => k.x + k.w / 2 >= cell.x && k.x + k.w / 2 <= cell.x + cell.w).map(({ i }) => i)
     const own = cols.map(() => []), group = cols.map(() => [])
     const groupWidth = cols.map(() => [])
+    // Whether each piece of a column's own heading was printed on its side.
+    const ownSideways = cols.map(() => [])
     // A column whose header is split into short side-by-side cells directly above
     // the data ("Yes | No" over one wide entry cell) is a choice: each sub-heading
     // is an option, and a tick goes under the one that is picked.
@@ -1031,6 +1033,7 @@ export function detectRegisterTables(rects, textItems) {
         }
       }
       for (const i of cover) (cover.length > 1 ? group : own)[i].push(t.text.trim())
+      if (cover.length === 1) ownSideways[cover[0]].push(Boolean(t.rotated))
       if (cover.length > 1) for (const i of cover) groupWidth[i].push({ w: cell.w, text: t.text.trim() })
     }
     // A wide grey bar drawn behind several smaller heading cells ("Hardware" over 7
@@ -1044,7 +1047,10 @@ export function detectRegisterTables(rects, textItems) {
     const clean = (parts) => parts.join(' ').replace(/\s+/g, ' ').replace(/\/\s+/g, '/').trim()
     const columns = cols.map((k, i) => {
       const g = clean(group[i]), o = clean(own[i])
-      return { index: i, x: k.x, w: k.w, caption: [g, o].filter(Boolean).join(' '), group: g, own: o, choices: choices[i] }
+      // A heading set on its side over a narrow column is how a checklist prints its tick
+      // columns ("Physical cond." | "Nut & bolt" …); parsePdf turns a run of them into one multi-select group per row.
+      const sideways = ownSideways[i].length > 0 && ownSideways[i].every(Boolean)
+      return { index: i, x: k.x, w: k.w, caption: [g, o].filter(Boolean).join(' '), group: g, own: o, choices: choices[i], sideways }
     })
     // The same heading over several columns ("Location" x 8) would give every one
     // of them the same name; number them left to right so each stays distinct.

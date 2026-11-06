@@ -217,7 +217,7 @@ function CourseTracking() {
           onChange={(v) => { setStatusFilter(v); setCurrentPage(1) }}
           options={[]}
           extraOptions={[
-            { value: 'all', label: 'All statuses' },
+            { value: 'all', label: 'All status' },
             { value: 'in_progress', label: 'In Progress' },
             { value: 'completed', label: 'Completed' },
             { value: 'enrolled', label: 'Not Started' },

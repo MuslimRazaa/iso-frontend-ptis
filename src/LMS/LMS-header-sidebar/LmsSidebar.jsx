@@ -74,6 +74,8 @@ function LmsSidebar() {
     <aside
       className={`lms-sidebar ${isExpanded ? "expanded" : "collapsed"}`}
       onMouseEnter={() => setIsExpanded(true)}
+
+      onMouseMove={() => { if (!isExpanded) setIsExpanded(true) }}
       onMouseLeave={() => setIsExpanded(false)}
     >
       <SidebarBrand to={dashboardPath} label="Learning" caption="Management System" />

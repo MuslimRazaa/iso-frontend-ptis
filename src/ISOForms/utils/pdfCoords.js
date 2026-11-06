@@ -97,17 +97,18 @@ export const isPlaced = (field) => normalizePdfCoords(field?.pdfCoords) !== null
 
 /**
  * PDF points → canvas pixels (top-left origin).
- * `viewport` is a pdfjs viewport: { width, height, scale }.
+ * `viewport` is a pdfjs viewport: { width, height, scale, viewBox }.
  * The returned box is the CSS box for an overlay element.
  */
 export function pdfToScreen(coords, viewport) {
   const c = normalizePdfCoords(coords)
   if (!c) return null
   const scale = viewport.scale
+  const [ox, oy] = pageOrigin(viewport)
   return {
-    left: c.x * scale,
+    left: (c.x - ox) * scale,
     // Flip: PDF y is the box BOTTOM, CSS top is measured from the page top.
-    top: viewport.height - (c.y + c.height) * scale,
+    top: viewport.height - (c.y + c.height - oy) * scale,
     width: c.width * scale,
     height: c.height * scale,
   }
@@ -121,10 +122,11 @@ export function screenToPdf(box, viewport, pageSize) {
   const scale = viewport.scale
   const width = box.width / scale
   const height = box.height / scale
+  const [ox, oy] = pageOrigin(viewport)
   return {
-    x: round2(box.left / scale),
+    x: round2(box.left / scale + ox),
     // Flip back: CSS top+height is the box bottom, measured from the page top.
-    y: round2((viewport.height - (box.top + box.height)) / scale),
+    y: round2((viewport.height - (box.top + box.height)) / scale + oy),
     width: round2(width),
     height: round2(height),
     pageWidth: pageSize?.width ? round2(pageSize.width) : undefined,
@@ -133,3 +135,12 @@ export function screenToPdf(box, viewport, pageSize) {
 }
 
 const round2 = (n) => Math.round(n * 100) / 100
+
+// Where the page's own corner sits in PDF user space. Usually (0, 0), but some producers
+// (Excel's PDF export among them) set a MediaBox like [-12 12 780 624]. The importer and the
+// filled-PDF overlay both work in user space, so the editor has to take that corner off when
+// it draws on the canvas, or every box shows a cell to the left of and a row above its place.
+function pageOrigin(viewport) {
+  const vb = viewport?.viewBox
+  return Array.isArray(vb) && vb.length >= 2 ? [Number(vb[0]) || 0, Number(vb[1]) || 0] : [0, 0]
+}
