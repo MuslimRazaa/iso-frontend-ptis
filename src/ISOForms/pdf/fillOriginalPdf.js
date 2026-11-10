@@ -212,71 +212,38 @@ const drawControlledDocumentNotice = (pages, font) => {
 }
 
 /**
- * Covers the unused rows at the end of a register table.
+ * Marks every field left empty with a dash.
  *
- * A register template prints far more rows than most forms fill. Rows cannot be
- * taken out of the template's PDF, so each unused one is painted over in white
- * instead — but only the run of empty rows at the END of a table, since a white
- * band in the middle would look like a hole. The cover starts just under the last
- * used row's bottom line, so that line stays and becomes the table's new edge.
- * A table with nothing filled in at all is left whole.
+ * The form keeps all its rows and blanks, as printed, and each one nobody filled in
+ * gets a dash, so it reads as "nothing here" rather than as something forgotten —
+ * in a register table or anywhere else on the page. A table's tick column gets a
+ * dash in each of its tick cells. Left alone: a single checkbox (unticked is its
+ * answer), a choice ticked beside its printed words outside a table (a dash there
+ * would sit on the words), and a field the PDF's own form fills.
  */
-const hideUnusedRows = (pages, fields, allValues) => {
-  const rowMap = new Map()
+const markEmptyFields = (pages, fields, allValues, font) => {
   for (const f of fields || []) {
-    const box = f.pdfCoords?.rowBox
-    if (!box || ![box.x, box.y, box.width, box.height].every(Number.isFinite)) continue
-    const page = Number.isFinite(f.pdfCoords.page) ? f.pdfCoords.page : 0
-    const key = `${page}|${Math.round(box.x)}|${Math.round(box.width)}|${Math.round(box.y)}`
-    if (!rowMap.has(key)) rowMap.set(key, { page, box, fields: [] })
-    rowMap.get(key).fields.push(f)
-  }
-
-  // Rows that stack directly on one another, with the same left edge and width,
-  // are one table.
-  const rows = [...rowMap.values()].sort((a, b) => a.page - b.page || b.box.y - a.box.y)
-  const tables = []
-  for (const row of rows) {
-    const table = tables[tables.length - 1]
-    const prev = table && table[table.length - 1]
-    if (prev && prev.page === row.page &&
-        Math.abs(prev.box.x - row.box.x) <= 3 && Math.abs(prev.box.width - row.box.width) <= 3 &&
-        prev.box.y - (row.box.y + row.box.height) <= 4 && prev.box.y - (row.box.y + row.box.height) >= -3) {
-      table.push(row)
-    } else {
-      tables.push([row])
+    if (f.type === 'checkbox' || f.acroName) continue
+    const value = allValues[f.id]
+    if (f.type === 'signature' ? signatureText(value) : hasContent(value)) continue
+    const c = normalizePdfCoords(f.pdfCoords)
+    const page = pages[Number.isFinite(f.pdfCoords?.page) ? f.pdfCoords.page : (c?.page ?? 0)]
+    if (!page) continue
+    const dash = (b, left) => {
+      if (![b.x, b.y, b.width, b.height].every(Number.isFinite)) return
+      const size = Math.min(DEFAULT_FONT_SIZE, Math.max(6, b.height - 2))
+      const w = font.widthOfTextAtSize('-', size)
+      // A box that is only an old anchor point runs to the page edge, so its dash
+      // goes where the value would start, not halfway across the page.
+      const x = left ? b.x + PAD_X : b.x + (b.width - w) / 2
+      page.drawText('-', { x, y: b.y + (b.height - size) / 2 + size * 0.2, size, font, color: TEXT_COLOR })
     }
-  }
-
-  for (const table of tables) {
-    const empty = (row) => row.fields.every(f => !hasContent(allValues[f.id]))
-    let firstUnused = table.length
-    while (firstUnused > 0 && empty(table[firstUnused - 1])) firstUnused--
-    if (firstUnused === 0 || firstUnused === table.length) continue   // all empty, or none to hide
-
-    const page = pages[table[0].page]
-    const top = table[firstUnused].box
-    const bottom = table[table.length - 1].box
-    // The line between the last used row and the first unused one. Where exactly
-    // it was drawn varies by a fraction of a point from table to table, so the
-    // cover starts a little below it and the line is then drawn again over the
-    // top, which keeps the table closed whichever way the edge fell.
-    const edge = top.y + top.height
-    const coverTop = edge - 0.6
-    const coverBottom = bottom.y - 1.2
-    page?.drawRectangle({
-      x: top.x - 1.5,
-      y: coverBottom,
-      width: top.width + 3,
-      height: coverTop - coverBottom,
-      color: rgb(1, 1, 1),
-    })
-    page?.drawLine({
-      start: { x: top.x - 0.3, y: edge },
-      end: { x: top.x + top.width + 0.3, y: edge },
-      thickness: 0.7,
-      color: rgb(0.1, 0.1, 0.1),
-    })
+    const marks = Array.isArray(f.pdfCoords?.optionMarks) ? f.pdfCoords.optionMarks : null
+    if (marks?.length) {
+      if (f.pdfCoords.rowBox) marks.map(optionMarkBox).filter(Boolean).forEach(b => dash(b))
+      continue
+    }
+    if (c) dash(c, c.legacyAnchor)
   }
 }
 
@@ -301,7 +268,7 @@ export async function fillOriginalPdf(base64, fields, formValues, approverValues
 
   const allValues = { ...formValues, ...approverValues }
   const skipped = []
-  hideUnusedRows(pages, fields, allValues)
+  markEmptyFields(pages, fields, allValues, font)
 
   // If the template PDF is itself a fillable form, values go into its own
   // fields and the form is then flattened. That uses the appearance the form's

@@ -108,7 +108,10 @@ function tableBlocks(rows) {
     }
     for (const seg of segments) {
       if (seg.name === null) { plain[ri].push(...seg.items); continue }
-      const sig = seg.items.map(i => i.column).join('|')
+      // A choice column counts with its options: two tables printed one under the other can
+      // both read "SERIAL NO | Checks | Remarks" yet tick different things, and are two tables.
+      const sig = seg.items.map(i => i.field.options && /checkbox-group|radio|dropdown/.test(i.field.type)
+        ? `${i.column}[${i.field.options}]` : i.column).join('|')
       const t = open.find(o => o.lastRow === ri - 1 && o.sig === sig && seg.x0 < o.x1 + 4 && seg.x1 > o.x0 - 4)
       if (t) {
         t.rows.push({ name: seg.name, cells: seg.items.map(i => i.field), items: seg.items, ri })
