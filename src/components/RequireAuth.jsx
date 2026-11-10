@@ -16,9 +16,22 @@ import { Navigate, useLocation } from 'react-router-dom'
 // so without it a click from an e-mail opened straight onto whoever happened to
 // be signed in. With it, that login is dropped and the person signs in first;
 // the address they are sent back to no longer carries the flag, so it opens.
+//
+// `admin` guards the admin pages. They used to have no guard at all, so pasting
+// /dashboard into a browser that had never signed in opened the admin panel. Now
+// only an admin login opens them; anyone else signs in first, and an employee is
+// sent to their own dashboard — unless `permission` names a permission they hold
+// (the PTIS Portal tile on an employee's dashboard opens the admin portal).
+// `user` is the other way round, for the employee pages: they need an employee
+// login, and an admin who opens one is sent to the admin dashboard.
 const AUTH_KEYS = ['userType', 'userEmail', 'userEmployeeId', 'userFullName', 'userPermissions', 'adminPassword']
 
-const RequireAuth = ({ children }) => {
+const holds = (permission) => {
+  try { return Boolean(permission && JSON.parse(localStorage.getItem('userPermissions') || '{}')[permission]) }
+  catch { return false }
+}
+
+const RequireAuth = ({ children, admin = false, user = false, permission }) => {
   const location = useLocation()
   const params = new URLSearchParams(location.search)
   const fromEmail = params.get('login') === '1'
@@ -31,7 +44,11 @@ const RequireAuth = ({ children }) => {
     return <Navigate to={`/?redirect=${encodeURIComponent(intendedPath)}`} replace />
   }
 
-  const isLoggedIn = Boolean(localStorage.getItem('userEmail')) || localStorage.getItem('userType') === 'admin'
+  const isAdmin = localStorage.getItem('userType') === 'admin'
+  const isLoggedIn = Boolean(localStorage.getItem('userEmail')) || isAdmin
+
+  if (admin && !isAdmin && isLoggedIn && !holds(permission)) return <Navigate to="/user/dashboard" replace />
+  if (user && isAdmin) return <Navigate to="/dashboard" replace />
 
   if (!isLoggedIn) {
     const intendedPath = location.pathname + location.search

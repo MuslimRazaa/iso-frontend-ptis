@@ -80,12 +80,10 @@ function WelcomeToast() {
 }
 
 // The admin home. An employee who lands on it (a module's "back to dashboard" link
-// points here) is sent to their own dashboard instead of being shown the admin one.
-// It is a component, not a check made while the routes are built, so who is signed in
-// is read when the page is actually opened — after login, not before it.
-const AdminHome = () => (
-  localStorage.getItem('userType') === 'user' ? <Navigate to="/user/dashboard" replace /> : <MainDashboard />
-)
+// points here) is sent to their own dashboard instead of being shown the admin one,
+// and someone not signed in goes to Login. RequireAuth reads who is signed in when
+// the page is actually opened — after login, not before it.
+const AdminHome = () => <RequireAuth admin><MainDashboard /></RequireAuth>
 
 // Wraps the testing module in its own ThemeProvider so it can mount as a route.
 const TestingModulePage = () => (
@@ -185,7 +183,7 @@ function App() {
             <Route path="/dashboard" element={<AdminHome />} />
 
             {/* Admin — Learning Management System */}
-            <Route path="/learning-management-system/*" element={<LearningManagementSystem />}>
+            <Route path="/learning-management-system/*" element={<RequireAuth admin><LearningManagementSystem /></RequireAuth>}>
               <Route index element={<LmsHome />} />
               <Route path="add-course"          element={<AddCourse />} />
               <Route path="all-courses"         element={<AllCourses />} />
@@ -199,7 +197,7 @@ function App() {
             </Route>
 
             {/* Admin — PTIS Portal */}
-            <Route path="/portal/*" element={<PtisPortal />}>
+            <Route path="/portal/*" element={<RequireAuth admin permission="portal"><PtisPortal /></RequireAuth>}>
               <Route index element={<PortalDashboard />} />
               <Route path="add-admin"            element={<AddAdmin />} />
               <Route path="add-client"           element={<AddClient />} />
@@ -209,7 +207,7 @@ function App() {
             </Route>
 
             {/* Admin — Employee Management (standalone, moved out of LMS) */}
-            <Route path="/employees" element={<EmployeesLayout />}>
+            <Route path="/employees" element={<RequireAuth admin><EmployeesLayout /></RequireAuth>}>
               <Route index                element={<AllEmployees />} />
               <Route path="all-employees" element={<AllEmployees />} />
               <Route path="add-employee"  element={<AddEmployee />} />
@@ -219,15 +217,15 @@ function App() {
             <Route path="/learning-management-system/add-employee"  element={<Navigate to="/employees/add-employee" replace />} />
 
             {/* Admin — Testing Module (standalone, integrated from ptis-lms) */}
-            <Route path="/testing" element={<RequireAuth><TestingModulePage /></RequireAuth>} />
+            <Route path="/testing" element={<RequireAuth admin><TestingModulePage /></RequireAuth>} />
 
             {/* User — Testing Module (same module, host auth decides role).
                 When opened from a course (from=course) it also records to the
                 LMS test_results and returns to the LMS afterwards. */}
-            <Route path="/user/testing" element={<RequireAuth><TestingModulePage /></RequireAuth>} />
+            <Route path="/user/testing" element={<RequireAuth user><TestingModulePage /></RequireAuth>} />
 
             {/* Admin — Job Log Description (standalone module) */}
-            <Route path="/job-log/*" element={<JLRLayout />}>
+            <Route path="/job-log/*" element={<RequireAuth admin><JLRLayout /></RequireAuth>}>
               <Route index element={<JLRHome />} />
               <Route path="entries" element={<JobLogDescription />} />
               <Route path="backups" element={<JLRBackups />} />
@@ -235,13 +233,13 @@ function App() {
             </Route>
 
             {/* User — Job Log Description (same standalone layout, role-based fields) */}
-            <Route path="/user/job-log/*" element={<RequireAuth><JLRLayout /></RequireAuth>}>
+            <Route path="/user/job-log/*" element={<RequireAuth user><JLRLayout /></RequireAuth>}>
               <Route index element={<JLRHome />} />
               <Route path="entries" element={<JobLogDescription />} />
             </Route>
 
             {/* Admin — ISO Forms (standalone module, dynamic form builder) */}
-            <Route path="/iso-forms/*" element={<ISOFormsLayout />}>
+            <Route path="/iso-forms/*" element={<RequireAuth admin><ISOFormsLayout /></RequireAuth>}>
               <Route index element={<ISOFormsHome />} />
               <Route path="templates" element={<TemplatesList />} />
               <Route path="templates/new" element={<TemplateBuilder />} />
@@ -258,7 +256,7 @@ function App() {
                 Guarded: this is exactly where the "pending your approval" /
                 "was approved" email links point, so a logged-out click here
                 is the normal case to handle well, not an edge case. */}
-            <Route path="/user/iso-forms/*" element={<RequireAuth><ISOFormsLayout /></RequireAuth>}>
+            <Route path="/user/iso-forms/*" element={<RequireAuth user><ISOFormsLayout /></RequireAuth>}>
               <Route index element={<ISOFormsHome />} />
               <Route path="templates" element={<TemplatesList />} />
               <Route path="templates/new" element={<TemplateBuilder />} />
@@ -273,7 +271,7 @@ function App() {
 
             {/* User — LMS (user-specific layout, no admin pages). Guarded for
                 the same reason: the course-assignment email links here. */}
-            <Route path="/user/learning-management-system/*" element={<RequireAuth><UserLmsLayout /></RequireAuth>}>
+            <Route path="/user/learning-management-system/*" element={<RequireAuth user><UserLmsLayout /></RequireAuth>}>
               <Route index                      element={<UserLmsHome />} />
               {/* My Tasks & Browse merged into the single My Courses page */}
               <Route path="my-tasks"            element={<Navigate to="/user/learning-management-system/my-courses" replace />} />
@@ -287,7 +285,7 @@ function App() {
             {/* ============================================ */}
             {/* USER ROUTES                                 */}
             {/* ============================================ */}
-            <Route path="/user/*" element={<RequireAuth><UserPanel /></RequireAuth>}>
+            <Route path="/user/*" element={<RequireAuth user><UserPanel /></RequireAuth>}>
               <Route index element={<Navigate to="/user/dashboard" replace />} />
               <Route path="dashboard"       element={<UserDashboard />} />
               {/* Old short URLs → redirect to user LMS */}

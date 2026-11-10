@@ -103,7 +103,9 @@ function DynamicField({ field, value, onChange, readOnly, employees = [], signer
     return <div style={{ fontSize: 14, color: '#14141c' }}>{display}</div>
   }
 
-  const common = { value: value ?? '', onChange: (e) => onChange(e.target.value), style: inputStyle }
+  // An empty cell in a table shows a dash rather than a blank box, like the printed register.
+  const dash = compact ? '—' : undefined
+  const common = { value: value ?? '', onChange: (e) => onChange(e.target.value), style: inputStyle, placeholder: dash }
 
   switch (field.type) {
     case 'textarea':
@@ -115,6 +117,7 @@ function DynamicField({ field, value, onChange, readOnly, employees = [], signer
         <StyledDatePicker
           value={value ?? ''}
           onChange={onChange}
+          placeholder={dash}
           style={{ ...inputStyle, cursor: 'pointer' }}
         />
       )
@@ -124,7 +127,7 @@ function DynamicField({ field, value, onChange, readOnly, employees = [], signer
       return <input type="text" value={value ?? ''} onChange={(e) => onChange(e.target.value)} placeholder="Filled from the employee" style={inputStyle} />
     case 'time':
       // A clock time on its own, stored as "HH:mm" (24-hour).
-      return <StyledTimePicker value={String(value || '').slice(0, 5)} onChange={onChange} style={{ ...inputStyle, cursor: 'pointer' }} />
+      return <StyledTimePicker value={String(value || '').slice(0, 5)} onChange={onChange} placeholder={dash} style={{ ...inputStyle, cursor: 'pointer' }} />
     case 'datetime': {
       // Stored as "YYYY-MM-DDTHH:mm" (just the date until a time is picked).
       const [datePart = '', timePart = ''] = String(value || '').split('T')
@@ -171,10 +174,12 @@ function DynamicField({ field, value, onChange, readOnly, employees = [], signer
       const toggle = (opt) => {
         onChange(selected.includes(opt) ? selected.filter(o => o !== opt) : [...selected, opt])
       }
+      // In a table cell the options stay on one line, as the form prints them; the
+      // table scrolls sideways instead of growing taller.
       return (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+        <div style={{ display: 'flex', flexWrap: compact ? 'nowrap' : 'wrap', gap: compact ? 12 : 16 }}>
           {options.map(o => (
-            <label key={o} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14 }}>
+            <label key={o} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: compact ? 13 : 14, whiteSpace: compact ? 'nowrap' : undefined }}>
               <input type="checkbox" checked={selected.includes(o)} onChange={() => toggle(o)} />
               {o}
             </label>
@@ -187,9 +192,9 @@ function DynamicField({ field, value, onChange, readOnly, employees = [], signer
       // current one, and ticking the chosen option again clears it, so an
       // optional field can still be left unanswered.
       return (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+        <div style={{ display: 'flex', flexWrap: compact ? 'nowrap' : 'wrap', gap: compact ? 12 : 16 }}>
           {options.map(o => (
-            <label key={o} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, cursor: 'pointer' }}>
+            <label key={o} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: compact ? 13 : 14, cursor: 'pointer', whiteSpace: compact ? 'nowrap' : undefined }}>
               <input
                 type="checkbox"
                 checked={value === o}
