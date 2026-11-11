@@ -301,7 +301,7 @@ const REQUIRED_KEYS = ['tra', 'equipCL', 'vLog', 'tbt', 'rept', 'accounts', 'it'
 const todayYmd = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 const autoStatusOf = (e) => {
   const end = String(e.endDate || '').slice(0, 10)
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(end) || end > todayYmd()) return 'In Progress'
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(end) || end >= todayYmd()) return 'In Progress'
   // The long dash "—" is an empty cell, a typed "-" is an answer (see utils/jlrStatus.js).
   return REQUIRED_KEYS.some(k => /^[–—]*$/.test(String(e[k] ?? '').trim())) ? 'Incomplete' : 'Completed'
 }
@@ -313,6 +313,12 @@ const REQUIRED_LABELS = {
   stockRequisition: 'Stock Requisition', goodsIssueNote: 'Goods Issue Note', consumption: 'Consumption', gatePass: 'Gate Pass',
 }
 const DEPT_ORDER = [['qhse', 'QHSE'], ['inventory', 'Inventory'], ['accounts', 'Accounts'], ['it', 'IT']]
+
+// The Operations fields the form marks with *, which an entry cannot be saved without.
+const OPERATIONS_REQUIRED = [
+  ['entryDate', 'Entry Date'], ['client', 'Client'], ['workOrder', 'Work Order'], ['inspectorName', 'Inspector Name'],
+  ['location', 'Location'], ['natureOfJob', 'Nature of Job'], ['startDate', 'Job Start'], ['source', 'Region'],
+]
 const missingByDept = (e) => {
   const missing = REQUIRED_KEYS.filter(k => /^[–—]*$/.test(String(e[k] ?? '').trim()))
   return DEPT_ORDER
@@ -1168,12 +1174,16 @@ function JobLogDescription() {
 
   const handleSubmit = async e => {
     e.preventDefault()
-    // Status is compulsory. Only enforced for someone who can actually set it —
-    // another department's user sees the field locked and must not be blocked
-    // from saving their own section.
-    if (canEdit('operations') && !String(modalState.workOrder || '').trim()) {
-      showToast('Please enter at least one Work Order number.', 'error')
-      return
+    // The Operations fields marked * are compulsory, on a new entry and on an edit.
+    // Only enforced for someone who can actually fill them — another department's
+    // user sees them locked and must not be blocked from saving their own section.
+    // A long dash is how an imported entry shows an empty cell, so it counts as empty.
+    if (canEdit('operations')) {
+      const missing = OPERATIONS_REQUIRED.filter(([key]) => /^[–—]*$/.test(String(modalState[key] ?? '').trim()))
+      if (missing.length) {
+        showToast(`Please fill in: ${missing.map(([, label]) => label).join(', ')}.`, 'error')
+        return
+      }
     }
     const rd = calculateDays(modalState.startDate, modalState.endDate)
     const days = rd ? String(rd) : ''
@@ -2201,7 +2211,7 @@ function JobLogDescription() {
                   <input type="text" value={modalState.natureOfJob} placeholder="Visual / NDT …" required
                     disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('natureOfJob', e.target.value)} /></label>
-                <label><span>Job Start</span>
+                <label><span>Job Start *</span>
                   <StyledDatePicker value={modalState.startDate}
                     disabled={!canEdit('operations')}
                     style={modalSelectStyle}

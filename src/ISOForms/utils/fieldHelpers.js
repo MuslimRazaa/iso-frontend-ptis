@@ -65,7 +65,7 @@ export const hasContent = (value) => {
  * stamped, as before, and so is one whose row has anything filled in — or one a
  * person already typed a name into.
  */
-export const signaturesToStamp = (fields, values) => {
+const numberedRows = (fields) => {
   const rows = []
   for (const f of fields) {
     const m = ROW_NUMBER.exec(String(f.label || ''))
@@ -77,6 +77,38 @@ export const signaturesToStamp = (fields, values) => {
     if (hit) hit.fields.push(f)
     else rows.push({ no: m[1], page, y, fields: [f] })
   }
+  return rows
+}
+
+/**
+ * The fields sharing a printed register row with `field` (itself included), or null when
+ * it is not in a numbered row, or is the only field in it. Used to give a row's
+ * "Date & Time" the moment the row is first filled in, instead of every row at once.
+ */
+export const rowOfField = (fields, field) => {
+  const row = numberedRows(fields).find(r => r.fields.includes(field))
+  return row && row.fields.length >= 2 ? row.fields : null
+}
+
+/**
+ * Ids of the "Date & Time" and signature fields that only look filled because the form
+ * stamped them on its own: in a numbered row where nothing else was entered. Forms saved
+ * before rows were stamped one at a time carry them in every row, used or not, so the
+ * completed PDF leaves them out (and dashes them) rather than show unused rows as signed.
+ */
+export const selfStampedBlanks = (fields, values) => {
+  const blank = new Set()
+  for (const row of numberedRows(fields)) {
+    if (row.fields.length < 2) continue
+    const stamps = row.fields.filter(f => f.type === 'datetime' || f.type === 'signature')
+    if (!stamps.length || row.fields.some(f => !stamps.includes(f) && hasContent(values[f.id]))) continue
+    stamps.forEach(f => blank.add(f.id))
+  }
+  return blank
+}
+
+export const signaturesToStamp = (fields, values) => {
+  const rows = numberedRows(fields)
 
   const stamp = new Set()
   for (const f of fields) {
