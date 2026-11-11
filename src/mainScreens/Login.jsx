@@ -115,9 +115,11 @@ function Login() {
         localStorage.setItem('userEmployeeId', employee.employee_id);
         localStorage.setItem('userFullName', employee.full_name);
 
-        // Fetch user permissions by email
+        // Fetch user permissions by employee_id -- NOT email, which isn't
+        // guaranteed unique (two people sharing one inbox would otherwise
+        // silently get each other's permissions here).
         const permissionsResponse = await fetch(
-          `${API_ENDPOINTS.EMPLOYEES}/permissions/email/${employee.email}`
+          `${API_ENDPOINTS.EMPLOYEES}/permissions/employee-id/${encodeURIComponent(employee.employee_id)}`
         );
 
         if (permissionsResponse.ok) {

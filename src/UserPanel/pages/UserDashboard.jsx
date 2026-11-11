@@ -97,10 +97,13 @@ const UserDashboard = () => {
 
     const fetchUserPermissions = async () => {
         try {
-            const userEmail = localStorage.getItem('userEmail');
-            if (!userEmail) return;
+            // employee_id, not email -- email isn't guaranteed unique, so two
+            // employees sharing one inbox would otherwise silently swap
+            // permissions depending on which row the DB happened to return.
+            const userEmployeeId = localStorage.getItem('userEmployeeId');
+            if (!userEmployeeId) return;
 
-            const response = await fetch(`${API_ENDPOINTS.EMPLOYEES}/permissions/email/${userEmail}`);
+            const response = await fetch(`${API_ENDPOINTS.EMPLOYEES}/permissions/employee-id/${encodeURIComponent(userEmployeeId)}`);
             if (response.ok) {
                 const permissions = await response.json();
                 setUserPermissions(permissions);

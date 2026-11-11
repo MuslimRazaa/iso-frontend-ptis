@@ -667,7 +667,9 @@ function JobLogDescription() {
 
   /* ── Fetch current user's JLR permissions ───────────────────
      - On admin routes (/job-log, /lms) → full access (no restrictions)
-     - On user routes (/user/*)         → load from backend by email
+     - On user routes (/user/*)         → load from backend by employee_id
+       (not email -- email isn't guaranteed unique, so two employees
+       sharing one inbox would otherwise silently swap permissions)
   ──────────────────────────────────────────────────────────── */
   useEffect(() => {
     if (!isUser) {
@@ -675,13 +677,13 @@ function JobLogDescription() {
       setJlrPerms({ operations: true, qhse: true, inventory: true, accounts: true, it: true, full: true })
       return
     }
-    const email = localStorage.getItem('userEmail')
-    if (!email) {
+    const employeeId = localStorage.getItem('userEmployeeId')
+    if (!employeeId) {
       // No login info — lock everything (read-only)
       setJlrPerms({ operations: false, qhse: false, inventory: false, accounts: false, it: false, full: false })
       return
     }
-    fetch(`${API_BASE_URL}/api/employees/permissions/email/${encodeURIComponent(email)}`)
+    fetch(`${API_BASE_URL}/api/employees/permissions/employee-id/${encodeURIComponent(employeeId)}`)
       .then(r => r.ok ? r.json() : null)
       .then(p => {
         if (p?.jlr) setJlrPerms(p.jlr)
