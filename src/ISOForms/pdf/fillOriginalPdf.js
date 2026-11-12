@@ -1,7 +1,7 @@
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
 import { normalizePdfCoords, optionMarkBox, DEFAULT_FONT_SIZE } from '../utils/pdfCoords'
 import { signatureText } from '../utils/signature'
-import { hasContent, formatDateTimeValue, formatTimeValue } from '../utils/fieldHelpers'
+import { hasContent, selfStampedBlanks, formatDateTimeValue, formatTimeValue } from '../utils/fieldHelpers'
 import { base64ToBytes } from '../utils/base64'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -267,6 +267,7 @@ export async function fillOriginalPdf(base64, fields, formValues, approverValues
   }
 
   const allValues = { ...formValues, ...approverValues }
+  for (const id of selfStampedBlanks(fields, allValues)) delete allValues[id]
   const skipped = []
   markEmptyFields(pages, fields, allValues, font)
 

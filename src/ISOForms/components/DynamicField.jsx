@@ -103,8 +103,9 @@ function DynamicField({ field, value, onChange, readOnly, employees = [], signer
     return <div style={{ fontSize: 14, color: '#14141c' }}>{display}</div>
   }
 
-  // An empty cell in a table shows a dash rather than a blank box, like the printed register.
-  const dash = compact ? '—' : undefined
+  // An empty field shows a dash rather than a blank box, like the printed register — and
+  // like the completed PDF, which dashes every field nobody filled in.
+  const dash = '—'
   const common = { value: value ?? '', onChange: (e) => onChange(e.target.value), style: inputStyle, placeholder: dash }
 
   switch (field.type) {
@@ -138,6 +139,7 @@ function DynamicField({ field, value, onChange, readOnly, employees = [], signer
             <StyledDatePicker
               value={datePart}
               onChange={(d) => onChange(join(d, timePart))}
+              placeholder={dash}
               style={{ ...inputStyle, cursor: 'pointer' }}
             />
           </div>
@@ -145,6 +147,7 @@ function DynamicField({ field, value, onChange, readOnly, employees = [], signer
             <StyledTimePicker
               value={timePart.slice(0, 5)}
               disabled={!datePart}
+              placeholder={dash}
               onChange={(t) => onChange(join(datePart, t))}
               style={{ ...inputStyle, cursor: datePart ? 'pointer' : 'not-allowed' }}
             />

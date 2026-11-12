@@ -5,7 +5,7 @@ import API_BASE_URL, { API_ENDPOINTS } from '../../config/api'
 import { Eye } from 'lucide-react'
 import DynamicField from '../components/DynamicField'
 import TemplatePreviewModal from '../components/TemplatePreviewModal'
-import { isFieldEmpty, signaturesToStamp, nowDateTimeValue } from '../utils/fieldHelpers'
+import { isFieldEmpty, signaturesToStamp, nowDateTimeValue, rowOfField, hasContent } from '../utils/fieldHelpers'
 import { SEED_TEMPLATES, SEED_VERSION, SEED_EMPLOYEES } from '../seedTemplates'
 import { ensureSeeded, getOfflineTemplates, getOfflineTemplate, addOfflineEntry } from '../utils/offlineStore'
 import { getCurrentEmployeeId } from '../utils/currentEmployee'
@@ -146,9 +146,11 @@ function FormFiller() {
       // A new form opens with "Date & Time" fields already set to now. It is only a
       // starting point — the person can change it — and a form being revised keeps
       // what it was submitted with.
+      // A "Date & Time" in a register row is left out: it is set when that row is first
+      // filled in (see setFieldValue), so rows nobody uses stay empty — and unsigned.
       if (!entryId) {
         const now = nowDateTimeValue()
-        const stamped = requesterFields.filter(f => f.type === 'datetime')
+        const stamped = requesterFields.filter(f => f.type === 'datetime' && !rowOfField(requesterFields, f))
         if (stamped.length) setValues(prev => ({ ...Object.fromEntries(stamped.map(f => [f.id, now])), ...prev }))
       }
     }
@@ -238,6 +240,11 @@ function FormFiller() {
     if (changed && changed.type === 'employee' && own.find(f => f.type === 'employee')?.id === fieldId) {
       const d = designations[val] || ''
       for (const f of own) if (f.type === 'designation') next[f.id] = d
+    }
+    // The first thing entered in a register row dates the row; the person can still change it.
+    if (changed && changed.type !== 'datetime' && hasContent(val)) {
+      const mates = rowOfField(own, changed)
+      for (const f of mates || []) if (f.type === 'datetime' && !next[f.id]) next[f.id] = nowDateTimeValue()
     }
     return next
   })
