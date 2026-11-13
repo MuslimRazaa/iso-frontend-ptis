@@ -297,7 +297,7 @@ const STATUS_CHOICES = ['In Progress', 'Incomplete', 'Completed', 'On Hold']
 const AUTO = '__auto'
 // The same rule the server uses (utils/jlrStatus.js), so the form can show the
 // status the entry will get while it is still being filled in.
-const REQUIRED_KEYS = ['tra', 'equipCL', 'vLog', 'tbt', 'rept', 'accounts', 'it', 'stockRequisition', 'goodsIssueNote', 'consumption', 'gatePass']
+const REQUIRED_KEYS = ['entryDate', 'client', 'workOrder', 'inspectorName', 'inspectorTeam', 'reference', 'location', 'natureOfJob', 'startDate', 'endDate', 'vehicleUsed', 'days', 'calculatedDays', 'manPower', 'manHours', 'drivenKm', 'jmps', 'completionDate', 'source', 'tra', 'equipCL', 'vLog', 'tbt', 'rept', 'accounts', 'it', 'stockRequisition', 'goodsIssueNote', 'consumption', 'gatePass']
 const todayYmd = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 const autoStatusOf = (e) => {
   const end = String(e.endDate || '').slice(0, 10)
@@ -309,10 +309,14 @@ const autoStatusOf = (e) => {
 // What an Incomplete entry is still missing, by the department that has to fill it in:
 // [{ dept: 'QHSE', fields: ['TRA', 'V. Log'] }, …] — empty when nothing is missing.
 const REQUIRED_LABELS = {
+  entryDate: 'Entry Date', client: 'Client', workOrder: 'Work Order', inspectorName: 'Inspector Name', inspectorTeam: 'Inspector Team',
+  reference: 'Reference', location: 'Location', natureOfJob: 'Nature of Job', startDate: 'Job Start', endDate: 'Job End',
+  vehicleUsed: 'Vehicle Plate No.', days: 'Days', calculatedDays: 'Calculated Days', manPower: 'Man Power', manHours: 'Man Hrs',
+  drivenKm: 'Driven Km', jmps: 'JMPs', completionDate: 'Completion Date', source: 'Region',
   tra: 'TRA', equipCL: 'Equip C/L', vLog: 'V. Log', tbt: 'TBT', rept: 'REPT', accounts: 'Accounts', it: 'IT',
   stockRequisition: 'Stock Requisition', goodsIssueNote: 'Goods Issue Note', consumption: 'Consumption', gatePass: 'Gate Pass',
 }
-const DEPT_ORDER = [['qhse', 'QHSE'], ['inventory', 'Inventory'], ['accounts', 'Accounts'], ['it', 'IT']]
+const DEPT_ORDER = [['operations', 'Operations'], ['qhse', 'QHSE'], ['inventory', 'Inventory'], ['accounts', 'Accounts'], ['it', 'IT']]
 
 // The Operations fields the form marks with *, which an entry cannot be saved without.
 const OPERATIONS_REQUIRED = [
@@ -455,6 +459,57 @@ const COL_GROUPS = [
 /* ── Badge components ───────────────────────────────────────── */
 // Status filter value for the Pending card: "pending" OR not set yet.
 const STATUS_PENDING_ANY = '__pending_or_blank__'
+
+// A department name in an Incomplete entry's "Missing:" line. Hovering it opens a card
+// listing that department's empty fields. The card is fixed-positioned from the chip's
+// own box, so the table's scrolling area cannot clip it.
+function MissingChip({ dept, fields }) {
+  const [pos, setPos] = useState(null)
+  const open = (e) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    const below = r.top < 220
+    const w = 300
+    setPos({ x: Math.min(Math.max(r.left + r.width / 2, w / 2 + 16), window.innerWidth - w / 2 - 16), y: below ? r.bottom + 8 : r.top - 8, below, w })
+  }
+  return (
+    <span
+      onMouseEnter={open} onMouseLeave={() => setPos(null)}
+      style={{
+        display: 'inline-block', padding: '1px 5px', borderRadius: 999, cursor: 'help', whiteSpace: 'nowrap',
+        background: 'linear-gradient(135deg,#fff1f1,#fde3e3)', border: '1px solid #f6c9c9', color: '#c62828', fontWeight: 600,
+      }}
+    >
+      {dept}
+      {pos && (
+        <span style={{
+          position: 'fixed', left: pos.x, top: pos.y, transform: pos.below ? 'translateX(-50%)' : 'translate(-50%,-100%)',
+          zIndex: 1000, width: pos.w, textAlign: 'left', whiteSpace: 'normal', pointerEvents: 'none',
+          background: '#fff', border: '1px solid #f6c9c9', borderRadius: 12, overflow: 'hidden',
+          boxShadow: '0 12px 32px rgba(215,38,61,0.18), 0 2px 8px rgba(20,20,28,0.10)',
+          fontSize: 12.5, lineHeight: 1.4, fontWeight: 500,
+        }}>
+          <span style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '9px 12px',
+            background: 'linear-gradient(135deg,#d7263d,#b81d31)', color: '#fff', fontWeight: 700, fontSize: 12.5,
+          }}>
+            <span>{dept}: still empty</span>
+            <span style={{ background: 'rgba(255,255,255,0.22)', borderRadius: 999, padding: '1px 8px', fontSize: 11.5 }}>{fields.length}</span>
+          </span>
+          <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '10px 12px 12px' }}>
+            {fields.map(f => (
+              <span key={f} style={{
+                padding: '2px 9px', borderRadius: 999, background: '#fdf2f3', border: '1px solid #ffd1d8',
+                color: '#c62828', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
+              }}>
+                {f}
+              </span>
+            ))}
+          </span>
+        </span>
+      )}
+    </span>
+  )
+}
 
 function StatusBadge({ value }) {
   if (!value) return <span style={{ color: '#bbb', fontSize: 13 }}>—</span>
@@ -1941,9 +1996,17 @@ function JobLogDescription() {
                             const gaps = missingByDept(entry)
                             if (!gaps.length) return null
                             return (
-                              <div title={gaps.map(g => `${g.dept}: ${g.fields.join(', ')}`).join('\n')}
-                                style={{ marginTop: 3, fontSize: 9.5, lineHeight: 1.25, color: '#c62828', maxWidth: 150, whiteSpace: 'normal' }}>
-                                Missing: {gaps.map(g => g.dept).join(', ')}
+                              <div style={{ marginTop: 4, fontSize: 8.5, lineHeight: 1.2, color: '#c62828', whiteSpace: 'normal' }}>
+                                {/* First row: "Missing:" and two departments; the rest follow three to a row. */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                                  <span style={{ fontWeight: 700, marginRight: 1 }}>Missing:</span>
+                                  {gaps.slice(0, 2).map(g => <MissingChip key={g.dept} dept={g.dept} fields={g.fields} />)}
+                                </div>
+                                {gaps.length > 2 && (
+                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, max-content)', gap: 3, marginTop: 3 }}>
+                                    {gaps.slice(2).map(g => <MissingChip key={g.dept} dept={g.dept} fields={g.fields} />)}
+                                  </div>
+                                )}
                               </div>
                             )
                           })()}
