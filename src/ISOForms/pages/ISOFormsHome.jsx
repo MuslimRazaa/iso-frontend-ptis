@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { API_ENDPOINTS } from '../../config/api'
 import { getOfflineEntries } from '../utils/offlineStore'
 import { getCurrentEmployeeId } from '../utils/currentEmployee'
+import { formatDate } from '../../utils/dateFormat'
 
 const BRAND  = '#d7263d'
 const INK    = '#14141c'
@@ -214,7 +215,7 @@ function ISOFormsHome() {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
                     <span style={{ fontSize: 12, color: SUBTLE }}>
-                      {entry.created_at ? new Date(entry.created_at).toLocaleDateString() : ''}
+                      {entry.created_at ? formatDate(entry.created_at) : ''}
                     </span>
                     <StatusBadge status={entry.status} />
                   </div>

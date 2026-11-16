@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { API_ENDPOINTS } from '../../config/api'
 import useLmsBase from '../useLmsBase'
 import StyledSelect from '../../components/StyledSelect'
-import SearchableSelect from '../../components/SearchableSelect'
+import StandardPicker from '../StandardPicker'
 import { showToast } from '../../components/Toast'
 
 const formSelectStyle = {
@@ -26,12 +26,6 @@ function AddCourse() {
   const [standardMode, setStandardMode] = useState('single')
   const [selectedStandardIds, setSelectedStandardIds] = useState([])
 
-  const toggleStandard = (id) => {
-    const sid = String(id)
-    setSelectedStandardIds(prev =>
-      prev.includes(sid) ? prev.filter(x => x !== sid) : [...prev, sid]
-    )
-  }
 
   const [formData, setFormData] = useState({
     course_title: '',
@@ -48,7 +42,9 @@ function AddCourse() {
     primary_ppt: null,
     course_videos: [],
     is_published: false,
-    negative_marking: false
+    negative_marking: false,
+    // false = an awareness course: no test, complete once its content is finished.
+    requires_test: true
   })
 
   // Fetch standards from backend
@@ -116,7 +112,7 @@ function AddCourse() {
 
     try {
       // Standard(s) validation depends on the selected mode.
-      const standardIds = standardMode === 'multiple'
+      const standardIds = !formData.requires_test ? [] : standardMode === 'multiple'
         ? selectedStandardIds
         : (formData.standard_id ? [formData.standard_id] : [])
 
@@ -127,12 +123,12 @@ function AddCourse() {
         setLoading(false)
         return
       }
-      if (standardMode === 'single' && standardIds.length === 0) {
+      if (formData.requires_test && standardMode === 'single' && standardIds.length === 0) {
         showToast('Please select a standard', 'error')
         setLoading(false)
         return
       }
-      if (standardMode === 'multiple' && standardIds.length < 2) {
+      if (formData.requires_test && standardMode === 'multiple' && standardIds.length < 2) {
         showToast('Select at least 2 standards for a multi-standard course', 'error')
         setLoading(false)
         return
@@ -146,8 +142,11 @@ function AddCourse() {
       data.append('course_category', formData.course_category)
       // Primary standard (legacy NOT NULL column) = first selected; full set goes
       // as standard_ids so the backend can create one test per standard.
-      data.append('standard_id', standardIds[0])
-      data.append('standard_ids', JSON.stringify(standardIds))
+      data.append('requires_test', formData.requires_test ? '1' : '0')
+      if (formData.requires_test) {
+        data.append('standard_id', standardIds[0])
+        data.append('standard_ids', JSON.stringify(standardIds))
+      }
       data.append('course_description', formData.course_description)
       data.append('is_published', formData.is_published)
       data.append('negative_marking', formData.negative_marking ? 0.25 : 0.00)
@@ -276,63 +275,32 @@ function AddCourse() {
           />
         </label>
 
-        <label>
-          <span>Standards *</span>
-          {/* Mode selector — single standard (one test) vs multiple (a test each) */}
-          <div style={{ display: 'flex', gap: 20, margin: '4px 0 10px' }}>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, margin: 0, cursor: 'pointer', fontWeight: 500 }}>
-              <input type="radio" name="standardMode" checked={standardMode === 'single'}
-                onChange={() => setStandardMode('single')} />
-              Single standard
-            </label>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, margin: 0, cursor: 'pointer', fontWeight: 500 }}>
-              <input type="radio" name="standardMode" checked={standardMode === 'multiple'}
-                onChange={() => setStandardMode('multiple')} />
-              Multiple standards (a test for each)
-            </label>
-          </div>
-
-          {standardMode === 'single' ? (
-            <SearchableSelect
-              value={formData.standard_id}
-              onChange={(v) => handleInputChange({ target: { name: 'standard_id', value: v } })}
-              options={standards.map((standard) => ({
-                value: standard.id,
-                label: `${standard.standard_name} (${standard.short_name})`,
-              }))}
-              emptyOptionLabel="Select standard"
-              placeholder="Type to search…"
-              style={formSelectStyle}
+        <div className="form-row">
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={!formData.requires_test}
+              onChange={(e) => setFormData({ ...formData, requires_test: !e.target.checked })}
             />
-          ) : (
-            <div style={{
-              border: '1px solid #e0e0e6', borderRadius: 10, padding: 10,
-              maxHeight: 220, overflowY: 'auto', display: 'grid', gap: 4,
-            }}>
-              {standards.length === 0 && (
-                <span style={{ fontSize: 13, color: '#9a9aaa' }}>No standards available.</span>
-              )}
-              {standards.map((standard) => {
-                const checked = selectedStandardIds.includes(String(standard.id))
-                return (
-                  <label key={standard.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 8, margin: 0, cursor: 'pointer',
-                    padding: '7px 10px', borderRadius: 8, fontWeight: 500,
-                    background: checked ? '#fdf2f3' : 'transparent',
-                    border: `1px solid ${checked ? '#ffd1d8' : 'transparent'}`,
-                  }}>
-                    <input type="checkbox" checked={checked}
-                      onChange={() => toggleStandard(standard.id)} />
-                    {standard.standard_name} ({standard.short_name})
-                  </label>
-                )
-              })}
-              <span style={{ fontSize: 12.5, color: '#7a7a8c', marginTop: 4 }}>
-                Selected: {selectedStandardIds.length} — user will take {selectedStandardIds.length || 0} test(s) after the course.
-              </span>
-            </div>
-          )}
-        </label>
+            <span>Awareness course — no test (complete once the course content is finished)</span>
+          </label>
+        </div>
+
+        {formData.requires_test && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 14, color: '#32323c', fontWeight: 600 }}>
+          <span>Standards *</span>
+          <StandardPicker
+            standards={standards}
+            mode={standardMode}
+            onModeChange={setStandardMode}
+            singleId={formData.standard_id}
+            onSingleChange={(v) => handleInputChange({ target: { name: 'standard_id', value: v } })}
+            multiIds={selectedStandardIds}
+            onMultiChange={setSelectedStandardIds}
+            selectStyle={formSelectStyle}
+          />
+        </div>
+        )}
 
         <label>
           <span>Prerequisites</span>
@@ -422,6 +390,7 @@ function AddCourse() {
           ))}
         </div>
 
+        {formData.requires_test && (
         <div className="form-row">
           <label className="checkbox-label">
             <input 
@@ -433,6 +402,7 @@ function AddCourse() {
             <span>Enable Negative Marking (-0.25 marks per wrong answer)</span>
           </label>
         </div>
+        )}
 
         <div className="form-row">
           <label className="checkbox-label">

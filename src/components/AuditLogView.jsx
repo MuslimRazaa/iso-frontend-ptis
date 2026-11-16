@@ -9,6 +9,7 @@ import PaginationBar from './PaginationBar'
 import StyledSelect from './StyledSelect'
 import SearchableSelect from './SearchableSelect'
 import StyledDatePicker from './StyledDatePicker'
+import { formatDateTime } from '../utils/dateFormat'
 
 // One viewer, reused by JLR and ISO Forms: an audit row is the same shape
 // (who, did what, to what, when) regardless of which module it came from, and
@@ -167,7 +168,7 @@ const AuditLogView = forwardRef(function AuditLogView(
   }
 
   const exportRowsToTable = (allRows) => allRows.map(row => [
-    row.created_at ? new Date(row.created_at).toLocaleString() : '—',
+    row.created_at ? formatDateTime(row.created_at) : '—',
     row.action || '',
     row.entity_label || `${ENTITY_LABEL[row.entity_type] || row.entity_type} #${row.entity_id}`,
     row.actor_name || row.actor_id || '—',
@@ -187,7 +188,7 @@ const AuditLogView = forwardRef(function AuditLogView(
         Promise.all([fetchAllFilteredRows(), loadPtisLogoDataUrl()]),
       ])
       const doc = new jsPDF({ orientation: 'landscape' })
-      const generatedAt = new Date().toLocaleString()
+      const generatedAt = formatDateTime()
       // Reserve the same top margin on every page (autoTable applies one
       // margin.top uniformly) and redraw the letterhead in willDrawPage,
       // which fires before that page's rows render so the table starts
@@ -225,7 +226,7 @@ const AuditLogView = forwardRef(function AuditLogView(
     try {
       const [XLSX, allRows] = await Promise.all([import('xlsx'), fetchAllFilteredRows()])
       const sheetRows = allRows.map(row => ({
-        When: row.created_at ? new Date(row.created_at).toLocaleString() : '—',
+        When: row.created_at ? formatDateTime(row.created_at) : '—',
         Action: row.action || '',
         What: row.entity_label || `${ENTITY_LABEL[row.entity_type] || row.entity_type} #${row.entity_id}`,
         Who: row.actor_name || row.actor_id || '—',
@@ -356,7 +357,7 @@ const AuditLogView = forwardRef(function AuditLogView(
               {rows.map(row => (
                 <tr key={row.id} style={{ borderTop: '1px solid #ececf0' }}>
                   <td style={{ padding: '14px 20px', color: '#595966', whiteSpace: 'nowrap' }}>
-                    {row.created_at ? new Date(row.created_at).toLocaleString() : '—'}
+                    {row.created_at ? formatDateTime(row.created_at) : '—'}
                   </td>
                   <td style={{ padding: '14px 20px' }}><ActionBadge action={row.action} /></td>
                   <td style={{ padding: '14px 20px', color: '#14141c' }}>

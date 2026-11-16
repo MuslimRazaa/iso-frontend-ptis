@@ -7,6 +7,7 @@ import { API_ENDPOINTS, API_BASE_URL } from '../../config/api'
 import PaginationBar from '../../components/PaginationBar'
 import ClearFilterButton from '../../components/ClearFilterButton'
 import StyledSelect from '../../components/StyledSelect'
+import StandardPicker from '../StandardPicker'
 import StyledDatePicker from '../../components/StyledDatePicker'
 import { showToast } from '../../components/Toast'
 import { localYmd } from '../../utils/localDate'
@@ -18,6 +19,7 @@ const formSelectStyle = {
 }
 
 import dataAnalystThumb from '../../assets/thumbnails/1.jpg'
+import { formatDate } from '../../utils/dateFormat'
 
 const PAGE_SIZE = 100
 
@@ -45,7 +47,14 @@ function AllCourses() {
     standardId: null,
     generalStandardId: null,
     specificStandardId: null,
+    requiresTest: true,
+    // The standards, as in Add Course: one (one test) or several (a test for each).
+    standardMode: 'single',
+    singleStandardId: '',
+    multiStandardIds: [],
+    originalStandardIds: [],
   })
+  const [standards, setStandards] = useState([])
   const [saving, setSaving] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [query, setQuery] = useState('')
@@ -57,6 +66,7 @@ function AllCourses() {
   // Fetch courses from backend
   useEffect(() => {
     fetchCourses()
+    axios.get(API_ENDPOINTS.STANDARDS).then(r => setStandards(Array.isArray(r.data) ? r.data : [])).catch(() => setStandards([]))
   }, [])
 
   const fetchCourses = async () => {
@@ -80,7 +90,7 @@ function AllCourses() {
         } else if (diffDays < 30) {
           updatedText = `${Math.floor(diffDays / 7)} weeks ago`
         } else {
-          updatedText = updatedDate.toLocaleDateString()
+          updatedText = formatDate(updatedDate)
         }
 
         return {
@@ -89,7 +99,7 @@ function AllCourses() {
           description: course.course_description,
           owner: course.course_owner || 'N/A',
           category: course.course_category,
-          standard: course.standard_name || 'N/A',
+          standard: Number(course.requires_test) === 0 ? 'Awareness · no test' : (course.standard_name || 'N/A'),
           creditHours: course.credit_hours,
           duration: course.duration_weeks || 0,
           status: course.is_published ? 'Active' : 'Draft',
@@ -104,6 +114,8 @@ function AllCourses() {
           standardId: course.standard_id,
           generalStandardId: course.general_standard_id,
           specificStandardId: course.specific_standard_id,
+          // false = an awareness course: no test, complete once its content is finished.
+          requiresTest: Number(course.requires_test) !== 0,
         }
       })
 
@@ -151,8 +163,25 @@ function AllCourses() {
       standardId: course.standardId,
       generalStandardId: course.generalStandardId,
       specificStandardId: course.specificStandardId,
+      requiresTest: course.requiresTest,
+      standardMode: 'single',
+      singleStandardId: course.standardId ? String(course.standardId) : '',
+      multiStandardIds: [],
+      originalStandardIds: [],
     })
     setShowModal(true)
+    // The list row only knows the main standard; the course itself knows all of them.
+    axios.get(`${API_ENDPOINTS.COURSES}/${course.id}`).then(r => {
+      const ids = (r.data?.standards || []).map(s => String(s.standard_id))
+      if (!ids.length) return
+      setEditForm(prev => prev.title !== course.title ? prev : {
+        ...prev,
+        standardMode: ids.length > 1 ? 'multiple' : 'single',
+        singleStandardId: ids[0],
+        multiStandardIds: ids,
+        originalStandardIds: ids,
+      })
+    }).catch(() => { /* keep the main standard from the list */ })
   }
 
   const cancelEdit = () => {
@@ -174,6 +203,11 @@ function AllCourses() {
       standardId: null,
       generalStandardId: null,
       specificStandardId: null,
+      requiresTest: true,
+      standardMode: 'single',
+      singleStandardId: '',
+      multiStandardIds: [],
+      originalStandardIds: [],
     })
     setShowModal(false)
   }
@@ -185,6 +219,16 @@ function AllCourses() {
       showToast('Course title is required', 'error')
       return
     }
+    if (editForm.requiresTest) {
+      if (editForm.standardMode === 'single' && !editForm.singleStandardId) {
+        showToast('Please select a standard', 'error')
+        return
+      }
+      if (editForm.standardMode === 'multiple' && editForm.multiStandardIds.length < 2) {
+        showToast('Select at least 2 standards for a multi-standard course', 'error')
+        return
+      }
+    }
 
     const data = new FormData()
     data.append('course_title', editForm.title)
@@ -194,11 +238,24 @@ function AllCourses() {
     data.append('credit_hours', editForm.creditHours || 0)
     data.append('duration_weeks', editForm.duration || 0)
     data.append('prerequisites', editForm.prerequisites || '')
-    // The standard is read-only in this form; it is sent back unchanged because
-    // the API requires a course to keep one.
-    if (editForm.standardId) data.append('standard_id', editForm.standardId)
-    if (editForm.generalStandardId) data.append('general_standard_id', editForm.generalStandardId)
-    if (editForm.specificStandardId) data.append('specific_standard_id', editForm.specificStandardId)
+    data.append('requires_test', editForm.requiresTest ? '1' : '0')
+    if (editForm.requiresTest) {
+      const pickedIds = editForm.standardMode === 'multiple'
+        ? editForm.multiStandardIds
+        : (editForm.singleStandardId ? [editForm.singleStandardId] : [])
+      const sameAsBefore = pickedIds.length === editForm.originalStandardIds.length &&
+        [...pickedIds].sort().join(',') === [...editForm.originalStandardIds].sort().join(',')
+      if (!sameAsBefore || !editForm.standardId) {
+        // Changed (or newly given a test): the whole list is replaced.
+        data.append('standard_id', pickedIds[0])
+        data.append('standard_ids', JSON.stringify(pickedIds))
+      } else {
+        // Untouched: keep exactly what the course has.
+        if (editForm.standardId) data.append('standard_id', editForm.standardId)
+        if (editForm.generalStandardId) data.append('general_standard_id', editForm.generalStandardId)
+        if (editForm.specificStandardId) data.append('specific_standard_id', editForm.specificStandardId)
+      }
+    }
     // Slots kept as-is (an existing uploaded path or a pasted URL, not being
     // replaced) travel as JSON; slots with a newly picked file upload as real
     // files — the backend merges the two instead of one overwriting the other.
@@ -532,15 +589,30 @@ function AllCourses() {
                 />
               </label>
 
-              <label>
-                <span>Standard</span>
+              <label className="checkbox-label">
                 <input
-                  type="text"
-                  value={editForm.standard}
-                  disabled
-                  style={{ backgroundColor: '#f5f5f5', cursor: 'not-allowed' }}
+                  type="checkbox"
+                  checked={!editForm.requiresTest}
+                  onChange={(e) => setEditForm({ ...editForm, requiresTest: !e.target.checked })}
                 />
+                <span>Awareness course — no test (complete once the course content is finished)</span>
               </label>
+
+              {editForm.requiresTest && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 14, color: '#32323c', fontWeight: 600 }}>
+                  <span>Standards *</span>
+                  <StandardPicker
+                    standards={standards}
+                    mode={editForm.standardMode}
+                    onModeChange={(m) => setEditForm({ ...editForm, standardMode: m })}
+                    singleId={editForm.singleStandardId}
+                    onSingleChange={(v) => setEditForm({ ...editForm, singleStandardId: String(v || '') })}
+                    multiIds={editForm.multiStandardIds}
+                    onMultiChange={(ids) => setEditForm({ ...editForm, multiStandardIds: ids })}
+                    selectStyle={formSelectStyle}
+                  />
+                </div>
+              )}
 
               <label>
                 <span>Prerequisites</span>

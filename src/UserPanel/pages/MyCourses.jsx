@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api';
 import { computeCourseTests } from '../utils/courseTests';
 import { Icon, C } from '../../UserLMS/lmsUI';
+import { formatDate } from '../../utils/dateFormat'
 
 const BASE = '/user/learning-management-system';
 
@@ -72,6 +73,15 @@ const MyCourses = () => {
     if (!q) return;
     setSearch(q);
     setSearchParams(prev => { const next = new URLSearchParams(prev); next.delete('q'); return next }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  // Arriving from a dashboard stat card (?filter=in-progress) — land on that tab.
+  useEffect(() => {
+    const f = searchParams.get('filter');
+    if (!f) return;
+    if (['all', 'not-started', 'in-progress', 'completed'].includes(f)) setFilter(f);
+    setSearchParams(prev => { const next = new URLSearchParams(prev); next.delete('filter'); return next }, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
@@ -282,6 +292,7 @@ const MyCourses = () => {
           pptSeconds: apiProgress?.ppt_view_time || 0,
           isStarted: !!apiProgress,
           localProgress: apiProgress?.progress_percentage || task.progress || 0,
+          noTest: testStatus.noTest === true, // awareness course: no test, done when the content is
           allDone: testStatus.allDone,       // every test taken → belongs in History
           // A test has a result OR one is mid-attempt (marker) → content locked.
           locked: testStatus.anyStarted || courseHasActiveTest(courseId, task.created_at),
@@ -495,7 +506,7 @@ const MyCourses = () => {
       {assignedCourses.length > 0 && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 22, flexWrap: 'wrap' }}>
           {filters.map(f => (
-            <button key={f.key} onClick={() => setFilter(f.key)} style={{
+            <button key={f.key} className={`lmsx-tab${filter === f.key ? ' is-active' : ''}`} onClick={() => setFilter(f.key)} style={{
               padding: '8px 18px', borderRadius: 10,
               border: filter === f.key ? `1px solid ${C.brand}` : `1px solid ${C.border}`,
               background: filter === f.key ? C.brandTint : C.surface,
@@ -556,7 +567,7 @@ const MyCourses = () => {
                 {/* Meta */}
                 <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', color: C.muted }}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12 }}><Icon name="book" size={14} /> {course.creditHours}h</span>
-                  {course.deadline && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12 }}><Icon name="calendar" size={14} /> {new Date(course.deadline).toLocaleDateString()}</span>}
+                  {course.deadline && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12 }}><Icon name="calendar" size={14} /> {formatDate(course.deadline)}</span>}
                   {started && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12 }}><Icon name="video" size={14} /> {fmt(course.videoSeconds)}</span>}
                 </div>
 
@@ -583,8 +594,10 @@ const MyCourses = () => {
                     onMouseEnter={e => { if (!course.locked) e.currentTarget.style.background = '#991b1b'; }}
                     onMouseLeave={e => { if (!course.locked) e.currentTarget.style.background = C.brand; }}
                   >
-                    {course.locked ? <><Icon name="lock" size={15} /> Locked</> : started ? <><Icon name="play" size={14} /> Continue</> : <><Icon name="play" size={14} /> Start Course</>}
+                    {course.locked ? <><Icon name="lock" size={15} /> Locked</> : started ? <><Icon name="play" size={14} /> {course.noTest && course.localProgress >= 100 ? 'Review' : 'Continue'}</> : <><Icon name="play" size={14} /> Start Course</>}
                   </button>
+                  {/* An awareness course has no test, so no Start Test button either. */}
+                  {!course.noTest && (
                   <button onClick={() => openTest(course)} disabled={!testUnlocked} title={testUnlocked ? 'Take the test' : started ? `Finish the course to unlock the test (currently ${course.localProgress}%)` : 'Start the course first'} style={{
                     flex: 1, padding: '10px', borderRadius: 9, cursor: testUnlocked ? 'pointer' : 'not-allowed',
                     border: `1px solid ${testUnlocked ? C.brand : C.border}`,
@@ -597,6 +610,7 @@ const MyCourses = () => {
                   >
                     {testUnlocked ? <><Icon name="test" size={15} /> Start Test</> : <><Icon name="lock" size={15} /> Test</>}
                   </button>
+                  )}
                 </div>
                 </div>
               </div>
@@ -614,7 +628,7 @@ const MyCourses = () => {
       {browseCourses.length > 4 && (
         <div style={{ marginBottom: 22, position: 'relative', maxWidth: 420 }}>
           <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: C.muted, pointerEvents: 'none', display: 'flex' }}><Icon name="search" size={16} /></span>
-          <input type="text" placeholder="Search courses…" value={search} onChange={e => setSearch(e.target.value)}
+          <input type="text" className="lmsx-input" placeholder="Search courses…" value={search} onChange={e => setSearch(e.target.value)}
             style={{ width: '100%', padding: '11px 16px 11px 40px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, color: C.ink, fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
         </div>
       )}

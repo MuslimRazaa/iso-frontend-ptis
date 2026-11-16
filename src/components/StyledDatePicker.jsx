@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react'
+import { formatDate } from '../utils/dateFormat'
 
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 const MONTH_LABELS = Array.from({ length: 12 }, (_, i) => new Date(2000, i, 1).toLocaleDateString(undefined, { month: 'short' }))
@@ -175,7 +176,7 @@ function StyledDatePicker({ value, onChange, min, max, placeholder = 'Select dat
         }}
       >
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: selectedDate ? 'inherit' : '#9a9aaa' }}>
-          {selectedDate ? selectedDate.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : placeholder}
+          {selectedDate ? formatDate(selectedDate) : placeholder}
         </span>
         <CalendarIcon size={15} style={{ flexShrink: 0, opacity: 0.6 }} />
       </button>

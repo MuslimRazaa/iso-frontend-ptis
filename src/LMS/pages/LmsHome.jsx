@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { API_ENDPOINTS, API_BASE_URL } from "../../config/api";
 import useLmsBase from "../useLmsBase";
 import { summarise, averageCompletion } from "../utils/courseProgressState";
+import { formatDate } from '../../utils/dateFormat'
 
 const defaultStatHighlights = [
   { label: "Active Courses", value: "—", helper: "Published and open", tone: "accent" },
@@ -165,7 +166,7 @@ function LmsHome() {
             return {
               title: t.course_title || 'Course',
               owner: t.employee_name || 'Unassigned',
-              date: new Date(t.deadline).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+              date: formatDate(t.deadline),
               status: progress >= 100 ? 'Completed' : progress > 0 ? 'In Progress' : 'Not Started',
             };
           });

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { API_BASE_URL } from '../../config/api'
 import { Database, Download, RefreshCw, CheckCircle2, AlertTriangle, HardDriveDownload, Clock } from 'lucide-react'
 import { showToast } from '../../components/Toast'
+import { formatDateTime } from '../../utils/dateFormat'
 
 const BASE = `${API_BASE_URL}/api/backups`
 
@@ -15,7 +16,7 @@ const fmtDate = (s) => {
   if (!s) return '—'
   const d = new Date(s)
   if (isNaN(d.getTime())) return '—'
-  return d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return formatDateTime(d)
 }
 
 function Stat({ Icon, label, value, color = '#1f1f27' }) {

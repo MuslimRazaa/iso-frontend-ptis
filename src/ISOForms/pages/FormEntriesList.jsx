@@ -10,6 +10,7 @@ import StyledSelect from '../../components/StyledSelect'
 import SearchableSelect from '../../components/SearchableSelect'
 import StyledDatePicker from '../../components/StyledDatePicker'
 import { showToast } from '../../components/Toast'
+import { formatDate } from '../../utils/dateFormat'
 
 const PAGE_SIZE = 100
 
@@ -190,7 +191,7 @@ function FormEntriesList() {
       const createdBy = e.created_by_name || e.created_by || ''
       const relatedTo = e.related_employee_name || String(e.related_employee_id || '')
       const status = e.status || 'pending'
-      const dateStr = e.created_at ? new Date(e.created_at).toLocaleDateString() : ''
+      const dateStr = e.created_at ? formatDate(e.created_at) : ''
 
       if (templateFilter && tName !== templateFilter) return false
       if (createdByFilter && createdBy !== createdByFilter) return false
@@ -425,7 +426,7 @@ function FormEntriesList() {
                   <td style={{ padding: '16px 20px', color: '#595966' }}>{relatedToDisplay(entry)}</td>
                   <td style={{ padding: '16px 20px' }}><StatusBadge status={entry.status} /></td>
                   <td style={{ padding: '16px 20px', color: '#595966' }}>
-                    {entry.created_at ? new Date(entry.created_at).toLocaleDateString() : '—'}
+                    {entry.created_at ? formatDate(entry.created_at) : '—'}
                   </td>
                   <td style={{ padding: '16px 20px', textAlign: 'right' }}>
                     <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>

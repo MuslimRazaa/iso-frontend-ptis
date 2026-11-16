@@ -10,6 +10,7 @@ import PaginationBar from '../../components/PaginationBar'
 import ClearFilterButton from '../../components/ClearFilterButton'
 import StyledSelect from '../../components/StyledSelect'
 import { showToast } from '../../components/Toast'
+import { formatDate } from '../../utils/dateFormat'
 
 const PAGE_SIZE = 100
 
@@ -39,7 +40,7 @@ const fmtDate = (value) => {
   if (!value) return '—'
   const d = new Date(value)
   if (Number.isNaN(d.getTime())) return '—'
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+  return formatDate(d)
 }
 
 
@@ -299,7 +300,9 @@ function CourseTracking() {
                       </span>
                     </td>
                     <td style={{ whiteSpace: 'nowrap' }}>
-                      {Number(r.test_attempts) > 0 ? (
+                      {Number(r.requires_test) === 0 ? (
+                        <span style={{ fontSize: 12.5, color: '#9a9aaa' }}>No test</span>
+                      ) : Number(r.test_attempts) > 0 ? (
                         <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
                           <span style={{
                             display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 9px', borderRadius: 99,

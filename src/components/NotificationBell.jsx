@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { API_BASE_URL } from '../config/api';
 import { showToast } from './Toast';
+import { formatDate } from '../utils/dateFormat'
 
 // Bell + dropdown, keyed entirely by `email` — originally built inline inside
 // UserHeader for employees, pulled out here so the admin dashboard can get
@@ -155,7 +156,7 @@ const NotificationBell = ({ email, onOpen, closeSignal }) => {
     if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
     if (diffDays === 1) return 'Yesterday';
     if (diffDays < 7) return `${diffDays} days ago`;
-    return notifTime.toLocaleDateString();
+    return formatDate(notifTime);
   };
 
   const handleNotificationClick = (notification) => {

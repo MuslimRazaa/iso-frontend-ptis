@@ -20,6 +20,7 @@ import {
   ClipboardList, CheckCircle2, Clock, CircleDashed, Pencil, Download, FileSpreadsheet,
   ChevronRight, ChevronDown, Users
 } from 'lucide-react'
+import { formatDate } from '../../utils/dateFormat'
 
 /* ─────────────────────────────────────────────────────────────
    DB ↔ component field mapping helpers
@@ -1330,8 +1331,8 @@ function JobLogDescription() {
       if (!changeStart || !changeEnd) { setChangeError('Both dates are required: the day they started on this job, and the last day they were on it.'); return }
       if (!modalState.startDate) { setChangeError("Set this job's Start Date first (Job Details tab) — a person's days on the job are counted from it."); return }
       if (changeStart > changeEnd) { setChangeError('"On the job from" cannot be after "Last day on the job".'); return }
-      if (changeStart < modalState.startDate) { setChangeError(`They cannot have started before the job did (job start: ${modalState.startDate}).`); return }
-      if (modalState.endDate && changeEnd > modalState.endDate) { setChangeError(`They cannot stay past the job's end date (${modalState.endDate}).`); return }
+      if (changeStart < modalState.startDate) { setChangeError(`They cannot have started before the job did (job start: ${formatDate(modalState.startDate)}).`); return }
+      if (modalState.endDate && changeEnd > modalState.endDate) { setChangeError(`They cannot stay past the job's end date (${formatDate(modalState.endDate)}).`); return }
       if (!window.confirm(`Remove ${member} from this job?\n\nTheir field attendance for this job will be counted only from ${changeStart} to ${changeEnd}. Days after ${changeEnd} will no longer count for them.`)) return
       try {
         setChangeSaving(true)
@@ -1531,6 +1532,7 @@ function JobLogDescription() {
   }, [deleteStep])
 
   const rv = v => v || '—'
+  const rd = v => formatDate(v) || '—'
 
   /* ── Theme-aware stat card ──────────────────────────────── */
   // Clicking a card filters the table to what it counts, and clicking it again
@@ -1930,11 +1932,11 @@ function JobLogDescription() {
                     const changes = entry.inspectorChanges || []
                     const inspectorReplaceReason = changes
                       .filter(c => c.fieldType === 'inspector' && c.changeType === 'replace')
-                      .map(c => `${c.oldValue} → ${c.newValue} (${c.startDate} – ${c.endDate || 'ongoing'})\n${c.reason || ''}`.trim())
+                      .map(c => `${c.oldValue} → ${c.newValue} (${formatDate(c.startDate)} – ${c.endDate ? formatDate(c.endDate) : 'ongoing'})\n${c.reason || ''}`.trim())
                       .join('\n\n')
                     const teamReplaceReason = changes
                       .filter(c => c.fieldType === 'team' && c.changeType === 'replace')
-                      .map(c => `${c.oldValue} → ${c.newValue} (${c.startDate} – ${c.endDate || 'ongoing'})\n${c.reason || ''}`.trim())
+                      .map(c => `${c.oldValue} → ${c.newValue} (${formatDate(c.startDate)} – ${c.endDate ? formatDate(c.endDate) : 'ongoing'})\n${c.reason || ''}`.trim())
                       .join('\n\n')
                     const isExpanded = expandedRows.has(entry.id)
                     // In progress rows glow amber and incomplete ones red, as expiring and
@@ -1956,7 +1958,7 @@ function JobLogDescription() {
                           )}
                         </td>
                         <td className="all-records-cell-id" style={{ fontWeight: 700, color: '#595966', textAlign: 'center' }}>{serial}</td>
-                        <td className="all-records-cell-date">{rv(entry.entryDate)}</td>
+                        <td className="all-records-cell-date">{rd(entry.entryDate)}</td>
                         <td className="all-records-cell-text" style={{ fontWeight: 600 }}>{rv(entry.client)}</td>
                         <td className="all-records-cell-text">
                           <WorkOrderCell
@@ -1977,8 +1979,8 @@ function JobLogDescription() {
                         <td className="all-records-cell-text" style={{ fontSize: 12, color: '#7a7a8c' }}>{rv(entry.reference)}</td>
                         <td className="all-records-cell-text">{rv(entry.location)}</td>
                         <td className="all-records-cell-description">{rv(entry.natureOfJob)}</td>
-                        <td className="all-records-cell-date">{rv(entry.startDate)}</td>
-                        <td className="all-records-cell-date">{rv(entry.endDate)}</td>
+                        <td className="all-records-cell-date">{rd(entry.startDate)}</td>
+                        <td className="all-records-cell-date">{rd(entry.endDate)}</td>
                         <td className="all-records-cell-text">{rv(entry.vehicleUsed)}</td>
                         <td className="all-records-cell-text" style={{ textAlign: 'center', fontWeight: 700 }}>{rv(entry.days)}</td>
                         <td className="all-records-cell-text" style={{ textAlign: 'center', fontWeight: 700 }}>{rv(entry.calculatedDays)}</td>
@@ -2011,12 +2013,12 @@ function JobLogDescription() {
                             )
                           })()}
                         </td>
-                        <td className="all-records-cell-date">{rv(entry.completionDate)}</td>
+                        <td className="all-records-cell-date">{rd(entry.completionDate)}</td>
                         <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.rept} /></td>
                         <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.exp} /></td>
                         <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.accounts} /></td>
                         <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.it} /></td>
-                        <td className="all-records-cell-date">{rv(entry.submissionDate)}</td>
+                        <td className="all-records-cell-date">{rd(entry.submissionDate)}</td>
                         <td>
                           <span style={{
                             display: 'inline-block', padding: '2px 8px', borderRadius: 6,
@@ -2075,7 +2077,7 @@ function JobLogDescription() {
                               <span style={{ fontWeight: 600, color: '#1f1f27' }}>
                                 {c.changeType === 'replace' ? `${c.oldValue} → ${c.newValue}` : c.changeType === 'remove' ? `− ${c.oldValue}` : `+ ${c.newValue}`}
                               </span>
-                              <span style={{ color: '#595966' }}>{c.changeType === 'remove' ? `on the job ${c.startDate} – ${c.endDate}` : `${c.startDate} – ${c.endDate || 'ongoing'}`}</span>
+                              <span style={{ color: '#595966' }}>{c.changeType === 'remove' ? `on the job ${formatDate(c.startDate)} – ${formatDate(c.endDate)}` : `${formatDate(c.startDate)} – ${c.endDate ? formatDate(c.endDate) : 'ongoing'}`}</span>
                               {c.reason && <InfoTooltip text={c.reason} />}
                             </div>
                           </td>
@@ -2652,7 +2654,7 @@ function JobLogDescription() {
                         <span style={{ flex: 1, fontWeight: 600 }}>
                           {c.changeType === 'replace' ? `${c.oldValue} → ${c.newValue}` : c.changeType === 'remove' ? `− ${c.oldValue}` : `+ ${c.newValue}`}
                         </span>
-                        <span style={{ color: '#595966' }}>{c.changeType === 'remove' ? `on the job ${c.startDate} – ${c.endDate}` : `${c.startDate} – ${c.endDate || 'ongoing'}`}</span>
+                        <span style={{ color: '#595966' }}>{c.changeType === 'remove' ? `on the job ${formatDate(c.startDate)} – ${formatDate(c.endDate)}` : `${formatDate(c.startDate)} – ${c.endDate ? formatDate(c.endDate) : 'ongoing'}`}</span>
                         {c.reason && <InfoTooltip text={c.reason} />}
                         {isActiveReplacement && canEdit('operations') && (
                           <button type="button" className="ghost-btn" onClick={() => endReplacementNow(c)}

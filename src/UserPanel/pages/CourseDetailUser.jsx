@@ -776,6 +776,9 @@ const CourseDetailUser = () => {
   }
 
   const pendingTests = requiredTests.filter((test) => !test.hasPassed);
+  // An awareness course has no test: it is complete once its content is.
+  const noTest = testUnlockInfo?.noTest === true;
+  const awarenessDone = noTest && (Number(testUnlockInfo?.progress?.percentage) >= 100 || testUnlockInfo?.progress?.status === 'completed');
   const getTestingUrlForTest = (test) => {
     const params = new URLSearchParams({
       courseId: String(courseId),
@@ -1131,8 +1134,25 @@ const CourseDetailUser = () => {
               </div>
             )}
             
+            {noTest && isEnrolled && (
+              <div style={{
+                marginTop: '1rem',
+                padding: '1rem',
+                background: awarenessDone ? 'rgba(16, 185, 129, 0.12)' : 'rgba(251, 191, 36, 0.1)',
+                border: awarenessDone ? '1px solid rgba(16, 185, 129, 0.35)' : '2px solid rgba(251, 191, 36, 0.3)',
+                borderRadius: '10px',
+                color: awarenessDone ? '#a7f3d0' : '#fbbf24',
+                fontWeight: '700',
+                textAlign: 'center',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+              }}>
+                <Icon name={awarenessDone ? 'check' : 'book'} size={16} />
+                {awarenessDone ? 'Course completed' : `Finish the course content to complete it (currently ${Math.round(Number(testUnlockInfo?.progress?.percentage) || 0)}%)`}
+              </div>
+            )}
+
             {/* Progress indicator when test not yet unlocked */}
-            {isEnrolled && !testUnlocked && testUnlockInfo && (
+            {isEnrolled && !testUnlocked && testUnlockInfo && !noTest && (
               <div style={{
                 marginTop: '1rem',
                 padding: '1rem',

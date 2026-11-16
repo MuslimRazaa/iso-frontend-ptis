@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { API_ENDPOINTS, API_BASE_URL } from '../config/api'
 import { computeCourseTests } from '../UserPanel/utils/courseTests'
 import { Icon, C } from './lmsUI'
+import { formatDate as formatDateValue } from '../utils/dateFormat'
 
 const BASE = '/user/learning-management-system'
 
@@ -76,7 +77,13 @@ function UserLmsHome() {
         const c = { notStarted: 0, inProgress: 0, passed: 0, failed: 0, overdue: 0 }
         enriched.forEach(e => {
           const s = e.status
-          if (s.allDone) {
+          if (s.noTest) {
+            // Awareness course: no test, so it is done when the content is.
+            if (Number(e.progress) >= 100) c.passed++
+            else if (e.deadlinePassed) c.overdue++
+            else if (e.started || e.progress > 0) c.inProgress++
+            else c.notStarted++
+          } else if (s.allDone) {
             if (!s.passedAll) c.failed++
             else if (s.overdue) c.overdue++
             else c.passed++
@@ -121,13 +128,13 @@ function UserLmsHome() {
 
   const totalCourses = STATUS_ORDER.reduce((s, k) => s + counts[k], 0)
   const statCards = [
-    { label: 'Assigned Courses', value: totalCourses, icon: 'book', accent: C.inProgress },
-    { label: 'In Progress', value: counts.inProgress, icon: 'clock', accent: C.overdue },
-    { label: 'Completed', value: counts.passed + counts.failed + counts.overdue, icon: 'award', accent: C.passed },
-    { label: 'Avg Progress', value: `${avgProgress}%`, icon: 'trend', accent: C.brand },
+    { label: 'Assigned Courses', value: totalCourses, icon: 'book', accent: C.inProgress, to: `${BASE}/my-courses` },
+    { label: 'In Progress', value: counts.inProgress, icon: 'clock', accent: C.overdue, to: `${BASE}/my-courses?filter=in-progress` },
+    { label: 'Completed', value: counts.passed + counts.failed + counts.overdue, icon: 'award', accent: C.passed, to: `${BASE}/history` },
+    { label: 'Avg Progress', value: `${avgProgress}%`, icon: 'trend', accent: C.brand, to: `${BASE}/my-courses` },
   ]
 
-  const fmtDate = (s) => s ? new Date(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : '—'
+  const fmtDate = (s) => s ? formatDateValue(s) : '—'
 
   return (
     <div style={{ padding: '32px', width: '100%' }}>
@@ -144,7 +151,18 @@ function UserLmsHome() {
       {/* Stat cards */}
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 26 }}>
         {statCards.map(s => (
-          <div key={s.label} style={{ flex: '1 1 170px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div
+            key={s.label}
+            className="lmsx-card"
+            role="button"
+            tabIndex={0}
+            title={`Open ${s.label}`}
+            onClick={() => navigate(s.to)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(s.to) } }}
+            onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = `0 12px 26px ${s.accent}26`; e.currentTarget.style.borderColor = s.accent }}
+            onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = C.border }}
+            style={{ flex: '1 1 170px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer', transition: 'transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease', outline: 'none' }}
+          >
             <div style={{ width: 42, height: 42, borderRadius: 11, background: `${s.accent}14`, color: s.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <Icon name={s.icon} size={20} />
             </div>
@@ -169,7 +187,7 @@ function UserLmsHome() {
             <Icon name="history" size={18} color={C.body} />
             <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: C.ink }}>Recent History</h3>
           </div>
-          <button onClick={() => navigate(`${BASE}/history`)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', color: C.brand, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+          <button className="lmsx-link" onClick={() => navigate(`${BASE}/history`)} style={{ background: 'none', border: 'none', color: C.brand, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
             View all <Icon name="arrowRight" size={15} />
           </button>
         </div>
@@ -182,7 +200,9 @@ function UserLmsHome() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <tbody>
                 {historyRows.map((r, i) => (
-                  <tr key={i} style={{ borderTop: i ? `1px solid ${C.line}` : 'none' }}>
+                  <tr key={i} className="lmsx-row lmsx-row-click" tabIndex={0} onClick={() => navigate(`${BASE}/history`)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') navigate(`${BASE}/history`) }}
+                    style={{ borderTop: i ? `1px solid ${C.line}` : 'none' }}>
                     <td style={{ padding: '13px 20px', fontWeight: 600, color: C.ink }}>{r.title}</td>
                     <td style={{ padding: '13px 20px', textAlign: 'center' }}>
                       <Chip text={r.passed ? 'Pass' : 'Fail'} color={r.passed ? C.passed : C.failed} />
@@ -205,14 +225,14 @@ function UserLmsHome() {
           { title: 'Courses', desc: 'Start a course, take its test, track progress.', icon: 'book', path: `${BASE}/my-courses` },
           { title: 'History', desc: 'Your finished courses and their results.', icon: 'history', path: `${BASE}/history` },
         ].map(tile => (
-          <button key={tile.title} onClick={() => navigate(tile.path)} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: '22px 20px', textAlign: 'left', cursor: 'pointer', transition: 'all 0.2s ease' }}
+          <button key={tile.title} className="lmsx-tile" onClick={() => navigate(tile.path)} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: '22px 20px', textAlign: 'left', cursor: 'pointer', transition: 'all 0.2s ease' }}
             onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 10px 26px rgba(15,23,42,0.08)'; e.currentTarget.style.borderColor = C.muted }}
             onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = C.border }}
           >
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: C.brandTint, color: C.brand, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}><Icon name={tile.icon} size={22} /></div>
+            <div className="lmsx-tile-icon" style={{ width: 44, height: 44, borderRadius: 12, background: C.brandTint, color: C.brand, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}><Icon name={tile.icon} size={22} /></div>
             <div style={{ fontSize: 15, fontWeight: 700, color: C.ink, marginBottom: 6 }}>{tile.title}</div>
             <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.5 }}>{tile.desc}</div>
-            <div style={{ marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: C.brand }}>Open <Icon name="arrowRight" size={14} /></div>
+            <div className="lmsx-open" style={{ marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: C.brand }}>Open <Icon name="arrowRight" size={14} /></div>
           </button>
         ))}
       </div>
@@ -229,7 +249,7 @@ const Chip = ({ text, color }) => (
 function StatusBar({ counts, loading, total }) {
   const max = Math.max(1, ...STATUS_ORDER.map(k => counts[k]))
   return (
-    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: '20px 22px' }}>
+    <div className="lmsx-panel" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: '20px 22px' }}>
       <h3 style={{ margin: '0 0 2px', fontSize: 15, fontWeight: 700, color: C.ink }}>Courses by Status</h3>
       <p style={{ margin: '0 0 18px', fontSize: 12.5, color: C.muted }}>{total} assigned course{total === 1 ? '' : 's'}</p>
       {loading ? (
@@ -240,9 +260,9 @@ function StatusBar({ counts, loading, total }) {
             const v = counts[k]
             const h = Math.round((v / max) * 138)
             return (
-              <div key={k} title={`${STATUS[k].label}: ${v}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '100%' }}>
+              <div key={k} className="lmsx-bar" title={`${STATUS[k].label}: ${v}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '100%' }}>
                 <div style={{ fontSize: 13, fontWeight: 800, color: C.ink, marginBottom: 6 }}>{v}</div>
-                <div style={{ width: '100%', maxWidth: 44, height: Math.max(h, v > 0 ? 6 : 3), background: v > 0 ? STATUS[k].color : C.line, borderRadius: '5px 5px 0 0', transition: 'height 0.4s ease' }} />
+                <div className="lmsx-bar-fill" style={{ width: '100%', maxWidth: 44, height: Math.max(h, v > 0 ? 6 : 3), background: v > 0 ? STATUS[k].color : C.line, borderRadius: '5px 5px 0 0', transition: 'height 0.4s ease' }} />
                 <div style={{ fontSize: 10.5, color: C.muted, marginTop: 9, textAlign: 'center', lineHeight: 1.2, height: 26 }}>{STATUS[k].label}</div>
               </div>
             )
@@ -270,7 +290,7 @@ function ProgressLine({ data, loading }) {
   const LINE = C.inProgress
 
   return (
-    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: '20px 22px' }}>
+    <div className="lmsx-panel" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: '20px 22px' }}>
       <h3 style={{ margin: '0 0 2px', fontSize: 15, fontWeight: 700, color: C.ink }}>Progress Across Courses</h3>
       <p style={{ margin: '0 0 12px', fontSize: 12.5, color: C.muted }}>% completed per course</p>
       {loading ? (
@@ -294,7 +314,7 @@ function ProgressLine({ data, loading }) {
             {/* points */}
             {data.map((d, i) => (
               <g key={i}>
-                <circle cx={x(i)} cy={y(d.progress)} r="4.5" fill={LINE} stroke="#fff" strokeWidth="2">
+                <circle className="lmsx-dot" cx={x(i)} cy={y(d.progress)} r="4.5" fill={LINE} stroke="#fff" strokeWidth="2">
                   <title>{`${d.title}: ${d.progress}%`}</title>
                 </circle>
                 <text x={x(i)} y={H - pad.b + 16} textAnchor="middle" fontSize="10" fill={C.muted}>{short(d.title)}</text>

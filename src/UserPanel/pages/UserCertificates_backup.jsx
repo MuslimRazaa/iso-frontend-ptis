@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { formatDate } from '../../utils/dateFormat'
 
 const UserCertificates = () => {
   const [certificates, setCertificates] = useState([]);
@@ -95,11 +96,11 @@ const UserCertificates = () => {
                   </div>
                   <div className="meta-item">
                     <span className="meta-label">Issued:</span>
-                    <span className="meta-value">{new Date(cert.issuedDate).toLocaleDateString()}</span>
+                    <span className="meta-value">{formatDate(cert.issuedDate)}</span>
                   </div>
                   <div className="meta-item">
                     <span className="meta-label">Valid Until:</span>
-                    <span className="meta-value">{new Date(cert.validUntil).toLocaleDateString()}</span>
+                    <span className="meta-value">{formatDate(cert.validUntil)}</span>
                   </div>
                 </div>
                 <div className="cert-status valid">

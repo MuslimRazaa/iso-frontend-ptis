@@ -3,6 +3,7 @@ import { normalizePdfCoords, optionMarkBox, DEFAULT_FONT_SIZE } from '../utils/p
 import { signatureText } from '../utils/signature'
 import { hasContent, selfStampedBlanks, formatDateTimeValue, formatTimeValue } from '../utils/fieldHelpers'
 import { base64ToBytes } from '../utils/base64'
+import { formatDate } from '../../utils/dateFormat'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Overlay renderer.
@@ -60,7 +61,7 @@ const displayValue = (field, value) => {
   if (field.type === 'date') {
     if (!value) return ''
     try {
-      return new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+      return formatDate(value) || String(value)
     } catch { return String(value) }
   }
   return value != null && value !== '' ? String(value) : ''

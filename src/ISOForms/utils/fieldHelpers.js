@@ -1,7 +1,8 @@
 import { formatSignatureDate } from './signature'
+import { formatDate } from '../../utils/dateFormat'
 
 /**
- * A "Date & Time" value as people read it: "03 Sep 2026, 03:45 PM". The value is
+ * A "Date & Time" value as people read it: "03-09-2026, 03:45 PM". The value is
  * stored as "YYYY-MM-DDTHH:mm" (or just the date when no time was picked), and
  * the same wording is used on the screen and in the PDF.
  */
@@ -9,10 +10,7 @@ export const formatDateTimeValue = (value) => {
   const v = String(value || '').trim()
   if (!v) return ''
   if (!v.includes('T')) {
-    const d = new Date(`${v}T00:00`)
-    return Number.isNaN(d.getTime())
-      ? v
-      : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+    return formatDate(v) || v
   }
   return formatSignatureDate(v)
 }
