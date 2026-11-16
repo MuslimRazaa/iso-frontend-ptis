@@ -7,6 +7,7 @@ import {
   GraduationCap, UserRound, Star, BookOpen, Calendar, Clock,
   ExternalLink, FileText, Video, Smartphone, Infinity as InfinityIcon
 } from 'lucide-react'
+import { formatDate } from '../../utils/dateFormat'
 
 // Admin text fields (outcomes / syllabus) are stored as one item per line, the
 // same way the learner's page reads them — a course must not describe itself
@@ -364,7 +365,7 @@ function CourseDetail() {
                 </div>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '20px', fontWeight: '700' }}>
-                    {taskInfo?.deadline ? new Date(taskInfo.deadline).toLocaleDateString() : 'N/A'}
+                    {taskInfo?.deadline ? formatDate(taskInfo.deadline) : 'N/A'}
                   </div>
                   <div style={{ fontSize: '12px', color: '#888' }}>Deadline</div>
                 </div>

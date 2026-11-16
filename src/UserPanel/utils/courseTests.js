@@ -12,6 +12,11 @@
 // while those old results still live on in History.
 export function computeCourseTests(courseDetail, allResults, deadline, assignedSince) {
   const courseId = courseDetail?.id;
+  // An awareness course has no test: nothing to take, nothing to start or lock, and it is
+  // never "finished" by tests — callers judge it by the course content's progress instead.
+  if (Number(courseDetail?.requires_test) === 0) {
+    return { tests: [], noTest: true, anyStarted: false, allDone: false, passedAll: false, lastSubmittedAt: null, overdue: false };
+  }
   let results = (allResults || []).filter(r => Number(r.course_id) === Number(courseId));
   if (assignedSince) {
     const since = new Date(assignedSince);

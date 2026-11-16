@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { showToast } from '../../components/Toast'
+import { formatDate } from '../../utils/dateFormat'
 
 const initialRecords = [
   {
@@ -220,8 +221,8 @@ function AllRecords() {
                     <td className="all-records-cell-text">{record.location}</td>
                     <td className="all-records-cell-text">{record.rig}</td>
                     <td className="all-records-cell-text">{record.partNo}</td>
-                    <td className="all-records-cell-date">{record.inspectionDate}</td>
-                    <td className="all-records-cell-date">{record.expireDate}</td>
+                    <td className="all-records-cell-date">{formatDate(record.inspectionDate)}</td>
+                    <td className="all-records-cell-date">{formatDate(record.expireDate)}</td>
                     <td>
                       <span className={`all-records-badge ${record.fitForUse === 'Yes' ? 'badge-success' : 'badge-danger'}`}>
                         {record.fitForUse}

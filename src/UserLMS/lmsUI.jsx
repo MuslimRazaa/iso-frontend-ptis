@@ -1,4 +1,5 @@
 import React from 'react';
+import './lmsUi.css';
 
 // ── Shared LMS design tokens ──────────────────────────────────────────────
 // A restrained, professional palette (slate neutrals + one brand accent + a

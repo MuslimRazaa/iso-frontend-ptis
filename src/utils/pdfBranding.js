@@ -1,3 +1,4 @@
+import { formatDateTime } from './dateFormat'
 // Shared jsPDF letterhead + watermark so every PDF exported from the app
 // (audit logs today, more later) looks like it came from the same company
 // instead of a bare title + table. One place to keep it consistent.
@@ -73,7 +74,7 @@ export function drawPdfLetterhead(doc, { logoDataUrl, title, subtitle, generated
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(120, 120, 130);
-  doc.text(`Generated: ${generatedAt || new Date().toLocaleString()}`, pageW - marginX, y + 4, { align: 'right' });
+  doc.text(`Generated: ${generatedAt || formatDateTime()}`, pageW - marginX, y + 4, { align: 'right' });
 
   y += 16;
   doc.setFont('helvetica', 'bold');

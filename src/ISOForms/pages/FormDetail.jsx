@@ -12,6 +12,7 @@ import { downloadFilledPdf, fillOriginalPdf } from '../pdf/fillOriginalPdf'
 import { X } from 'lucide-react'
 import { SEED_EMPLOYEES } from '../seedTemplates'
 import { viewAttachment, downloadAttachment } from '../utils/attachments'
+import { formatDateTime } from '../../utils/dateFormat'
 
 const STATUS_COLORS = {
   pending:  { bg: '#fff7e6', color: '#b54708' },
@@ -495,13 +496,13 @@ function FormDetail() {
           <div>
             <div style={{ fontSize: 12, color: '#7a7a8c', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Submitted</div>
             <div style={{ fontWeight: 700, color: '#14141c', marginTop: 4 }}>
-              {entry.created_at ? new Date(entry.created_at).toLocaleString() : '—'}
+              {entry.created_at ? formatDateTime(entry.created_at) : '—'}
             </div>
           </div>
           {entry.decided_at && (
             <div>
               <div style={{ fontSize: 12, color: '#7a7a8c', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Decided</div>
-              <div style={{ fontWeight: 700, color: '#14141c', marginTop: 4 }}>{new Date(entry.decided_at).toLocaleString()}</div>
+              <div style={{ fontWeight: 700, color: '#14141c', marginTop: 4 }}>{formatDateTime(entry.decided_at)}</div>
             </div>
           )}
         </div>
@@ -548,7 +549,7 @@ function FormDetail() {
             <div style={{ fontSize: 13, color: '#7a7a8c' }}>
               Assigned to <strong style={{ color: '#14141c' }}>{approval.approver_employee_name || approval.approver_employee_id || '—'}</strong>
               {approval.status !== 'pending' && approval.decided_at && (
-                <> — {approval.status} on {new Date(approval.decided_at).toLocaleString()}</>
+                <> — {approval.status} on {formatDateTime(approval.decided_at)}</>
               )}
             </div>
             {approval.remarks && (

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '../../contexts/NotificationContext';
+import { formatDate } from '../../utils/dateFormat'
 
 const TopNavbar = () => {
   const navigate = useNavigate();
@@ -42,16 +43,7 @@ const TopNavbar = () => {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, []);
 
-  const formatDate = (date) => {
-    return date.toLocaleDateString('en-US', { 
-      weekday: 'short', 
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric' 
-    });
-  };
-
-  const handleLogout = () => {
+const handleLogout = () => {
     localStorage.removeItem('userEmail');
     localStorage.removeItem('userPermissions');
     localStorage.removeItem('authToken');
@@ -84,7 +76,7 @@ const TopNavbar = () => {
     if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
     if (diffDays === 1) return 'Yesterday';
     if (diffDays < 7) return `${diffDays} days ago`;
-    return notifTime.toLocaleDateString();
+    return formatDate(notifTime);
   };
 
   const handleNotificationClick = (notification) => {

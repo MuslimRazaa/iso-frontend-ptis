@@ -9,6 +9,7 @@ import StyledSelect from '../../components/StyledSelect'
 import StyledDatePicker from '../../components/StyledDatePicker'
 import { showToast } from '../../components/Toast'
 import { localToday, localYmd } from '../../utils/localDate'
+import { formatDate as formatDateValue } from '../../utils/dateFormat'
 
 const formSelectStyle = {
   border: '1px solid #dcdce3', borderRadius: 14, padding: '12px 14px',
@@ -125,20 +126,23 @@ function TaskAllocation() {
       passed: !!r.passed,
       score: r.score_percentage,
     }))
-    const requiredCount = Number(task.linked_standards_count) > 0
+    // An awareness course has no test: it is complete once its content is.
+    const noTest = Number(task.requires_test) === 0
+    const requiredCount = noTest ? 0 : Number(task.linked_standards_count) > 0
       ? Number(task.linked_standards_count)
       : ((task.general_standard_id && task.specific_standard_id) ? 2 : 1)
     const doneCount = tests.length
-    const allDone = requiredCount > 0 && doneCount >= requiredCount
-    const passedAll = allDone && tests.every(t => t.passed)
     const progress = task.live_progress != null ? Number(task.live_progress) : (task.progress || 0)
+    const allDone = noTest ? progress >= 100 : requiredCount > 0 && doneCount >= requiredCount
+    const passedAll = allDone && tests.every(t => t.passed)
     const overdue = !allDone && task.deadline && new Date() > new Date(task.deadline)
     let label, color
-    if (allDone) { label = passedAll ? 'Completed · Passed' : 'Completed · Failed'; color = passedAll ? '#16a34a' : '#dc2626' }
+    if (allDone && noTest) { label = 'Completed'; color = '#16a34a' }
+    else if (allDone) { label = passedAll ? 'Completed · Passed' : 'Completed · Failed'; color = passedAll ? '#16a34a' : '#dc2626' }
     else if (overdue) { label = 'Overdue'; color = '#d97706' }
     else if (doneCount > 0 || progress > 0) { label = 'In Progress'; color = '#2563eb' }
     else { label = 'Not Started'; color = '#64748b' }
-    return { label, color, progress, tests, requiredCount, doneCount, allDone, passedAll }
+    return { label, color, progress, tests, requiredCount, doneCount, allDone, passedAll, noTest }
   }
 
   const fetchCourseRequests = async () => {
@@ -386,7 +390,7 @@ function TaskAllocation() {
 
   const formatDate = (dateString) => {
     const date = new Date(dateString)
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    return formatDateValue(date)
   }
 
   const onTaskQueryChange = (v) => { setTaskQuery(v); setTasksPage(1) }
@@ -583,7 +587,9 @@ function TaskAllocation() {
                         </div>
                       </td>
                       <td>
-                        {st.tests.length === 0 ? (
+                        {st.noTest ? (
+                          <span style={{ color: '#94a3b8', fontSize: 13 }}>No test</span>
+                        ) : st.tests.length === 0 ? (
                           <span style={{ color: '#94a3b8', fontSize: 13 }}>{st.doneCount} / {st.requiredCount} taken</span>
                         ) : (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

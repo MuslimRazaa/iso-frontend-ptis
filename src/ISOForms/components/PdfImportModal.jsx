@@ -15,6 +15,7 @@ const FIELD_TYPES = [
   { value: 'checkbox-group', label: 'Checkbox Group' },
   { value: 'radio',          label: 'Checkbox (select one only)' },
   { value: 'employee',       label: 'Employee Picker' },
+  { value: 'employee-self',  label: 'Employee Picker (auto-filled with the person filling the form)' },
   { value: 'employee-multi', label: 'Employee Picker (multiple)' },
   { value: 'designation',    label: 'Designation (from the Employee Picker)' },
 ]

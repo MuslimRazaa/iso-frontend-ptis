@@ -72,10 +72,9 @@ const pad = (n) => String(n).padStart(2, '0')
 // Spelled out rather than taken from toLocaleString: that gives "Sept" in some
 // runtimes and "Sep" in others, and a signature has to read the same on the
 // screen and in the PDF.
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 /**
- * "03 Sep 2026, 03:45 PM" — when a form was signed.
+ * "03-09-2026, 03:45 PM" — when a form was signed.
  *
  * To the minute: seconds say nothing a signature line needs, and 12-hour with
  * AM/PM is how the time is read on these forms. The stored value keeps the full
@@ -91,7 +90,7 @@ export const formatSignatureDate = (at) => {
   // 0 and 12 both read as 12 on a clock face.
   const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12
 
-  return `${pad(d.getDate())} ${MONTHS[d.getMonth()]} ${d.getFullYear()}, `
+  return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}, `
     + `${pad(hours12)}:${pad(d.getMinutes())} ${meridiem}`
 }
 

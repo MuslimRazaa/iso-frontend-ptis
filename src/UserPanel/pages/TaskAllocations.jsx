@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api';
+import { formatDate } from '../../utils/dateFormat'
 
 const TaskAllocations = () => {
   const [tasks, setTasks] = useState([]);
@@ -114,8 +115,10 @@ const TaskAllocations = () => {
         const progressPercentage = progress?.progress_percentage || 0;
         const taskResultMap = testResultsMap[task.course_id] || {};
 
+        // An awareness course has no test: it is complete once its content is.
+        const noTest = Number(task.requires_test) === 0;
         const requiredTests = [];
-        if (task.general_standard_id) {
+        if (!noTest && task.general_standard_id) {
           const result = taskResultMap[task.general_standard_id] || null;
           requiredTests.push({
             standardId: task.general_standard_id,
@@ -141,7 +144,7 @@ const TaskAllocations = () => {
           });
         }
 
-        if (!requiredTests.length && task.standard_id) {
+        if (!noTest && !requiredTests.length && task.standard_id) {
           const result = taskResultMap[task.standard_id] || null;
           requiredTests.push({
             standardId: task.standard_id,
@@ -188,9 +191,11 @@ const TaskAllocations = () => {
         let status = 'Pending';
         const today = new Date();
         const deadline = new Date(task.deadline);
-        const isOverdue = deadline < today && !allRequiredTestsPassed;
+        const isOverdue = deadline < today && !allRequiredTestsPassed && !(noTest && progressPercentage >= 100);
         
-        if (allRequiredTestsPassed) {
+        if (noTest && progressPercentage >= 100) {
+          status = 'Completed';
+        } else if (allRequiredTestsPassed) {
           status = 'Completed';
         } else if (progressPercentage >= 100) {
           status = isOverdue ? 'Overdue' : 'In Progress';
@@ -221,7 +226,8 @@ const TaskAllocations = () => {
           requiredTests,
           pendingTests,
           nextPendingTest,
-          allRequiredTestsPassed
+          allRequiredTestsPassed,
+          noTest
         };
       });
 
@@ -847,7 +853,21 @@ const TaskAllocations = () => {
                 )}
 
                 {/* Course/Test Notice */}
-                {(task.status === 'Completed' || (task.progress >= 100 && !task.allRequiredTestsPassed)) && (
+                {task.noTest && task.status === 'Completed' && (
+                  <div style={{
+                    marginBottom: '1rem',
+                    padding: '1rem',
+                    background: 'linear-gradient(135deg, #10b98115 0%, #05966915 100%)',
+                    borderRadius: '10px',
+                    border: '2px solid #10b981'
+                  }}>
+                    <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#10b981' }}>
+                      ✅ Course Completed
+                    </div>
+                  </div>
+                )}
+
+                {!task.noTest && (task.status === 'Completed' || (task.progress >= 100 && !task.allRequiredTestsPassed)) && (
                   <div style={{
                     marginBottom: '1rem',
                     padding: '1rem',
@@ -974,11 +994,7 @@ const TaskAllocations = () => {
                     color: isOverdue ? '#ef4444' : isDueSoon ? '#f59e0b' : '#1f2937',
                     marginBottom: '0.25rem'
                   }}>
-                    {new Date(task.dueDate).toLocaleDateString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      year: 'numeric'
-                    })}
+                    {formatDate(task.dueDate)}
                   </div>
                   <div style={{
                     fontSize: '0.8rem',
@@ -1200,7 +1216,7 @@ const TaskAllocations = () => {
                   </>
                 )}
 
-                {task.status === 'Completed' && (
+                {task.status === 'Completed' && !task.noTest && (
                   <div style={{
                     display: 'flex',
                     flexDirection: 'column',

@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { showToast } from '../../components/Toast'
 import { localToday } from '../../utils/localDate'
+import { formatDate } from '../../utils/dateFormat'
 
 const initialPdfRecords = [
   {
@@ -210,7 +211,7 @@ function UnprocessedRecords() {
                         </div>
                       </td>
                       <td>
-                        <span style={{ fontSize: '13px', color: '#595966' }}>{record.uploadDate}</span>
+                        <span style={{ fontSize: '13px', color: '#595966' }}>{formatDate(record.uploadDate)}</span>
                       </td>
                       <td>
                         <span style={{ fontSize: '13px', color: '#595966' }}>{record.fileSize}</span>

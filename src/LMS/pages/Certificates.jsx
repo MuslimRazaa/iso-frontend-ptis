@@ -3,6 +3,7 @@ import { FileText } from 'lucide-react'
 import SearchableSelect from '../../components/SearchableSelect'
 import { showToast } from '../../components/Toast'
 import { localToday } from '../../utils/localDate'
+import { formatDate } from '../../utils/dateFormat'
 
 const formSelectStyle = {
   border: '1px solid #dcdce3', borderRadius: 14, padding: '12px 14px',
@@ -209,7 +210,7 @@ function Certificates() {
                         {test.score}% / {test.passingScore}%
                       </span>
                     </td>
-                    <td>{new Date(test.testDate).toLocaleDateString()}</td>
+                    <td>{formatDate(test.testDate)}</td>
                     <td>
                       <span className={`status-pill small ${test.hasCertificate ? 'active' : 'draft'}`}>
                         {test.hasCertificate ? 'Issued' : 'Pending'}
@@ -260,7 +261,7 @@ function Certificates() {
                   <p className="eyebrow">{cert.employeeId}</p>
                   <h4>{cert.employeeName}</h4>
                   <p className="cert-test-name">{cert.testName}</p>
-                  <span className="cert-date">Issued: {new Date(cert.issueDate).toLocaleDateString()}</span>
+                  <span className="cert-date">Issued: {formatDate(cert.issueDate)}</span>
                 </div>
                 <div className="cert-actions">
                   <button className="action-btn edit" onClick={() => handleViewCertificate(cert.certificateUrl)}>

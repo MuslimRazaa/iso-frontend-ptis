@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api';
 import { Icon, C } from '../../UserLMS/lmsUI';
+import { formatDate as formatDateValue } from '../../utils/dateFormat'
 
 // My History — a persistent log of every course the user has completed. Built
 // from test_results (never deleted), so removing/re-assigning a task never
@@ -90,7 +91,7 @@ const CourseHistory = () => {
     }
   };
 
-  const fmtDate = (s) => s ? new Date(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+  const fmtDate = (s) => s ? formatDateValue(s) : '—';
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', flexDirection: 'column', gap: 16 }}>
@@ -134,7 +135,7 @@ const CourseHistory = () => {
               </thead>
               <tbody>
                 {rows.map(r => (
-                  <tr key={r.key} style={{ borderTop: `1px solid ${C.line}`, verticalAlign: 'top' }}>
+                  <tr key={r.key} className="lmsx-row" style={{ borderTop: `1px solid ${C.line}`, verticalAlign: 'top' }}>
                     <td style={{ padding: '16px 20px' }}>
                       <div style={{ fontWeight: 700, color: C.ink }}>{r.title}</div>
                       <div style={{ fontSize: 12, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.6px', marginTop: 2 }}>{r.category}</div>
