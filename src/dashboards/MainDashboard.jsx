@@ -44,8 +44,8 @@ const dashboardTiles = [
     title: "Testing & Certification",
     link: "/testing",
     description: "Conduct standard-based tests and issue certificates.",
-    status: "online",
-    statusLabel: "Live",
+    status: "sync",
+    statusLabel: "Syncing",
     metric: "Loading…",
   },
   {
@@ -53,8 +53,8 @@ const dashboardTiles = [
     title: "Job Log Description",
     link: "/job-log",
     description: "Track inspection activities and field job entries.",
-    status: "online",
-    statusLabel: "Live",
+    status: "sync",
+    statusLabel: "Syncing",
     metric: "Loading…",
   },
   {
@@ -62,8 +62,8 @@ const dashboardTiles = [
     title: "ISO Forms",
     link: "/iso-forms",
     description: "Quick access to QA/QC controlled documentation.",
-    status: "attention",
-    statusLabel: "Review",
+    status: "sync",
+    statusLabel: "Syncing",
     metric: "Loading…",
   },
   {
@@ -375,19 +375,23 @@ function MainDashboard() {
         const progressRows = Array.isArray(progressJson?.data) ? progressJson.data : [];
         const progress = summarise(progressRows);
         const avgCompletion = averageCompletion(progressRows);
-        const lmsMetric = progress.total
-          ? `${avgCompletion}% average completion · ${progress.total} enrolment${progress.total === 1 ? '' : 's'}`
-          : "No enrolments yet";
-
         const courseRequestsJson = courseRequestsRes?.ok ? await courseRequestsRes.json() : [];
         const courseRequestsList = Array.isArray(courseRequestsJson) ? courseRequestsJson : [];
         const pendingCourseRequests = courseRequestsList.filter(r => r.status === 'pending').length;
+        // The badge says the module is live; what needs an admin's attention is in the line below.
+        const requestsNote = pendingCourseRequests > 0
+          ? ` · ${pendingCourseRequests} course request${pendingCourseRequests === 1 ? '' : 's'} pending`
+          : '';
+        const lmsMetric = progress.total
+          ? `${avgCompletion}% average completion · ${progress.total} enrolment${progress.total === 1 ? '' : 's'}${requestsNote}`
+          : `No enrolments yet${requestsNote}`;
 
         const jobLogJson = jobLogRes.ok ? await jobLogRes.json() : null;
         const jobLogTotal = jobLogJson?.stats?.total ?? 0;
-        const pendingJobs = jobLogJson?.stats?.pending ?? 0;
+        // Entries still waiting on a department (the register's own Incomplete status).
+        const incompleteJobs = jobLogJson?.stats?.incomplete ?? 0;
         const jobLogMetric = jobLogTotal
-          ? `${pendingJobs} pending · ${jobLogTotal} total entries`
+          ? `${incompleteJobs} incomplete · ${jobLogTotal} total entries`
           : "No job entries yet";
 
         const testingRows = testingRes.ok ? await testingRes.json() : [];
@@ -407,30 +411,25 @@ function MainDashboard() {
           : "No form templates yet";
 
         setTileMetrics({ lms: lmsMetric, "cv-gen": jobLogMetric, testing: testingMetric, iso: isoMetric });
-        // "Review" when there's something an admin actually needs to act on
-        // (a pending course request, a pending job, a form awaiting
-        // approval) — "Live" once that module's data loaded with nothing
-        // outstanding. Portal and Premier ERP aren't included: neither one
-        // fetches any data here (Portal is static links, Premier ERP is a
-        // separate external app), so there's nothing in this module to
-        // derive a sync/review state from — they stay on their fixed
-        // "Live" label for that reason, not because it was left hardcoded.
+        // The badge answers one question: is this module's data coming through? "Live" when it
+        // is, "Offline" when its request failed. What needs attention (pending requests,
+        // incomplete jobs, forms awaiting approval) is the line below the card's title, not the
+        // badge. Portal is a static preview and Premier ERP is a separate external app, so
+        // neither is derived from data here.
+        const live = { status: 'online', statusLabel: 'Live' };
+        const offline = { status: 'attention', statusLabel: 'Offline' };
         setTileStatus({
-          lms: pendingCourseRequests > 0
-            ? { status: 'attention', statusLabel: `${pendingCourseRequests} Request${pendingCourseRequests === 1 ? '' : 's'}` }
-            : { status: 'online', statusLabel: 'Live' },
-          testing: { status: 'online', statusLabel: 'Live' },
-          'cv-gen': pendingJobs > 0
-            ? { status: 'attention', statusLabel: `${pendingJobs} Pending` }
-            : { status: 'online', statusLabel: 'Live' },
-          iso: isoPending > 0
-            ? { status: 'attention', statusLabel: `${isoPending} Pending` }
-            : { status: 'online', statusLabel: 'Live' },
+          lms: progressRes.ok ? live : offline,
+          testing: testingRes.ok && standardsRes.ok ? live : offline,
+          'cv-gen': jobLogRes.ok ? live : offline,
+          iso: isoTemplatesRes.ok ? live : offline,
         });
       } catch (error) {
         console.error('Error fetching tile metrics:', error);
         // Nothing answered at all — most likely the backend itself is down.
         setModuleHealth({ lms: false, testing: false, "cv-gen": false, iso: false });
+        const offline = { status: 'attention', statusLabel: 'Offline' };
+        setTileStatus({ lms: offline, testing: offline, 'cv-gen': offline, iso: offline });
       }
     };
 

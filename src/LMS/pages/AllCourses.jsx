@@ -39,6 +39,8 @@ function AllCourses() {
     creditHours: 0,
     duration: 0,
     prerequisites: '',
+    syllabus: '',
+    learningOutcomes: '',
     thumbnail: null,
     thumbnailFile: null,
     pdfPath: null,
@@ -108,6 +110,8 @@ function AllCourses() {
           thumbnail: course.course_thumbnail ? `${API_BASE_URL}${course.course_thumbnail}` : dataAnalystThumb,
           pdfPath: course.pdf_path || null,
           prerequisites: course.prerequisites || 'None',
+          syllabus: course.syllabus || '',
+          learningOutcomes: course.learning_outcomes || '',
           videos: course.course_videos || [],
           // Not shown in the table, but the update needs them: the standard is
           // read-only while editing and the API rejects a course without one.
@@ -152,6 +156,8 @@ function AllCourses() {
       creditHours: course.creditHours,
       duration: course.duration,
       prerequisites: course.prerequisites,
+      syllabus: course.syllabus || '',
+      learningOutcomes: course.learningOutcomes || '',
       thumbnail: course.thumbnail,
       thumbnailFile: null,
       pdfPath: course.pdfPath || null,
@@ -195,6 +201,8 @@ function AllCourses() {
       creditHours: 0,
       duration: 0,
       prerequisites: '',
+      syllabus: '',
+      learningOutcomes: '',
       thumbnail: null,
       thumbnailFile: null,
       pdfPath: null,
@@ -238,6 +246,8 @@ function AllCourses() {
     data.append('credit_hours', editForm.creditHours || 0)
     data.append('duration_weeks', editForm.duration || 0)
     data.append('prerequisites', editForm.prerequisites || '')
+    data.append('syllabus', editForm.syllabus || '')
+    data.append('learning_outcomes', editForm.learningOutcomes || '')
     data.append('requires_test', editForm.requiresTest ? '1' : '0')
     if (editForm.requiresTest) {
       const pickedIds = editForm.standardMode === 'multiple'
@@ -621,6 +631,27 @@ function AllCourses() {
                   value={editForm.prerequisites}
                   onChange={(e) => setEditForm({ ...editForm, prerequisites: e.target.value })}
                 />
+              </label>
+
+              <label>
+                <span>What You'll Learn (Learning Outcomes)</span>
+                <textarea
+                  rows="4"
+                  placeholder="One outcome per line"
+                  value={editForm.learningOutcomes}
+                  onChange={(e) => setEditForm({ ...editForm, learningOutcomes: e.target.value })}
+                />
+              </label>
+
+              <label>
+                <span>Course Syllabus</span>
+                <textarea
+                  rows="5"
+                  placeholder="One topic per line"
+                  value={editForm.syllabus}
+                  onChange={(e) => setEditForm({ ...editForm, syllabus: e.target.value })}
+                />
+                <small style={{ color: '#7a7a8c', fontSize: 12 }}>One topic per line — shown on the course Syllabus tab.</small>
               </label>
 
               <label>

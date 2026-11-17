@@ -160,8 +160,6 @@ const ManageUserAccess = () => {
               const assignedModules = [];
               if (employee.lms_access === 1) assignedModules.push('LMS');
               if (employee.portal_access === 1) assignedModules.push('Portal');
-              if (employee.cvs_access === 1) assignedModules.push('CVs');
-              if (employee.reports_access === 1) assignedModules.push('Reports');
               if (employee.testing_admin_access === 1) assignedModules.push('Testing: Admin');
               else if (employee.testing_access === 1) assignedModules.push('Testing');
               if (employee.iso_forms_admin_access === 1) assignedModules.push('ISO Forms: Admin');
@@ -269,42 +267,6 @@ const ManageUserAccess = () => {
                       type="checkbox" 
                       checked={permissions.portal}
                       onChange={() => togglePermission('portal')}
-                    />
-                    <span className="toggle-slider"></span>
-                  </label>
-                </div>
-
-                <div className="permission-item">
-                  <div className="permission-info">
-                    <div className="permission-icon cvs">📄</div>
-                    <div>
-                      <strong>Job Log Description & Library</strong>
-                      <p>Access to generate and manage CVs for bids and clients</p>
-                    </div>
-                  </div>
-                  <label className="toggle-switch">
-                    <input 
-                      type="checkbox" 
-                      checked={permissions.cvs}
-                      onChange={() => togglePermission('cvs')}
-                    />
-                    <span className="toggle-slider"></span>
-                  </label>
-                </div>
-
-                <div className="permission-item">
-                  <div className="permission-info">
-                    <div className="permission-icon reports">📊</div>
-                    <div>
-                      <strong>Reports & Analytics</strong>
-                      <p>Access to generate and view detailed reports</p>
-                    </div>
-                  </div>
-                  <label className="toggle-switch">
-                    <input
-                      type="checkbox"
-                      checked={permissions.reports}
-                      onChange={() => togglePermission('reports')}
                     />
                     <span className="toggle-slider"></span>
                   </label>
