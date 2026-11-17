@@ -156,8 +156,8 @@ const UserDashboard = () => {
             title: "LMS Portal",
             link: "/user/all-courses",
             description: "Full access to Learning Management System features.",
-            status: "sync",
-            statusLabel: "Active",
+            status: "online",
+            statusLabel: "Live",
             metric: lmsMetric,
             permission: userPermissions.lms,
             icon: "lms"
@@ -167,9 +167,11 @@ const UserDashboard = () => {
             title: "PTIS Portal",
             link: "/portal",
             description: "Access inspection records and client information.",
-            status: "online",
-            statusLabel: "Live",
-            metric: "View records & reports",
+            // Every Portal page is still static mock data (none makes a network call), the same
+            // as on the admin dashboard — so it is a preview, not live.
+            status: "sync",
+            statusLabel: "Preview",
+            metric: "Design preview — not yet built",
             permission: userPermissions.portal,
             icon: "portal"
         },
@@ -191,8 +193,10 @@ const UserDashboard = () => {
             title: "ISO Forms",
             link: "/user/iso-forms",
             description: "Quick access to QA/QC controlled documentation.",
-            status: isoPendingCount > 0 ? "attention" : "online",
-            statusLabel: isoPendingCount > 0 ? "Review" : "Live",
+            // The module is live; what is waiting on this person is the red count on the card
+            // and the line below.
+            status: "online",
+            statusLabel: "Live",
             metric: isoPendingCount > 0
                 ? `${isoPendingCount} form${isoPendingCount === 1 ? '' : 's'} awaiting sign-off`
                 : "No forms awaiting sign-off",
@@ -214,28 +218,6 @@ const UserDashboard = () => {
             // from the LMS once a course is done. Only Testing (Admin) gets the module card.
             permission: Boolean(userPermissions.testing_admin),
             icon: "certificates"
-        },
-        {
-            id: "bid-cv-library",
-            title: "Bid CV Library",
-            link: "/user/bid-cv-library",
-            description: "Recently curated CVs for tender submissions.",
-            status: "online",
-            statusLabel: "Live",
-            metric: "6 tenders in play",
-            permission: userPermissions.cvs, // Using cvs permission for bid library access
-            icon: "bid-cv"
-        },
-        {
-            id: "reports",
-            title: "Power BI Dashboards",
-            link: "/user/reports",
-            description: "Track operations KPIs and live financial snapshots.",
-            status: "sync",
-            statusLabel: "Syncing",
-            metric: "Analytics dashboard",
-            permission: userPermissions.reports,
-            icon: "power-bi"
         },
         {
             id: "premier-erp",
@@ -290,22 +272,6 @@ const UserDashboard = () => {
                         <path d="M14 20h20M14 26h20M14 32h12" />
                         <circle cx="18" cy="20" r="1.5" />
                         <circle cx="18" cy="26" r="1.5" />
-                    </svg>
-                );
-            case "bid-cv":
-                return (
-                    <svg viewBox="0 0 48 48" role="img" aria-hidden="true">
-                        <rect x="10" y="8" width="28" height="32" rx="2" />
-                        <path d="M16 14h16M16 20h16M16 26h10" />
-                        <rect x="16" y="30" width="6" height="6" rx="1" />
-                    </svg>
-                );
-            case "power-bi":
-                return (
-                    <svg viewBox="0 0 48 48" role="img" aria-hidden="true">
-                        <rect x="8" y="24" width="8" height="16" />
-                        <rect x="20" y="16" width="8" height="24" />
-                        <rect x="32" y="8" width="8" height="32" />
                     </svg>
                 );
             case "premier-erp":

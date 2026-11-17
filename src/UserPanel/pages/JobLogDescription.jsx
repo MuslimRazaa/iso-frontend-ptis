@@ -119,10 +119,9 @@ const toDB = data => ({
   equip_cl: data.equipCL || null,
   v_log: data.vLog || null,
   tbt: data.tbt || null,
-  // Status follows the job's dates and paperwork (the server works it out). Only a
-  // status someone chose by hand in the Operations section is saved; empty = automatic.
-  status: STATUS_CHOICES.includes(data.status) ? data.status : null,
-  completion_date: data.completionDate || null,
+  // Status follows the job's dates and paperwork (the server works it out); the one thing
+  // saved by hand is On Hold. The completion date is worked out by the server too.
+  status: data.status === 'On Hold' ? 'On Hold' : null,
   rept: data.rept || null,
   exp: data.exp || null,
   accounts: data.accounts || null,
@@ -294,13 +293,12 @@ const ROW_TONES = {
 }
 // The status is worked out by itself from the dates and what each department has filled;
 // someone in Operations can still pick a different one, which then stays.
-const STATUS_CHOICES = ['In Progress', 'Incomplete', 'Completed', 'On Hold']
-const AUTO = '__auto'
 // The same rule the server uses (utils/jlrStatus.js), so the form can show the
 // status the entry will get while it is still being filled in.
-const REQUIRED_KEYS = ['entryDate', 'client', 'workOrder', 'inspectorName', 'inspectorTeam', 'reference', 'location', 'natureOfJob', 'startDate', 'endDate', 'vehicleUsed', 'days', 'calculatedDays', 'manPower', 'manHours', 'drivenKm', 'jmps', 'completionDate', 'source', 'tra', 'equipCL', 'vLog', 'tbt', 'rept', 'accounts', 'it', 'stockRequisition', 'goodsIssueNote', 'consumption', 'gatePass']
+const REQUIRED_KEYS = ['entryDate', 'client', 'workOrder', 'inspectorName', 'inspectorTeam', 'reference', 'location', 'natureOfJob', 'startDate', 'endDate', 'vehicleUsed', 'days', 'calculatedDays', 'manPower', 'manHours', 'drivenKm', 'jmps', 'source', 'tra', 'equipCL', 'vLog', 'tbt', 'rept', 'submissionDate', 'exp', 'accounts', 'it', 'stockRequisition', 'goodsIssueNote', 'consumption', 'gatePass']
 const todayYmd = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 const autoStatusOf = (e) => {
+  if (String(e.status || '').trim().toLowerCase() === 'on hold') return 'On Hold'
   const end = String(e.endDate || '').slice(0, 10)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(end) || end >= todayYmd()) return 'In Progress'
   // The long dash "—" is an empty cell, a typed "-" is an answer (see utils/jlrStatus.js).
@@ -313,8 +311,8 @@ const REQUIRED_LABELS = {
   entryDate: 'Entry Date', client: 'Client', workOrder: 'Work Order', inspectorName: 'Inspector Name', inspectorTeam: 'Inspector Team',
   reference: 'Reference', location: 'Location', natureOfJob: 'Nature of Job', startDate: 'Job Start', endDate: 'Job End',
   vehicleUsed: 'Vehicle Plate No.', days: 'Days', calculatedDays: 'Calculated Days', manPower: 'Man Power', manHours: 'Man Hrs',
-  drivenKm: 'Driven Km', jmps: 'JMPs', completionDate: 'Completion Date', source: 'Region',
-  tra: 'TRA', equipCL: 'Equip C/L', vLog: 'V. Log', tbt: 'TBT', rept: 'REPT', accounts: 'Accounts', it: 'IT',
+  drivenKm: 'Driven Km', jmps: 'JMPs', source: 'Region',
+  tra: 'TRA', equipCL: 'Equip C/L', vLog: 'V. Log', tbt: 'TBT', rept: 'REPT', submissionDate: 'Submission Date', exp: 'EXP (Expenses)', accounts: 'Accounts', it: 'IT',
   stockRequisition: 'Stock Requisition', goodsIssueNote: 'Goods Issue Note', consumption: 'Consumption', gatePass: 'Gate Pass',
 }
 const DEPT_ORDER = [['operations', 'Operations'], ['qhse', 'QHSE'], ['inventory', 'Inventory'], ['accounts', 'Accounts'], ['it', 'IT']]
@@ -484,7 +482,7 @@ function MissingChip({ dept, fields }) {
       {pos && (
         <span style={{
           position: 'fixed', left: pos.x, top: pos.y, transform: pos.below ? 'translateX(-50%)' : 'translate(-50%,-100%)',
-          zIndex: 1000, width: pos.w, textAlign: 'left', whiteSpace: 'normal', pointerEvents: 'none',
+          zIndex: 5000, width: pos.w, textAlign: 'left', whiteSpace: 'normal', pointerEvents: 'none',
           background: '#fff', border: '1px solid #f6c9c9', borderRadius: 12, overflow: 'hidden',
           boxShadow: '0 12px 32px rgba(215,38,61,0.18), 0 2px 8px rgba(20,20,28,0.10)',
           fontSize: 12.5, lineHeight: 1.4, fontWeight: 500,
@@ -760,6 +758,8 @@ function JobLogDescription() {
     if (jlrPerms.full) return true            // full access overrides
     return !!jlrPerms[dept]
   }
+  // Putting a job on hold is Operations' call alone — other departments see the switch, not use it.
+  const canHold = !!(jlrPerms && jlrPerms.operations)
   const canAccessAnyJlr = jlrPerms && (
     jlrPerms.full || jlrPerms.operations || jlrPerms.qhse ||
     jlrPerms.inventory || jlrPerms.accounts || jlrPerms.it
@@ -1171,7 +1171,8 @@ function JobLogDescription() {
 
   const openAddModal = () => {
     setModalMode('add'); setEditingId(null)
-    setModalState({ ...emptyEntry, sNo: nextSerial }); setIsModalOpen(true)
+    // The entry date is the day the entry is made.
+    setModalState({ ...emptyEntry, sNo: nextSerial, entryDate: todayYmd() }); setIsModalOpen(true)
     setActiveTab('details'); setInspectorChangesList([]); resetInspectorChangeForm()
   }
   const openEditModal = entry => {
@@ -2152,16 +2153,59 @@ function JobLogDescription() {
             {activeTab === 'details' && (
             <form className="modal-form" onSubmit={handleSubmit}>
 
+              {(() => {
+                // The status is worked out from the entry as it is filled in; it is not typed in.
+                const liveStatus = autoStatusOf(modalState)
+                const onHold = modalState.status === 'On Hold'
+                const gaps = liveStatus === 'Incomplete' ? missingByDept(modalState) : []
+                return (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14,
+                    padding: '10px 14px', background: '#fafafc', border: '1px solid #ececf1', borderRadius: 12,
+                  }}>
+                    <span style={{ fontSize: 11.5, fontWeight: 700, color: '#7a7a8c', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Status</span>
+                    <StatusBadge value={liveStatus} />
+                    {liveStatus === 'Completed' && (
+                      <span style={{ fontSize: 13, color: '#595966', fontWeight: 600 }}>
+                        {modalState.completionDate ? `Completed on ${formatDate(modalState.completionDate)}` : 'Completion date is set when you save'}
+                      </span>
+                    )}
+                    {gaps.length > 0 && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap', gap: 4, fontSize: 11.5, color: '#c62828', fontWeight: 600 }}>
+                        Missing:
+                        {gaps.map(g => <MissingChip key={g.dept} dept={g.dept} fields={g.fields} />)}
+                      </span>
+                    )}
+                    <label
+                      title={canHold ? 'Pause this job: it shows On Hold until you switch this off' : 'Only Operations can put a job on hold'}
+                      style={{
+                        marginLeft: 'auto', display: 'inline-flex', flexDirection: 'row', alignItems: 'center', gap: 8,
+                        cursor: canHold ? 'pointer' : 'not-allowed', opacity: canHold ? 1 : 0.6,
+                      }}
+                    >
+                      <input
+                        type="checkbox" checked={onHold} disabled={!canHold}
+                        onChange={(e) => handleModalChange('status', e.target.checked ? 'On Hold' : '')}
+                        style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }}
+                      />
+                      <span style={{ position: 'relative', width: 38, height: 22, borderRadius: 999, background: onHold ? '#d7263d' : '#d0d0d8', transition: 'background 0.18s', flexShrink: 0 }}>
+                        <span style={{ position: 'absolute', top: 2, left: onHold ? 18 : 2, width: 18, height: 18, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', transition: 'left 0.18s' }} />
+                      </span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: onHold ? '#d7263d' : '#595966' }}>Put on hold</span>
+                    </label>
+                  </div>
+                )
+              })()}
+
               <ModalSection Icon={BsBriefcase} title="Operations" hint="Job & field details" />
               <div className="form-row">
                 <label><span>S#</span>
                   <input type="text" value={modalState.sNo} readOnly
                     style={{ background: '#f4f4f7', color: '#aaa', cursor: 'not-allowed' }} /></label>
-                <label><span>Entry Date *</span>
-                  <StyledDatePicker value={modalState.entryDate}
-                    disabled={!canEdit('operations')}
-                    style={modalSelectStyle}
-                    onChange={v => handleModalChange('entryDate', v)} /></label>
+                <label><span>Entry Date (auto)</span>
+                  <input type="text" readOnly value={formatDate(modalState.entryDate)}
+                    title="Set automatically to the day the entry was made"
+                    style={{ background: '#f4f4f7', color: '#aaa', cursor: 'not-allowed' }} /></label>
                 <div className="field-col"><span>Client *</span>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -2292,13 +2336,13 @@ function JobLogDescription() {
                   <input type="text" value={modalState.vehicleUsed} placeholder="Hilux-12"
                     disabled={!canEdit('operations')}
                     onChange={e => handleModalChange('vehicleUsed', e.target.value)} /></label>
-              </div>
-
-              <div className="form-row">
                 <label><span>Days (auto)</span>
                   <input type="number" readOnly
                     value={calculateDays(modalState.startDate, modalState.endDate)}
                     style={{ background: '#f4f4f7', color: '#aaa', cursor: 'not-allowed' }} /></label>
+              </div>
+
+              <div className="form-row">
                 <label><span>Calculated Days</span>
                   <input type="number" min="0" value={modalState.calculatedDays}
                     disabled={!canEdit('operations')}
@@ -2329,29 +2373,6 @@ function JobLogDescription() {
                     style={modalSelectStyle}
                     onChange={v => handleModalChange('jmps', v)}
                   /></label>
-              </div>
-
-              <div className="form-row">
-                <label><span>Status</span>
-                  <StyledSelect
-                    // Filled in by itself from the job's dates and the departments'
-                    // entries, and follows them as they are filled; picking another
-                    // status here is kept instead, until it is set back to Automatic.
-                    value={modalState.status || AUTO}
-                    disabled={!canEdit('operations')}
-                    options={[]}
-                    extraOptions={[
-                      { value: AUTO, label: `Automatic — ${autoStatusOf(modalState)}${autoStatusOf(modalState) === 'Incomplete' && missingByDept(modalState).length ? ` (missing: ${missingByDept(modalState).map(g => g.dept).join(', ')})` : ''}` },
-                      ...STATUS_CHOICES.map(s => ({ value: s, label: s })),
-                    ]}
-                    style={modalSelectStyle}
-                    onChange={v => handleModalChange('status', v === AUTO ? '' : v)}
-                  /></label>
-                <label><span>Completion Date</span>
-                  <StyledDatePicker value={modalState.completionDate}
-                    disabled={!canEdit('operations')}
-                    style={modalSelectStyle}
-                    onChange={v => handleModalChange('completionDate', v)} /></label>
                 <label><span>Region *</span>
                   <StyledSelect
                     value={modalState.source}

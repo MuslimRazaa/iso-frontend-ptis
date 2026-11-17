@@ -301,10 +301,6 @@ function App() {
                 <div style={{ padding: '40px', textAlign: 'center' }}>
                   <h2>PTIS Portal Access</h2><p>View inspection records</p>
                 </div>} />
-              <Route path="reports" element={
-                <div style={{ padding: '40px', textAlign: 'center' }}>
-                  <h2>Reports</h2><p>Generate and view reports</p>
-                </div>} />
               <Route path="help" element={
                 <div style={{ padding: '40px', textAlign: 'center' }}>
                   <h2>Help Center</h2><p>Get support and documentation</p>
