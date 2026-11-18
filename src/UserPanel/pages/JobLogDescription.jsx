@@ -73,6 +73,8 @@ const fromDB = row => ({
   tbt: row.tbt || '',
   status: canonStatus(row.status),
   statusManual: row.status_manual || '',
+  // 1 = made before the status was worked out by itself (keeps its own rules); 2 = made since.
+  statusRules: row.legacy_rules ? 1 : 2,
   completionDate: row.completion_date ? row.completion_date.slice(0, 10) : '',
   rept: row.rept || '',
   exp: row.exp || '',
@@ -121,7 +123,9 @@ const toDB = data => ({
   tbt: data.tbt || null,
   // Status follows the job's dates and paperwork (the server works it out); the one thing
   // saved by hand is On Hold. The completion date is worked out by the server too.
-  status: data.status === 'On Hold' ? 'On Hold' : null,
+  // An older entry sends back the status it was given (the server keeps it).
+  status: data.status === 'On Hold' ? 'On Hold'
+    : (Number(data.statusRules) === 1 && LEGACY_STATUSES.includes(data.status) ? data.status : null),
   rept: data.rept || null,
   exp: data.exp || null,
   accounts: data.accounts || null,
@@ -275,7 +279,10 @@ const emptyEntry = {
   status: '', completionDate: '', rept: '', exp: '', accounts: '', it: '',
   submissionDate: '', source: '', remark: '', remarks: '',
   remarkOperations: '', remarkQhse: '', remarkInventory: '', remarkAccounts: '', remarkIt: '',
-  stockRequisition: '', goodsIssueNote: '', consumption: '', gatePass: ''
+  stockRequisition: '', goodsIssueNote: '', consumption: '', gatePass: '',
+  // Which rules the entry follows (see isLegacy) and the status it had when opened, so the On Hold
+  // switch can give an older entry its own status back.
+  statusRules: 2, origStatus: ''
 }
 
 // Region (stored in the `source` column) — fixed dropdown choices.
@@ -296,13 +303,20 @@ const ROW_TONES = {
 // The same rule the server uses (utils/jlrStatus.js), so the form can show the
 // status the entry will get while it is still being filled in.
 const REQUIRED_KEYS = ['entryDate', 'client', 'workOrder', 'inspectorName', 'inspectorTeam', 'reference', 'location', 'natureOfJob', 'startDate', 'endDate', 'vehicleUsed', 'days', 'calculatedDays', 'manPower', 'manHours', 'drivenKm', 'jmps', 'source', 'tra', 'equipCL', 'vLog', 'tbt', 'rept', 'submissionDate', 'exp', 'accounts', 'it', 'stockRequisition', 'goodsIssueNote', 'consumption', 'gatePass']
+// Entries made before the status was worked out by itself (statusRules 1) keep the rules they were
+// made under: the departments' own 11 fields, and a status someone chose by hand stands.
+const REQUIRED_KEYS_V1 = ['tra', 'equipCL', 'vLog', 'tbt', 'rept', 'accounts', 'it', 'stockRequisition', 'goodsIssueNote', 'consumption', 'gatePass']
+const LEGACY_STATUSES = ['In Progress', 'Incomplete', 'Completed']
+const isLegacy = (e) => Number(e && e.statusRules) === 1
+const keysFor = (e) => (isLegacy(e) ? REQUIRED_KEYS_V1 : REQUIRED_KEYS)
 const todayYmd = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 const autoStatusOf = (e) => {
   if (String(e.status || '').trim().toLowerCase() === 'on hold') return 'On Hold'
+  if (isLegacy(e) && LEGACY_STATUSES.includes(e.status)) return e.status
   const end = String(e.endDate || '').slice(0, 10)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(end) || end >= todayYmd()) return 'In Progress'
   // The long dash "—" is an empty cell, a typed "-" is an answer (see utils/jlrStatus.js).
-  return REQUIRED_KEYS.some(k => /^[–—]*$/.test(String(e[k] ?? '').trim())) ? 'Incomplete' : 'Completed'
+  return keysFor(e).some(k => /^[–—]*$/.test(String(e[k] ?? '').trim())) ? 'Incomplete' : 'Completed'
 }
 
 // What an Incomplete entry is still missing, by the department that has to fill it in:
@@ -323,7 +337,7 @@ const OPERATIONS_REQUIRED = [
   ['location', 'Location'], ['natureOfJob', 'Nature of Job'], ['startDate', 'Job Start'], ['source', 'Region'],
 ]
 const missingByDept = (e) => {
-  const missing = REQUIRED_KEYS.filter(k => /^[–—]*$/.test(String(e[k] ?? '').trim()))
+  const missing = keysFor(e).filter(k => /^[–—]*$/.test(String(e[k] ?? '').trim()))
   return DEPT_ORDER
     .map(([key, dept]) => ({ dept, fields: missing.filter(k => FIELD_DEPT[k] === key).map(k => REQUIRED_LABELS[k]) }))
     .filter(d => d.fields.length)
@@ -1188,6 +1202,7 @@ function JobLogDescription() {
       manPower: f('manPower'), manHours: f('manHours'), drivenKm: f('drivenKm'),
       jmps: f('jmps'), tra: f('tra'), equipCL: f('equipCL'), vLog: f('vLog'), tbt: f('tbt'),
       status: f('statusManual'), completionDate: f('completionDate'), rept: f('rept'),
+      statusRules: entry.statusRules != null ? entry.statusRules : 2, origStatus: f('statusManual'),
       exp: f('exp'), accounts: f('accounts'), it: f('it'),
       submissionDate: f('submissionDate'), source: f('source'), remark: f('remark'), remarks: f('remarks'),
       remarkOperations: f('remarkOperations'), remarkQhse: f('remarkQhse'),
@@ -2158,6 +2173,7 @@ function JobLogDescription() {
                 const liveStatus = autoStatusOf(modalState)
                 const onHold = modalState.status === 'On Hold'
                 const gaps = liveStatus === 'Incomplete' ? missingByDept(modalState) : []
+                const legacy = isLegacy(modalState)
                 return (
                   <div style={{
                     display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14,
@@ -2165,9 +2181,15 @@ function JobLogDescription() {
                   }}>
                     <span style={{ fontSize: 11.5, fontWeight: 700, color: '#7a7a8c', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Status</span>
                     <StatusBadge value={liveStatus} />
-                    {liveStatus === 'Completed' && (
+                    {liveStatus === 'Completed' && (modalState.completionDate || !legacy) && (
                       <span style={{ fontSize: 13, color: '#595966', fontWeight: 600 }}>
                         {modalState.completionDate ? `Completed on ${formatDate(modalState.completionDate)}` : 'Completion date is set when you save'}
+                      </span>
+                    )}
+                    {legacy && (
+                      <span title="This entry was made before the status was worked out by itself, so it keeps the status and completion date it already had."
+                        style={{ fontSize: 11.5, color: '#7a7a8c', fontWeight: 600 }}>
+                        Older entry · status kept as it was
                       </span>
                     )}
                     {gaps.length > 0 && (
@@ -2185,7 +2207,8 @@ function JobLogDescription() {
                     >
                       <input
                         type="checkbox" checked={onHold} disabled={!canHold}
-                        onChange={(e) => handleModalChange('status', e.target.checked ? 'On Hold' : '')}
+                        // Off again: an older entry gets back the status it had; a new one is automatic.
+                        onChange={(e) => handleModalChange('status', e.target.checked ? 'On Hold' : (modalState.origStatus && modalState.origStatus !== 'On Hold' ? modalState.origStatus : ''))}
                         style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }}
                       />
                       <span style={{ position: 'relative', width: 38, height: 22, borderRadius: 999, background: onHold ? '#d7263d' : '#d0d0d8', transition: 'background 0.18s', flexShrink: 0 }}>
