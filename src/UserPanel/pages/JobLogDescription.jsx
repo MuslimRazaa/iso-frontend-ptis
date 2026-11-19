@@ -2305,7 +2305,8 @@ function JobLogDescription() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <MultiSelect
                         value={modalState.inspectorTeam}
-                        options={teamOptions}
+                        options={['NA', ...teamOptions.filter(o => (typeof o === 'string' ? o : o.name) !== 'NA')]}
+                        exclusive="NA"
                         placeholder="Select team members…"
                         searchPlaceholder="Search inspector…"
                         disabled={!canEdit('operations')}

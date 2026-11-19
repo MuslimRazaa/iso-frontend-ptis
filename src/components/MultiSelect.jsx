@@ -14,7 +14,9 @@ import { createPortal } from 'react-dom';
 // filter card, a scrollable panel, …), which cut the last option off inside
 // Testing & Certification's filter card. Same technique StyledDatePicker
 // already uses for exactly this reason.
-function MultiSelect({ value, onChange, options, placeholder = 'Select…', searchPlaceholder = 'Search…', disabled, onAdd }) {
+// `exclusive` (optional) names one option that stands alone — e.g. "NA" for "no team": picking it clears
+// every other pick, and picking anyone else drops it again.
+function MultiSelect({ value, onChange, options, placeholder = 'Select…', searchPlaceholder = 'Search…', disabled, onAdd, exclusive }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [rect, setRect] = useState(null)
@@ -101,15 +103,18 @@ function MultiSelect({ value, onChange, options, placeholder = 'Select…', sear
   }, [open, computeRect])
 
   const commit = (arr) => onChange(arr.join(', '))
-  const toggle = (name) =>
-    commit(selected.includes(name) ? selected.filter(s => s !== name) : [...selected, name])
+  const toggle = (name) => {
+    if (selected.includes(name)) return commit(selected.filter(s => s !== name))
+    if (exclusive && name === exclusive) return commit([name])
+    commit([...selected.filter(s => s !== exclusive), name])
+  }
   const remove = (name) => commit(selected.filter(s => s !== name))
 
   const q = query.trim()
   const canAdd = !!onAdd && q.length > 0 && !normalized.some(o => o.name.toLowerCase() === q.toLowerCase())
   const doAdd = async () => {
     const added = (onAdd && await onAdd(q)) || q
-    if (added && !selected.includes(added)) commit([...selected, added])
+    if (added && !selected.includes(added)) commit([...selected.filter(s => s !== exclusive), added])
     setQuery('')
   }
 
