@@ -90,6 +90,71 @@ const MyCourses = () => {
     fetchData();
   }, []);
 
+  // Keep the cards' progress in step with what the course page has saved. The course page saves its
+  // time on the way out (and every 30 s), which can land just after this page has loaded — so the
+  // progress is read again shortly after arriving, whenever the tab regains focus, and every 20 s.
+  // Only the progress numbers are refreshed; the rest of the page is left alone.
+  // Live progress the course page publishes while someone is reading (see CourseDetailUser): it is
+  // newer than the last save, so it shows at once — here on arrival, and from another open tab as it
+  // happens. It only counts for the current assignment (published after it was made) and never replaces
+  // the server's own number once that is higher.
+  const livePct = (course) => {
+    try {
+      const live = JSON.parse(localStorage.getItem(`courseLive:${userEmail}:${course.courseId}`) || 'null');
+      if (!live || Number(live.courseId) !== Number(course.courseId)) return null;
+      const since = course.created_at ? new Date(course.created_at).getTime() : 0;
+      return live.at >= since ? Math.min(Number(live.pct) || 0, 99) : null;
+    } catch { return null; }
+  };
+  const withLive = (course) => {
+    const live = livePct(course);
+    return live != null && live > (course.localProgress || 0) ? { ...course, localProgress: live } : course;
+  };
+
+  useEffect(() => {
+    if (!userEmail) return undefined;
+    const apply = (msg) => {
+      if (!msg || msg.email !== userEmail) return;
+      setAssignedCourses(prev => prev.map(c => (
+        Number(c.courseId) === Number(msg.courseId) && Math.min(Number(msg.pct) || 0, 99) > (c.localProgress || 0)
+          ? { ...c, localProgress: Math.min(Number(msg.pct) || 0, 99), isStarted: true }
+          : c
+      )));
+    };
+    let channel = null;
+    try { channel = new BroadcastChannel('course-progress'); channel.onmessage = (e) => apply(e.data); } catch { /* not supported */ }
+    const onStorage = (e) => { if (e.key && e.key.startsWith(`courseLive:${userEmail}:`)) { try { apply(JSON.parse(e.newValue)); } catch { /* ignore */ } } };
+    window.addEventListener('storage', onStorage);
+    return () => { if (channel) channel.close(); window.removeEventListener('storage', onStorage); };
+  }, [userEmail]);
+
+  useEffect(() => {
+    if (!userEmail) return undefined;
+    let stopped = false;
+    const refreshProgress = async () => {
+      try {
+        const res = await fetch(`${API_ENDPOINTS.COURSE_PROGRESS}/user/${encodeURIComponent(userEmail)}`);
+        if (!res.ok || stopped) return;
+        const list = (await res.json()).data || [];
+        setAssignedCourses(prev => prev.map(c => {
+          const p = list.find(x => x.course_id === c.courseId);
+          if (!p) return c;
+          return withLive({
+            ...c,
+            videoSeconds: p.video_watch_time || 0,
+            pptSeconds: p.ppt_view_time || 0,
+            isStarted: true,
+            localProgress: p.progress_percentage || c.progress || 0,
+          });
+        }));
+      } catch { /* the next refresh will try again */ }
+    };
+    const first = setTimeout(refreshProgress, 2500);
+    const every = setInterval(refreshProgress, 20000);
+    window.addEventListener('focus', refreshProgress);
+    return () => { stopped = true; clearTimeout(first); clearInterval(every); window.removeEventListener('focus', refreshProgress); };
+  }, [userEmail]);
+
   const loadPendingRequests = () => {
     const reqs = JSON.parse(localStorage.getItem(`courseRequests_${userEmail}`) || '[]');
     setPendingRequests(new Set(reqs.map(r => r.courseId)));
@@ -291,15 +356,8 @@ const MyCourses = () => {
           videoSeconds: apiProgress?.video_watch_time || 0,
           pptSeconds: apiProgress?.ppt_view_time || 0,
           isStarted: !!apiProgress,
-          localProgress: (() => {
-            const whole = apiProgress?.progress_percentage || task.progress || 0;
-            // To one decimal from the time actually spent against the credit hours, so the bar moves
-            // along with the reading instead of sitting at 0% for minutes. 100 only when the server says so.
-            const creditH = Number(matched?.credit_hours ?? apiProgress?.credit_hours) || 0;
-            const secs = Number(apiProgress?.total_time_spent);
-            if (whole >= 100 || !apiProgress || creditH <= 0 || !Number.isFinite(secs)) return whole;
-            return Math.min(Math.round((secs / (creditH * 3600)) * 1000) / 10, 99.9);
-          })(),
+          // Exactly the progress the course page saved — the card does no calculation of its own.
+          localProgress: apiProgress?.progress_percentage || task.progress || 0,
           noTest: testStatus.noTest === true, // awareness course: no test, done when the content is
           allDone: testStatus.allDone,       // every test taken → belongs in History
           // A test has a result OR one is mid-attempt (marker) → content locked.
@@ -307,7 +365,7 @@ const MyCourses = () => {
         };
       }));
       // Finished courses leave My Courses (they live in History now).
-      const active = enriched.filter(c => !c.allDone);
+      const active = enriched.filter(c => !c.allDone).map(withLive);
       setAssignedCourses(active);
 
       // Browse-more = every course the user can request that they aren't ACTIVELY
