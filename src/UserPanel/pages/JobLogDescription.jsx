@@ -329,7 +329,7 @@ const REQUIRED_LABELS = {
   tra: 'TRA', equipCL: 'Equip C/L', vLog: 'V. Log', tbt: 'TBT', rept: 'REPT', submissionDate: 'Submission Date', exp: 'EXP (Expenses)', accounts: 'Accounts', it: 'IT',
   stockRequisition: 'Stock Requisition', goodsIssueNote: 'Goods Issue Note', consumption: 'Consumption', gatePass: 'Gate Pass',
 }
-const DEPT_ORDER = [['operations', 'Operations'], ['qhse', 'QHSE'], ['inventory', 'Inventory'], ['accounts', 'Accounts'], ['it', 'IT']]
+const DEPT_ORDER = [['operations', 'Operations'], ['qhse', 'QHSE'], ['accounts', 'Finance'], ['it', 'IT'], ['inventory', 'Inventory']]
 
 // The Operations fields the form marks with *, which an entry cannot be saved without.
 const OPERATIONS_REQUIRED = [
@@ -840,6 +840,14 @@ function JobLogDescription() {
   const requestedStatusToken = searchParams.get('status')
   const [statusFilter, setStatusFilter] = useState('all')
   const [sourceFilter, setSourceFilter] = useState('all')
+  // A department's view: every entry stays, but Completed / Incomplete (cards and filter) follow that
+  // department's own part — filled = Completed, something blank = Incomplete.
+  const [deptFilter, setDeptFilter] = useState('all')
+  const deptLabel = (DEPT_ORDER.find(([k]) => k === deptFilter) || [])[1]
+  // In a department's view there is no "pending / not set" status; one picked before stays out of the way.
+  useEffect(() => {
+    if (deptFilter !== 'all' && !['all', 'completed', 'incomplete', 'in progress', 'on hold'].includes(String(statusFilter).toLowerCase())) setStatusFilter('all')
+  }, [deptFilter]) // eslint-disable-line react-hooks/exhaustive-deps
   const [sortBy, setSortBy] = useState('entryDesc') // entryDesc | entryAsc | sNoDesc | sNoAsc | clientAsc
   const [dateFrom, setDateFrom] = useState('') // entry-date range filter (inclusive)
   const [dateTo, setDateTo] = useState('')
@@ -912,10 +920,11 @@ function JobLogDescription() {
   const queryRef = useRef(null)
   queryRef.current = {
     page: currentPage, search: debouncedSearch, status: statusFilter, source: sourceFilter,
-    sort: sortBy, from: dateFrom, to: dateTo,
+    sort: sortBy, from: dateFrom, to: dateTo, dept: deptFilter,
   }
   const filterParams = (q) => {
     const params = {}
+    if (q.dept && q.dept !== 'all') params.dept = q.dept
     if (q.search) params.search = q.search
     if (q.status && q.status !== 'all') params.status = q.status === STATUS_PENDING_ANY ? 'pending' : q.status
     if (q.source && q.source !== 'all') params.source = q.source
@@ -953,7 +962,7 @@ function JobLogDescription() {
 
   // Reload when the page or any filter changes. A filter change goes back to page 1
   // first (that change reloads), so it does not ask for a page that may not exist.
-  const filterKey = [debouncedSearch, statusFilter, sourceFilter, sortBy, dateFrom, dateTo].join('\u0001')
+  const filterKey = [debouncedSearch, statusFilter, sourceFilter, sortBy, dateFrom, dateTo, deptFilter].join('\u0001')
   const prevFilterKey = useRef(filterKey)
   useEffect(() => {
     if (prevFilterKey.current !== filterKey) {
@@ -1155,7 +1164,7 @@ function JobLogDescription() {
   // Export button switches to "Export by Filter" and exports exactly the rows
   // the user is currently looking at, bypassing the date-range modal.
   const hasActiveFilters =
-    searchTerm.trim() !== '' || statusFilter !== 'all' || sourceFilter !== 'all' ||
+    searchTerm.trim() !== '' || statusFilter !== 'all' || sourceFilter !== 'all' || deptFilter !== 'all' ||
     dateFrom !== '' || dateTo !== ''
 
   const handleExportClick = async () => {
@@ -1275,7 +1284,8 @@ function JobLogDescription() {
         res = await fetch(`${API_ENDPOINTS.JOB_LOG}/${editingId}?${actorQuery()}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+          // Only an administrator can correct the Entry Date of an existing entry.
+          body: JSON.stringify(isAdminContext ? { ...payload, edit_entry_date: true } : payload),
         })
       }
       if (!res.ok) {
@@ -1821,9 +1831,19 @@ function JobLogDescription() {
           style={{ ...inputStyle, minWidth: 160, cursor: 'pointer' }}
           value={statusFilter}
           onChange={setStatusFilter}
-          options={statusOptions}
-          extraOptions={[{ value: STATUS_PENDING_ANY, label: 'Pending / not set' }]}
+          options={deptFilter === 'all' ? statusOptions : ['Completed', 'In Progress', 'Incomplete', 'On Hold']}
+          extraOptions={deptFilter === 'all' ? [{ value: STATUS_PENDING_ANY, label: 'Pending / not set' }] : []}
           emptyOptionLabel="All Status"
+          emptyOptionValue="all"
+        />
+        {/* Department filter — a department's own view: the entries whose part it still has to fill. */}
+        <StyledSelect
+          style={{ ...inputStyle, minWidth: 170, cursor: 'pointer' }}
+          value={deptFilter}
+          onChange={setDeptFilter}
+          options={[]}
+          extraOptions={DEPT_ORDER.map(([value, label]) => ({ value, label }))}
+          emptyOptionLabel="All Departments"
           emptyOptionValue="all"
         />
         {/* Region filter */}
@@ -1863,7 +1883,7 @@ function JobLogDescription() {
         {/* Clear */}
         <ClearFilterButton
           visible={hasActiveFilters}
-          onClick={() => { setSearchTerm(''); setStatusFilter('all'); setSourceFilter('all'); setDateFrom(''); setDateTo(''); setSortBy('entryDesc') }}
+          onClick={() => { setSearchTerm(''); setStatusFilter('all'); setSourceFilter('all'); setDeptFilter('all'); setDateFrom(''); setDateTo(''); setSortBy('entryDesc') }}
         />
       </div>
 
@@ -1935,7 +1955,7 @@ function JobLogDescription() {
                         <ClipboardList size={44} color="#b9c0cf" />
                         <span style={{ fontSize: 16, fontWeight: 700, color: '#1f1f27' }}>No job log entries found</span>
                         <span style={{ fontSize: 14, color: '#7a7a8c' }}>
-                          {searchTerm || statusFilter !== 'all' || sourceFilter !== 'all'
+                          {searchTerm || statusFilter !== 'all' || sourceFilter !== 'all' || deptFilter !== 'all'
                             ? 'Try adjusting your filters or search term.'
                             : 'Click "Add Entry" to create the first entry, or import a CSV.'}
                         </span>
@@ -1957,7 +1977,13 @@ function JobLogDescription() {
                     const isExpanded = expandedRows.has(entry.id)
                     // In progress rows glow amber and incomplete ones red, as expiring and
                     // expired certificates do in Testing & Certification.
-                    const rowTone = ROW_TONES[String(entry.status || '').toLowerCase()]
+                    // In a department's view the row's status is that department's own: Completed when its part
+                    // is filled, Incomplete (with the fields it still lacks) when not.
+                    const deptGaps = deptFilter !== 'all' ? missingByDept(entry).filter(g => g.dept === deptLabel) : null
+                    // In Progress and On Hold stay as they are; only the others become this department's Completed / Incomplete.
+    const keepsStatus = ['in progress', 'on hold'].includes(String(entry.status || '').toLowerCase())
+    const shownStatus = deptGaps && !keepsStatus ? (deptGaps.length ? 'Incomplete' : 'Completed') : entry.status
+                    const rowTone = ROW_TONES[String(shownStatus || '').toLowerCase()]
                     const woTags = String(entry.workOrder || '').split(',').map(t => t.trim()).filter(Boolean)
                     const woOpen = woTags.length > 1 && expandedWo.has(entry.id)
                     // One full table row per work order: the entry's own row carries the first,
@@ -2009,8 +2035,13 @@ function JobLogDescription() {
                         <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.vLog} /></td>
                         <td style={{ textAlign: 'center' }}><YesNoBadge value={entry.tbt} /></td>
                         <td>
-                          <StatusBadge value={entry.status} />
-                          {String(entry.status || '').toLowerCase() === 'incomplete' && (() => {
+                          <StatusBadge value={shownStatus} />
+                          {deptGaps && deptGaps.length > 0 && shownStatus === 'Incomplete' && (
+                            <div style={{ marginTop: 4, fontSize: 10.5, lineHeight: 1.3, color: '#c62828', whiteSpace: 'normal' }}>
+                              <strong>{deptLabel} missing:</strong> {deptGaps.flatMap(g => g.fields).join(', ')}
+                            </div>
+                          )}
+                          {!deptGaps && String(entry.status || '').toLowerCase() === 'incomplete' && (() => {
                             const gaps = missingByDept(entry)
                             if (!gaps.length) return null
                             return (
@@ -2225,10 +2256,17 @@ function JobLogDescription() {
                 <label><span>S#</span>
                   <input type="text" value={modalState.sNo} readOnly
                     style={{ background: '#f4f4f7', color: '#aaa', cursor: 'not-allowed' }} /></label>
-                <label><span>Entry Date (auto)</span>
-                  <input type="text" readOnly value={formatDate(modalState.entryDate)}
-                    title="Set automatically to the day the entry was made"
-                    style={{ background: '#f4f4f7', color: '#aaa', cursor: 'not-allowed' }} /></label>
+                {isAdminContext && modalMode !== 'add' ? (
+                  <label><span>Entry Date (admin)</span>
+                    <StyledDatePicker value={modalState.entryDate}
+                      style={modalSelectStyle}
+                      onChange={v => handleModalChange('entryDate', v)} /></label>
+                ) : (
+                  <label><span>Entry Date (auto)</span>
+                    <input type="text" readOnly value={formatDate(modalState.entryDate)}
+                      title="Set automatically to the day the entry was made"
+                      style={{ background: '#f4f4f7', color: '#aaa', cursor: 'not-allowed' }} /></label>
+                )}
                 <div className="field-col"><span>Client *</span>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>

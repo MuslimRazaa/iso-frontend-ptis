@@ -575,6 +575,16 @@ const CourseDetailUser = () => {
     }
   };
 
+  // The same progress, to one decimal, for showing: with a long credit-hour target a whole-number
+  // percentage sits still for many minutes, which looks like it is not moving.
+  const displayProgress = () => {
+    const whole = calculateProgress();
+    const creditHours = Number(course?.creditHours) || 0;
+    if (whole >= 100 || creditHours <= 0) return whole;
+    const exact = ((totalTimeSpentRef.current || 0) / (creditHours * 3600)) * 100;
+    return Math.min(Math.round(exact * 10) / 10, 99.9);
+  };
+
   // Calculate progress percentage based on admin's Credit Hours & Duration
   const calculateProgress = () => {
     if (!course) return 0;
@@ -731,6 +741,24 @@ const CourseDetailUser = () => {
       return `${secs}s`;
     }
   };
+
+  // Reading time counts WHILE the reader is open, not only when it is closed: every few seconds the time
+  // since the last tick is added, so the progress moves along with the reading and the 30-second autosave
+  // saves it. (It used to be added only on close, so progress sat still the whole time someone read.)
+  useEffect(() => {
+    if (!showModal || !pptUrl) return undefined;
+    const tick = setInterval(() => {
+      if (!pptStartTimeRef.current) return;
+      const secs = Math.floor((Date.now() - pptStartTimeRef.current) / 1000);
+      if (secs < 1) return;
+      pptStartTimeRef.current += secs * 1000;   // the close handler then only adds what is left over
+      pptViewTimeRef.current += secs;
+      totalTimeSpentRef.current += secs;
+      setPptViewTime(pptViewTimeRef.current);
+      setTotalTimeSpent(totalTimeSpentRef.current);
+    }, 5000);
+    return () => clearInterval(tick);
+  }, [showModal, pptUrl]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -1269,7 +1297,7 @@ const CourseDetailUser = () => {
                   color: '#f59e0b',
                   fontFamily: 'monospace'
                 }}>
-                  {calculateProgress()}%
+                  {displayProgress()}%
                 </div>
               </div>
             </div>
@@ -1547,6 +1575,30 @@ const CourseDetailUser = () => {
                             ? 'Opens the full reader — your reading time counts towards this course.'
                             : 'Opens the full reader — your viewing time counts towards this course.'}
                         </p>
+
+                        {/* Once the course content is complete the next step sits right here, where the
+                            employee is reading: the tests still to take, each with its own Start button. */}
+                        {testUnlocked && pendingTests.length > 0 && (
+                          <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(148,163,184,0.25)' }}>
+                            <div style={{ fontWeight: 700, marginBottom: '0.6rem' }}>
+                              Course complete — {pendingTests.length === 1 ? 'take your test' : `take your ${pendingTests.length} tests`}
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                              {pendingTests.map((test) => (
+                                <div key={test.standardId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+                                  <span style={{ fontWeight: 600 }}>{test.label}</span>
+                                  <button
+                                    className="primary-btn"
+                                    onClick={() => navigate(getTestingUrlForTest(test))}
+                                    style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', minWidth: '150px' }}
+                                  >
+                                    {test.hasResult ? 'Retake' : 'Start'} Test
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
