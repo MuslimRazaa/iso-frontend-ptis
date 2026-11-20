@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import { API_ENDPOINTS } from '../../config/api'
@@ -18,6 +18,10 @@ function AddCourse() {
   const lmsBase = useLmsBase()
   const [videos, setVideos] = useState([])
   const [loading, setLoading] = useState(false)
+  // Which button was pressed: Publish Course (true) or Save as Draft (false). Set by the buttons just
+  // before the form submits, so it is read straight from here rather than from state that may lag.
+  const publishRef = useRef(true)
+  const [submittingAs, setSubmittingAs] = useState('publish')
   const [standards, setStandards] = useState([])
   const [categories, setCategories] = useState([])
 
@@ -108,6 +112,8 @@ function AddCourse() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    const publish = publishRef.current
+    setSubmittingAs(publish ? 'publish' : 'draft')
     setLoading(true)
 
     try {
@@ -148,7 +154,7 @@ function AddCourse() {
         data.append('standard_ids', JSON.stringify(standardIds))
       }
       data.append('course_description', formData.course_description)
-      data.append('is_published', formData.is_published)
+      data.append('is_published', publish)
       data.append('negative_marking', formData.negative_marking ? 0.25 : 0.00)
 
       // Optional fields
@@ -404,24 +410,18 @@ function AddCourse() {
         </div>
         )}
 
-        <div className="form-row">
-          <label className="checkbox-label">
-            <input 
-              type="checkbox" 
-              name="is_published"
-              checked={formData.is_published}
-              onChange={handleInputChange}
-            />
-            <span>Publish Course</span>
-          </label>
-        </div>
-
         <div className="form-actions">
           <button type="button" className="ghost-btn" onClick={() => window.history.back()}>
             Cancel
           </button>
-          <button type="submit" className="primary-btn" disabled={loading}>
-            {loading ? 'Publishing...' : 'Publish Course'}
+          <button type="submit" className="ghost-btn" disabled={loading}
+            title="Saves the course without showing it to employees yet"
+            onClick={() => { publishRef.current = false }}>
+            {loading && submittingAs === 'draft' ? 'Saving...' : 'Save as Draft'}
+          </button>
+          <button type="submit" className="primary-btn" disabled={loading}
+            onClick={() => { publishRef.current = true }}>
+            {loading && submittingAs === 'publish' ? 'Publishing...' : 'Publish Course'}
           </button>
         </div>
       </form>

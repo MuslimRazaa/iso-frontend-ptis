@@ -291,7 +291,15 @@ const MyCourses = () => {
           videoSeconds: apiProgress?.video_watch_time || 0,
           pptSeconds: apiProgress?.ppt_view_time || 0,
           isStarted: !!apiProgress,
-          localProgress: apiProgress?.progress_percentage || task.progress || 0,
+          localProgress: (() => {
+            const whole = apiProgress?.progress_percentage || task.progress || 0;
+            // To one decimal from the time actually spent against the credit hours, so the bar moves
+            // along with the reading instead of sitting at 0% for minutes. 100 only when the server says so.
+            const creditH = Number(matched?.credit_hours ?? apiProgress?.credit_hours) || 0;
+            const secs = Number(apiProgress?.total_time_spent);
+            if (whole >= 100 || !apiProgress || creditH <= 0 || !Number.isFinite(secs)) return whole;
+            return Math.min(Math.round((secs / (creditH * 3600)) * 1000) / 10, 99.9);
+          })(),
           noTest: testStatus.noTest === true, // awareness course: no test, done when the content is
           allDone: testStatus.allDone,       // every test taken → belongs in History
           // A test has a result OR one is mid-attempt (marker) → content locked.
