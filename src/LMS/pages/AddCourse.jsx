@@ -35,6 +35,7 @@ function AddCourse() {
     course_title: '',
     course_thumbnail: null,
     credit_hours: '',
+    study_minutes: '',
     duration_weeks: '',
     course_owner: '',
     course_category: '',
@@ -145,6 +146,7 @@ function AddCourse() {
       data.append('course_title', formData.course_title)
       data.append('course_thumbnail', formData.course_thumbnail)
       data.append('credit_hours', formData.credit_hours)
+      if (formData.study_minutes) data.append('study_minutes', formData.study_minutes)
       data.append('course_category', formData.course_category)
       // Primary standard (legacy NOT NULL column) = first selected; full set goes
       // as standard_ids so the backend can create one test per standard.
@@ -235,14 +237,26 @@ function AddCourse() {
         <div className="form-row">
           <label>
             <span>Credit Hours *</span>
-            <input 
-              type="number" 
+            <input
+              type="number"
               name="credit_hours"
-              placeholder="e.g., 15" 
+              placeholder="e.g., 15"
               min="0"
               value={formData.credit_hours}
               onChange={handleInputChange}
-              required 
+              required
+            />
+          </label>
+
+          <label title="How long this course takes to study. Employee progress reaches 100% after this many minutes. Leave empty to work it out from the course content (each video 6 min, the material 10 min).">
+            <span>Study Time (minutes)</span>
+            <input
+              type="number"
+              name="study_minutes"
+              placeholder="e.g., 30 (empty = automatic)"
+              min="1"
+              value={formData.study_minutes}
+              onChange={handleInputChange}
             />
           </label>
 

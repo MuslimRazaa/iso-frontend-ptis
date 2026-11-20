@@ -284,6 +284,7 @@ const CourseDetailUser = () => {
           category: data.course_category || 'Technical Skills',
           level: 'Intermediate',
           creditHours: data.credit_hours || 0,
+          studyMinutes: data.study_minutes || 0,
           durationWeeks: data.duration_weeks || 0,
           duration: data.duration_weeks ? `${(data.duration_weeks) * 54} h` : 'Self-paced',
           enrolled: 0,
@@ -575,32 +576,19 @@ const CourseDetailUser = () => {
     }
   };
 
-  // The same progress, to one decimal, for showing: with a long credit-hour target a whole-number
-  // percentage sits still for many minutes, which looks like it is not moving.
-  const displayProgress = () => {
-    const whole = calculateProgress();
-    const creditHours = Number(course?.creditHours) || 0;
-    if (whole >= 100 || creditHours <= 0) return whole;
-    const exact = ((totalTimeSpentRef.current || 0) / (creditHours * 3600)) * 100;
-    return Math.min(Math.round(exact * 10) / 10, 99.9);
-  };
-
-  // Calculate progress percentage based on admin's Credit Hours & Duration
+  // Calculate progress percentage, the same way the server does. The course's Study Time (minutes), when the
+  // admin gave one, is the target. Without it: time enough to watch all videos (~6 min each) plus read the
+  // study material (~10 min if a PPT/PDF exists). Credit Hours are not part of it.
   const calculateProgress = () => {
     if (!course) return 0;
 
     const spentSeconds = totalTimeSpentRef.current || 0;
 
-    // Credit Hours are the target (same as the server): 48 credit hours = 48 hours of study for 100%.
-    const creditHours = Number(course.creditHours) || 0;
-    if (creditHours > 0) {
-      return Math.min(Math.round((spentSeconds / (creditHours * 3600)) * 100), 100);
+    const studyMinutes = Number(course.studyMinutes) || 0;
+    if (studyMinutes > 0) {
+      return Math.min(Math.round((spentSeconds / (studyMinutes * 60)) * 100), 100);
     }
 
-    // No credit hours set — content-based target: time enough to watch all videos (~6 min each) plus
-    // read the study material (~10 min if a PPT/PDF exists). This replaces the
-    // old credit-hours model (1 credit = 15 study hours), which kept progress
-    // at ~0% for short training courses no matter how long the learner studied.
     const videoCount = course.videos?.length || 0;
     const hasMaterial = Boolean(course.pdf_path || (course.resources && course.resources.length > 0));
     let expectedMinutes = videoCount * 6 + (hasMaterial ? 10 : 0);
@@ -759,6 +747,21 @@ const CourseDetailUser = () => {
     }, 5000);
     return () => clearInterval(tick);
   }, [showModal, pptUrl]);
+
+  // Live progress for My Courses: every time the counted time changes, the progress the page now shows is
+  // published (to the same tab's next visit through localStorage, and to another open tab through a
+  // BroadcastChannel), so the card moves along with the reading instead of waiting for the next save.
+  // The moment it reaches 100 it is also saved at once, so the test unlocks without waiting 30 seconds.
+  const hundredSavedRef = useRef(false);
+  useEffect(() => {
+    if (!isEnrolled || !course) return;
+    const pct = calculateProgress();
+    const payload = { courseId: Number(courseId), email: userEmail, pct, at: Date.now() };
+    try { localStorage.setItem(`courseLive:${userEmail}:${courseId}`, JSON.stringify(payload)); } catch { /* storage unavailable */ }
+    try { const ch = new BroadcastChannel('course-progress'); ch.postMessage(payload); ch.close(); } catch { /* not supported */ }
+    if (pct >= 100 && !hundredSavedRef.current) { hundredSavedRef.current = true; saveProgress(); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalTimeSpent, isEnrolled, course]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -1297,7 +1300,7 @@ const CourseDetailUser = () => {
                   color: '#f59e0b',
                   fontFamily: 'monospace'
                 }}>
-                  {displayProgress()}%
+                  {calculateProgress()}%
                 </div>
               </div>
             </div>

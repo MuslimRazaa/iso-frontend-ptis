@@ -103,6 +103,7 @@ function AllCourses() {
           category: course.course_category,
           standard: Number(course.requires_test) === 0 ? 'Awareness · no test' : (course.standard_name || 'N/A'),
           creditHours: course.credit_hours,
+          studyMinutes: course.study_minutes || '',
           duration: course.duration_weeks || 0,
           status: course.is_published ? 'Active' : 'Draft',
           updated: updatedText,
@@ -154,6 +155,7 @@ function AllCourses() {
       category: course.category,
       standard: course.standard,
       creditHours: course.creditHours,
+      studyMinutes: course.studyMinutes || '',
       duration: course.duration,
       prerequisites: course.prerequisites,
       syllabus: course.syllabus || '',
@@ -199,6 +201,7 @@ function AllCourses() {
       category: '',
       standard: '',
       creditHours: 0,
+      studyMinutes: '',
       duration: 0,
       prerequisites: '',
       syllabus: '',
@@ -244,6 +247,8 @@ function AllCourses() {
     data.append('course_owner', editForm.owner || '')
     data.append('course_category', editForm.category || '')
     data.append('credit_hours', editForm.creditHours || 0)
+    // Empty clears it: progress then goes back to being worked out from the course content.
+    data.append('study_minutes', editForm.studyMinutes || '')
     data.append('duration_weeks', editForm.duration || 0)
     data.append('prerequisites', editForm.prerequisites || '')
     data.append('syllabus', editForm.syllabus || '')
@@ -566,6 +571,17 @@ function AllCourses() {
                     value={editForm.creditHours}
                     onChange={(e) => setEditForm({ ...editForm, creditHours: parseInt(e.target.value) || 0 })}
                     required
+                  />
+                </label>
+
+                <label title="How long this course takes to study. Employee progress reaches 100% after this many minutes. Leave empty to work it out from the course content.">
+                  <span>Study Time (minutes)</span>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="empty = automatic"
+                    value={editForm.studyMinutes}
+                    onChange={(e) => setEditForm({ ...editForm, studyMinutes: e.target.value === '' ? '' : (parseInt(e.target.value) || '') })}
                   />
                 </label>
 
