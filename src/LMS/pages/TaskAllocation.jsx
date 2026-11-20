@@ -160,6 +160,8 @@ function TaskAllocation() {
 
   const handleCreate = async () => {
     if (formData.employee_id && formData.course_id && formData.deadline) {
+      const chosen = employees.find((e) => String(e.id) === String(formData.employee_id))
+      if (!chosen) { showToast('Selected employee was not found. Please choose again.', 'error'); return }
       setAssignSubmitting(true)
       try {
         const response = await fetch(API_ENDPOINTS.TASK_ALLOCATIONS, {
@@ -167,6 +169,9 @@ function TaskAllocation() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             employee_id: formData.employee_id,
+            // Who was meant, by employee ID and by name: the server assigns only if both match the record.
+            employee_code: chosen.employee_id,
+            employee_name: chosen.full_name,
             course_id: formData.course_id,
             deadline: formData.deadline,
           }),
@@ -232,10 +237,27 @@ function TaskAllocation() {
     }
   }
 
+  // Who a course request belongs to. Names are not unique (two "Mr Ali Raza" records exist), so the
+  // email on the request — the one identity that is exact — decides; the name is only a fallback, and
+  // then an Active record is preferred over an Inactive one.
+  const employeeForRequest = (request) => {
+    // The server already worked out which employee record the request's email belongs to.
+    if (request?.employee_pk) {
+      const byId = employees.find((e) => Number(e.id) === Number(request.employee_pk))
+      if (byId) return byId
+    }
+    const email = String(request?.employee_email || '').toLowerCase().trim()
+    if (email) {
+      const byEmail = employees.find((e) => String(e.email || '').toLowerCase().trim() === email)
+      if (byEmail) return byEmail
+    }
+    const name = String(request?.employee_name || '').toLowerCase().trim()
+    const sameName = employees.filter((e) => String(e.full_name || '').toLowerCase().trim() === name)
+    return sameName.find((e) => String(e.status || '').toLowerCase() === 'active') || sameName[0]
+  }
+
   const openApproveModal = (request) => {
-    const emp = employees.find(
-      (e) => e.full_name?.toLowerCase() === request.employee_name?.toLowerCase()
-    )
+    const emp = employeeForRequest(request)
     const course = courses.find(
       (c) => c.course_title?.toLowerCase() === request.course_title?.toLowerCase()
     )
@@ -262,9 +284,7 @@ function TaskAllocation() {
     const request = approveModalRequest
     if (!request || !approveDeadline) return
 
-    const emp = employees.find(
-      (e) => e.full_name?.toLowerCase() === request.employee_name?.toLowerCase()
-    )
+    const emp = employeeForRequest(request)
     const course = courses.find(
       (c) => c.course_title?.toLowerCase() === request.course_title?.toLowerCase()
     )
@@ -282,6 +302,8 @@ function TaskAllocation() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           employee_id: emp.id,
+          employee_code: emp.employee_id,
+          employee_name: emp.full_name,
           course_id: course.id,
           deadline: approveDeadline,
         }),
@@ -345,11 +367,9 @@ function TaskAllocation() {
     } catch (e) {
       console.error('Failed to clear old assignment:', e)
     }
-    const emp = employees.find(
-      (e) => e.full_name?.toLowerCase().trim() === task.employee_name?.toLowerCase().trim()
-    )
+    // The task already knows its employee: use that id, not a name lookup (a duplicate name picked the wrong person).
     setFormData({
-      employee_id: emp ? String(emp.id) : '',
+      employee_id: task.employee_id ? String(task.employee_id) : '',
       course_id: task.course_id ? String(task.course_id) : '',
       deadline: '',
     })
@@ -573,7 +593,7 @@ function TaskAllocation() {
                   return (
                     <tr key={task.id} className={st.label === 'Overdue' ? 'overdue-row' : ''}>
                       <td>
-                        <strong>{task.employee_name}</strong>
+                        <strong>{task.employee_name}</strong>{task.employee_code ? <span style={{ color: '#8a8a9a', fontWeight: 500 }}> ({task.employee_code})</span> : null}
                       </td>
                       <td>{task.course_title}</td>
                       <td>{formatDate(task.assigned_date)}</td>
@@ -691,7 +711,7 @@ function TaskAllocation() {
                   {paginatedRequests.map((req, index) => (
                     <tr key={req.id || index}>
                       <td>
-                        <strong>{req.employee_name}</strong>
+                        <strong>{req.employee_name}</strong>{req.employee_code ? <span style={{ color: '#8a8a9a', fontWeight: 500 }}> ({req.employee_code})</span> : null}
                         <div style={{ fontSize: '12px', color: '#888' }}>{req.employee_email}</div>
                       </td>
                       <td>{req.course_title}</td>
@@ -901,7 +921,7 @@ function TaskAllocation() {
                 <p>
                   <Info size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} />
                   Approving <strong>"{approveModalRequest.course_title}"</strong> for{' '}
-                  <strong>{approveModalRequest.employee_name}</strong>. Set the deadline before it's assigned.
+                  <strong>{approveModalRequest.employee_name}</strong>{approveModalRequest.employee_code ? ` (${approveModalRequest.employee_code})` : ''}. Set the deadline before it's assigned.
                 </p>
               </div>
 
