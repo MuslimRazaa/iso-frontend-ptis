@@ -3300,7 +3300,9 @@ const TestingModule = () => {
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `${norm(result.STANDARD)}_Certificate_${norm(result.ID)}_${norm(result.NAME)}.pdf`;
+            // The server names the file (certificate tag first); the old name is only a fallback.
+            a.download = response.headers.get('X-Certificate-Filename')
+              || `${norm(result.STANDARD)}_Certificate_${norm(result.ID)}_${norm(result.NAME)}.pdf`;
             document.body.appendChild(a);
             a.click();
 

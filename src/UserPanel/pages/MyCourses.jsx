@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { API_ENDPOINTS, API_BASE_URL } from '../../config/api';
-import { computeCourseTests } from '../utils/courseTests';
+import { computeCourseTests, withCarriedPasses } from '../utils/courseTests';
 import { Icon, C } from '../../UserLMS/lmsUI';
 import { formatDate } from '../../utils/dateFormat'
 
@@ -382,10 +382,10 @@ const MyCourses = () => {
   // a re-assigned course starts fresh and stays consistent with the card.
   const buildTests = (courseId, courseData, results, assignedSince) => {
     const sinceMs = assignedSince ? new Date(assignedSince).getTime() : 0;
-    const courseResults = results.filter(r =>
-      Number(r.course_id) === Number(courseId) &&
-      (!sinceMs || (r.submitted_at && new Date(r.submitted_at).getTime() >= sinceMs))
-    );
+    const forCourse = results.filter(r => Number(r.course_id) === Number(courseId));
+    const inCurrent = (r) => !sinceMs || (r.submitted_at && new Date(r.submitted_at).getTime() >= sinceMs);
+    const courseResults = forCourse.filter(inCurrent);
+    const earlierResults = forCourse.filter(r => !inCurrent(r));
     const byStd = {};
     courseResults.forEach(r => { if (!byStd[r.standard_id]) byStd[r.standard_id] = r; });
 
@@ -394,7 +394,7 @@ const MyCourses = () => {
     if (stds.length === 0 && courseData.standard_id) {
       stds = [{ standard_id: courseData.standard_id, standard_name: courseData.standard_name, standard_type: courseData.standard_type || 'simple' }];
     }
-    return stds.map(s => {
+    const built = stds.map(s => {
       const result = byStd[s.standard_id] || null;
       const type = (s.standard_type || 'simple').toLowerCase();
       const suffix = type === 'general' ? ' (General)' : type === 'specific' ? ' (Specific)' : '';
@@ -404,10 +404,14 @@ const MyCourses = () => {
         standardType: type,
         label: `${s.standard_name || courseData.course_title || 'Test'}${suffix}`,
         hasResult: !!result,
+        passed: !!result?.passed,
         hasPassed: !!result?.passed,
         score: result?.score_percentage,
+        submittedAt: result?.submitted_at || null,
       };
     });
+    // A test already passed in an earlier assignment is not asked for again.
+    return withCarriedPasses(built, earlierResults);
   };
 
   const launchTest = (t) => {
@@ -728,7 +732,7 @@ const MyCourses = () => {
                         <div>
                           <div style={{ fontWeight: 700, color: C.ink, fontSize: 14 }}>{t.label}</div>
                           <div style={{ fontSize: 12.5, color: t.hasPassed ? C.passed : done ? C.failed : C.muted, marginTop: 2 }}>
-                            {t.hasPassed ? `Passed${t.score != null ? ` · ${t.score}%` : ''}` : done ? `Failed${t.score != null ? ` · ${t.score}%` : ''}` : 'Not attempted yet'}
+                            {t.hasPassed ? `${t.carried ? 'Already passed' : 'Passed'}${t.score != null ? ` · ${t.score}%` : ''}` : done ? `Failed${t.score != null ? ` · ${t.score}%` : ''}` : 'Not attempted yet'}
                           </div>
                         </div>
                         {done ? (

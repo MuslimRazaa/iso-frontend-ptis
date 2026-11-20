@@ -581,7 +581,13 @@ const CourseDetailUser = () => {
 
     const spentSeconds = totalTimeSpentRef.current || 0;
 
-    // Content-based target: time enough to watch all videos (~6 min each) plus
+    // Credit Hours are the target (same as the server): 48 credit hours = 48 hours of study for 100%.
+    const creditHours = Number(course.creditHours) || 0;
+    if (creditHours > 0) {
+      return Math.min(Math.round((spentSeconds / (creditHours * 3600)) * 100), 100);
+    }
+
+    // No credit hours set — content-based target: time enough to watch all videos (~6 min each) plus
     // read the study material (~10 min if a PPT/PDF exists). This replaces the
     // old credit-hours model (1 credit = 15 study hours), which kept progress
     // at ~0% for short training courses no matter how long the learner studied.
