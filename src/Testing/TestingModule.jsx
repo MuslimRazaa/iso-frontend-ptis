@@ -71,6 +71,16 @@ import StyledDatePicker from '../components/StyledDatePicker';
 import StyledTimePicker from '../components/StyledTimePicker';
 import SidebarBrand from '../components/SidebarBrand'
 
+// The employee for an ID. An exact match wins; otherwise an ID that differs only by leading zeros ("9" for
+// "09") finds its employee — but only when exactly one employee has that number, so it can never pick the
+// wrong person.
+const findEmployeeById = (list, id) => {
+  const exact = (list || []).find(e => String(e.ID) === String(id));
+  if (exact || !/^\d+$/.test(String(id))) return exact;
+  const same = (list || []).filter(e => /^\d+$/.test(String(e.ID)) && Number(e.ID) === Number(id));
+  return same.length === 1 ? same[0] : undefined;
+};
+
 // HomePage Component - Moved outside to prevent re-creation
 const HomePage = React.memo(({ 
   activeLoginForm, 
@@ -2771,7 +2781,7 @@ const TestingModule = () => {
     const handleAddResultSubmit = async (e) => {
       e.preventDefault();
 
-      const selectedEmployee = employees.find(emp => String(emp.ID) === String(resultFormData.employeeId));
+      const selectedEmployee = findEmployeeById(employees, resultFormData.employeeId);
       const fallbackEmployee = resultEditMode && resultEditTarget
         ? { ID: resultEditTarget.ID, Name: resultEditTarget.NAME }
         : null;
@@ -6013,7 +6023,8 @@ const TestingModule = () => {
         .map(entry => entry.r);
     }, [results, generalSearch, filterEmpId, filterEmpName, norm]);
 
-    const eligibleEmployees = useMemo(() => {
+    // Everyone eligible for a practical, unfiltered — what the Add form's pickers are built from.
+    const eligibleAll = useMemo(() => {
       const grouped = {};
       const passed = results.filter(
         (r) => String(r.STATUS || '').trim().toUpperCase() === 'PASS'
@@ -6100,20 +6111,51 @@ const TestingModule = () => {
         });
     }, [results, normalizePracticalBaseType, singlePracticalRequiredKeys]);
 
+    // What the Eligible Employees tab shows: the same filters as the Practical Results tab (the search box
+    // and the Employee ID / Name pickers) narrow this list too.
+    const eligibleEmployees = useMemo(() => {
+      let list = eligibleAll;
+      if (generalSearch) {
+        const q = generalSearch.toLowerCase();
+        list = list.filter((g) =>
+          String(g.empId || '').toLowerCase().includes(q) ||
+          String(g.empName || '').toLowerCase().includes(q) ||
+          String(g.baseType || '').toLowerCase().includes(q) ||
+          String(g.practicalStandardName || '').toLowerCase().includes(q)
+        );
+      }
+      if (filterEmpId || filterEmpName) {
+        list = list.filter((g) => employeeMatches({ ID: g.empId, NAME: g.empName }, filterEmpId, filterEmpName));
+      }
+      return list;
+    }, [eligibleAll, generalSearch, filterEmpId, filterEmpName]);
+
+    // The Employee ID / Name pickers list the people of the tab that is open: those eligible on the Eligible
+    // Employees tab, those with a practical result on the Practical Results tab.
+    const { scopedIdOptions, scopedNameOptions } = useMemo(() => {
+      const rows = practicalActiveTable === 'eligible'
+        ? eligibleAll.map((g) => ({ id: g.empId, name: g.empName }))
+        : results.filter((r) => r.STANDARD && r.STANDARD.includes('(Practical)')).map((r) => ({ id: r.ID, name: r.NAME }));
+      const ids = [...new Set(rows.map((x) => String(x.id ?? '')).filter(Boolean))]
+        .sort((a, b) => (Number(a) - Number(b)) || a.localeCompare(b));
+      const names = [...new Set(rows.map((x) => String(x.name ?? '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+      return { scopedIdOptions: ids, scopedNameOptions: names };
+    }, [practicalActiveTable, eligibleAll, results]);
+
     const eligibleEmployeeOptions = useMemo(() => {
       const byId = new Map();
-      eligibleEmployees.forEach((emp) => {
+      eligibleAll.forEach((emp) => {
         if (!byId.has(emp.empId)) byId.set(emp.empId, { value: emp.empId, label: String(emp.empName || emp.empId), sub: emp.empId });
       });
       return Array.from(byId.values()).sort((a, b) => a.label.localeCompare(b.label));
-    }, [eligibleEmployees]);
+    }, [eligibleAll]);
 
     // Standards still PENDING a practical for the currently selected employee:
     // eligible (theory passed) but practical not yet added. When no employee is
     // selected, fall back to the full practical-standards list.
     const availableStandardsForEmployee = useMemo(() => {
       if (!formData.employeeId) return practicalStandards;
-      const pending = eligibleEmployees
+      const pending = eligibleAll
         .filter((g) => String(g.empId) === String(formData.employeeId) && !g.practical)
         .map((g) => g.practicalStandardName || `${g.baseType} (Practical)`);
       const set = new Set(pending);
@@ -6121,7 +6163,7 @@ const TestingModule = () => {
       // practical already exists, so it would otherwise be filtered out as "done".
       if (formData.standard) set.add(formData.standard);
       return [...set].sort((a, b) => a.localeCompare(b));
-    }, [formData.employeeId, formData.standard, eligibleEmployees, practicalStandards]);
+    }, [formData.employeeId, formData.standard, eligibleAll, practicalStandards]);
 
     const [eligibleCurrentPage, setEligibleCurrentPage] = useState(1);
     const [practicalCurrentPage, setPracticalCurrentPage] = useState(1);
@@ -6147,9 +6189,12 @@ const TestingModule = () => {
 
     useEffect(() => {
       setEligibleCurrentPage(1);
-    }, [eligibleEmployees.length]);
+    }, [eligibleEmployees.length, generalSearch, filterEmpId, filterEmpName]);
 
+    // Land on a tab that has something in it — but only while nothing is being filtered, so a filter that
+    // empties the open tab never throws the user over to the other one.
     useEffect(() => {
+      if (generalSearch || filterEmpId || filterEmpName) return;
       if (practicalActiveTable === 'eligible' && eligibleEmployees.length === 0 && practicalResults.length > 0) {
         setPracticalActiveTable('results');
         return;
@@ -6157,7 +6202,7 @@ const TestingModule = () => {
       if (practicalActiveTable === 'results' && practicalResults.length === 0 && eligibleEmployees.length > 0) {
         setPracticalActiveTable('eligible');
       }
-    }, [practicalActiveTable, eligibleEmployees.length, practicalResults.length]);
+    }, [practicalActiveTable, eligibleEmployees.length, practicalResults.length, generalSearch, filterEmpId, filterEmpName]);
 
     useEffect(() => {
       if (totalPracticalPages > 0 && practicalCurrentPage > totalPracticalPages) {
@@ -6196,7 +6241,7 @@ const TestingModule = () => {
       e.preventDefault();
       setLoading(true);
 
-      const employee = employees.find(emp => String(emp.ID) === String(formData.employeeId));
+      const employee = findEmployeeById(employees, formData.employeeId);
       if (!employee) {
         showToast('Employee not found', 'error');
         setLoading(false);
@@ -6396,7 +6441,7 @@ const TestingModule = () => {
               <MultiSelect
                 value={filterEmpId}
                 onChange={setFilterEmpId}
-                options={empIdOptions}
+                options={scopedIdOptions}
                 placeholder="All Employees"
                 searchPlaceholder="Search employee ID…"
               />
@@ -6405,7 +6450,7 @@ const TestingModule = () => {
               <MultiSelect
                 value={filterEmpName}
                 onChange={setFilterEmpName}
-                options={empNameOptions}
+                options={scopedNameOptions}
                 placeholder="All Names"
                 searchPlaceholder="Search employee name…"
               />
@@ -6700,7 +6745,7 @@ const TestingModule = () => {
                   options={eligibleEmployeeOptions}
                   placeholder="Type to search…"
                   onChange={(selectedId) => {
-                    const selectedEmp = eligibleEmployees.find(emp => String(emp.empId) === String(selectedId));
+                    const selectedEmp = eligibleAll.find(emp => String(emp.empId) === String(selectedId));
                     setFormData({
                       ...formData,
                       employeeId: selectedId,
