@@ -57,6 +57,13 @@ function AllCourses() {
     originalStandardIds: [],
   })
   const [standards, setStandards] = useState([])
+  // The same Course Categories the Add Course form offers (managed on the Categories page).
+  const [courseCategories, setCourseCategories] = useState([])
+  useEffect(() => {
+    axios.get(API_ENDPOINTS.CATEGORIES)
+      .then((res) => setCourseCategories(Array.isArray(res.data) ? res.data.map((c) => c.name).filter(Boolean) : []))
+      .catch((err) => console.error('Error fetching categories:', err))
+  }, [])
   const [saving, setSaving] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [query, setQuery] = useState('')
@@ -605,11 +612,12 @@ function AllCourses() {
               </label>
 
               <label>
-                <span>Category</span>
+                <span>Course Category</span>
                 <StyledSelect
                   value={editForm.category}
                   onChange={(v) => setEditForm({ ...editForm, category: v })}
-                  options={['Technical Skills', 'Compliance & Safety', 'Management', 'Operations', 'Other']}
+                  // The course's own category stays selectable even if it is not (or no longer) on the list.
+                  options={[...new Set([...courseCategories, ...(editForm.category ? [editForm.category] : [])])]}
                   emptyOptionLabel="Select category"
                   style={formSelectStyle}
                 />
