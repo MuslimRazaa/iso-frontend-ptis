@@ -1,0 +1,1 @@
+import{b as s}from"./index-B5uIyJd2.js";function r(){const{pathname:e}=s();return e.startsWith("/employees")?"/employees":e.startsWith("/user")?"/user/learning-management-system":"/learning-management-system"}export{r as u};
