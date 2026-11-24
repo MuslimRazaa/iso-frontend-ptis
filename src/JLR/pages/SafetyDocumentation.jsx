@@ -72,7 +72,7 @@ export default function SafetyDocumentation() {
               to={`${base}/safety-documentation/${r.key}`}
               title={`Open ${r.title}`}
               style={{
-                display: 'block', textDecoration: 'none', color: 'inherit', background: '#fff', border: `1px solid ${BORDER}`,
+                display: 'flex', flexDirection: 'column', textDecoration: 'none', color: 'inherit', background: '#fff', border: `1px solid ${BORDER}`,
                 borderRadius: 18, padding: '24px 26px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', transition: 'all 0.22s ease',
               }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(215,38,61,0.35)'; e.currentTarget.style.boxShadow = '0 10px 30px rgba(0,0,0,0.09)'; e.currentTarget.style.transform = 'translateY(-3px)' }}
@@ -90,7 +90,8 @@ export default function SafetyDocumentation() {
               </div>
               <h3 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 700, color: INK }}>{r.title}</h3>
               <p style={{ margin: 0, fontSize: 13, color: MUTED, lineHeight: 1.65 }}>{r.description}</p>
-              <span style={{ display: 'inline-block', marginTop: 14, fontSize: 12.5, fontWeight: 700, color: BRAND }}>Open report →</span>
+              {/* marginTop:auto pushes the link to the card's bottom, so it sits on one line across all cards */}
+              <span style={{ display: 'inline-block', marginTop: 'auto', paddingTop: 14, fontSize: 12.5, fontWeight: 700, color: BRAND }}>Open report →</span>
             </Link>
           )
         })}

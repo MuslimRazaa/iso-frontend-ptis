@@ -4,6 +4,7 @@ import { signatureText } from '../utils/signature'
 import { hasContent, selfStampedBlanks, formatDateTimeValue, formatTimeValue } from '../utils/fieldHelpers'
 import { base64ToBytes } from '../utils/base64'
 import { formatDate } from '../../utils/dateFormat'
+import { pageCountOf, valuesForPage } from '../utils/formPages'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Overlay renderer.
@@ -237,11 +238,12 @@ const drawControlledDocumentNotice = (pages, font) => {
  * in a register table or anywhere else on the page. A table's tick column gets a
  * dash in each of its tick cells. Left alone: a single checkbox (unticked is its
  * answer), a choice ticked beside its printed words outside a table (a dash there
- * would sit on the words), and a field the PDF's own form fills.
+ * would sit on the words), a field the PDF's own form fills, and the entries a column heading is
+ * written in (a "Location" heading left empty stays an empty heading, not a dash).
  */
 const markEmptyFields = (pages, fields, allValues, font) => {
   for (const f of fields || []) {
-    if (f.type === 'checkbox' || f.acroName) continue
+    if (f.type === 'checkbox' || f.acroName || f.noDash || /^f_reg_head_/.test(String(f.id))) continue
     const value = allValues[f.id]
     if (f.type === 'signature' ? signatureText(value) : hasContent(value)) continue
     const c = normalizePdfCoords(f.pdfCoords)
@@ -273,7 +275,7 @@ const markEmptyFields = (pages, fields, allValues, font) => {
  * them in a corner would deface the template. The caller surfaces them so an
  * admin can place them in the field position editor.
  */
-export async function fillOriginalPdf(base64, fields, formValues, approverValues, employees = []) {
+async function fillOnePage(base64, fields, formValues, approverValues, employees = []) {
   const doc = await PDFDocument.load(base64ToBytes(base64))
   const font = await doc.embedFont(StandardFonts.Helvetica)
   const acroFont = font
@@ -415,6 +417,29 @@ export async function fillOriginalPdf(base64, fields, formValues, approverValues
   }
 
   return { bytes: await doc.save(), skipped }
+}
+
+/**
+ * The completed PDF for an entry. An entry with extra pages (see utils/formPages) gets the template's page once
+ * for every page it has, each filled from its own values and joined into one document. Approver fields belong to
+ * the form as a whole and are written on the first page only.
+ */
+export async function fillOriginalPdf(base64, fields, formValues, approverValues, employees = []) {
+  const count = pageCountOf(formValues)
+  if (count <= 1) return fillOnePage(base64, fields, formValues, approverValues, employees)
+
+  const merged = await PDFDocument.create()
+  const skipped = []
+  for (let page = 1; page <= count; page++) {
+    const res = await fillOnePage(
+      base64, fields, valuesForPage(formValues, fields, page), page === 1 ? approverValues : {}, employees,
+    )
+    skipped.push(...res.skipped)
+    const part = await PDFDocument.load(res.bytes)
+    const copied = await merged.copyPages(part, part.getPageIndices())
+    copied.forEach(p => merged.addPage(p))
+  }
+  return { bytes: await merged.save(), skipped: [...new Set(skipped)] }
 }
 
 /** Fills the original PDF and hands it to the browser as a download. */

@@ -229,7 +229,8 @@ function JLRHome() {
               transition: 'all 0.22s ease',
               boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
               cursor: to ? 'pointer' : 'default',
-              display: 'block',
+              display: 'flex',
+              flexDirection: 'column',
               textDecoration: 'none',
               color: 'inherit',
             }}
@@ -257,7 +258,7 @@ function JLRHome() {
                 {desc}
               </p>
               {to && (
-                <span style={{ display: 'inline-block', marginTop: 12, fontSize: 12.5, fontWeight: 700, color: BRAND }}>
+                <span style={{ display: 'inline-block', marginTop: 'auto', paddingTop: 12, fontSize: 12.5, fontWeight: 700, color: BRAND }}>
                   Open reports →
                 </span>
               )}

@@ -93,7 +93,14 @@ function columnGroups(t) {
   return { columns, groups }
 }
 
+// The entries a column heading is written in ("Location 1", "Location 1 (line 2)"): the importer makes them for a
+// grid whose headings the person filling the form decides. They sit in the heading cell of their column.
+const headingNameOf = (field) => /^f_reg_head_/.test(String(field.id || ''))
+  ? String(field.label || '').replace(/\s*\(line \d+\)\s*$/i, '').trim()
+  : null
+
 function tableBlocks(rows) {
+  const headingEntries = new Map()   // column heading -> its entries, top one first
   const tables = []          // every table found, in the order it starts
   const open = []            // tables that may continue on the next row
   const plain = rows.map(() => [])
@@ -101,6 +108,12 @@ function tableBlocks(rows) {
     // Runs of neighbouring fields that belong to the same printed row name.
     const segments = []
     for (const item of row) {
+      const headName = headingNameOf(item.field)
+      if (headName) {
+        if (!headingEntries.has(headName)) headingEntries.set(headName, [])
+        headingEntries.get(headName).push({ ...item, ri })
+        continue
+      }
       const parts = splitLabel(item.field.label)
       const last = segments[segments.length - 1]
       if (parts && last && last.name === parts[0]) { last.items.push({ ...item, column: parts[1] }); last.x1 = item.x1 }
@@ -129,12 +142,26 @@ function tableBlocks(rows) {
   const real = tables.filter(t => t.rows.length >= 2)
   for (const t of tables) if (t.rows.length < 2) for (const r of t.rows) plain[r.ri].push(...r.items)
 
+  // Each heading's entries go into the heading cell of the table column named like it. One that no table
+  // column carries stays a plain field, where it was.
+  const used = new Set()
+  for (const t of real) {
+    t.headings = t.columns.map(c => {
+      const mine = headingEntries.get(c)
+      if (!mine || used.has(c)) return []
+      used.add(c)
+      return mine.map(i => i.field)
+    })
+  }
+  for (const [name, list] of headingEntries) if (!used.has(name)) for (const i of list) plain[i.ri].push(i)
+
   const blocks = []
   rows.forEach((_, ri) => {
     const starting = real.filter(t => t.startRow === ri).sort((a, b) => a.x0 - b.x0)
     if (starting.length) {
       blocks.push({ type: 'tables', tables: starting.map(t => ({
         ...columnGroups(t),
+        headings: t.headings,
         rows: t.rows.map(r => ({ name: r.name.replace(/^Row\s+(\d+)$/i, '$1'), cells: r.cells })),
       })) })
     }

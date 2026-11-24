@@ -10,6 +10,9 @@ import { resolveSignerName, stampSignature } from '../utils/signature'
 import { getOfflineEntry, updateOfflineEntry, deleteOfflineEntry, getOfflineTemplate } from '../utils/offlineStore'
 import { downloadFilledPdf, fillOriginalPdf } from '../pdf/fillOriginalPdf'
 import { X } from 'lucide-react'
+import { PDFDocument } from 'pdf-lib'
+import { base64ToBytes } from '../utils/base64'
+import { pageCountOf } from '../utils/formPages'
 import { SEED_EMPLOYEES } from '../seedTemplates'
 import { viewAttachment, downloadAttachment } from '../utils/attachments'
 import { formatDateTime } from '../../utils/dateFormat'
@@ -18,6 +21,8 @@ const STATUS_COLORS = {
   pending:  { bg: '#fff7e6', color: '#b54708' },
   approved: { bg: '#e7f6ec', color: '#1a7f4e' },
   rejected: { bg: '#fdecea', color: '#b42318' },
+  submitted: { bg: '#eef4ff', color: '#2c4f86' },
+  in_process: { bg: '#f3efff', color: '#5b3fc4' },
 }
 
 const StatusBadge = ({ status }) => {
@@ -27,7 +32,7 @@ const StatusBadge = ({ status }) => {
       display: 'inline-block', padding: '5px 14px', borderRadius: 999,
       fontSize: 13, fontWeight: 700, textTransform: 'capitalize',
       background: s.bg, color: s.color,
-    }}>{status || 'pending'}</span>
+    }}>{(status || 'pending').replace(/_/g, ' ')}</span>
   )
 }
 
@@ -60,6 +65,17 @@ function FormDetail() {
   const [decidingRole, setDecidingRole] = useState(null)
   const [approverValuesByRole, setApproverValuesByRole] = useState({})
   const [downloading, setDownloading] = useState(false)
+  const [submittingEntry, setSubmittingEntry] = useState(false)
+  // Only a form printed on one page can be given more pages.
+  const [singlePage, setSinglePage] = useState(false)
+  useEffect(() => {
+    if (!template?.originalPdf) { setSinglePage(false); return undefined }
+    let active = true
+    PDFDocument.load(base64ToBytes(template.originalPdf), { ignoreEncryption: true })
+      .then(d => { if (active) setSinglePage(d.getPageCount() === 1) })
+      .catch(() => { if (active) setSinglePage(false) })
+    return () => { active = false }
+  }, [template?.originalPdf])
   // The filled PDF shown in the page (a blob URL), and whether it is being made.
   const [pdfView, setPdfView] = useState(null)
   const [preparingView, setPreparingView] = useState(false)
@@ -232,7 +248,7 @@ function FormDetail() {
   // so changing it is deliberately an admin-only act.
   // A form that any approver has already approved or rejected is locked for
   // everyone, admins included.
-  const isDecided = entry ? (!['pending', 'submitted'].includes(entry.status || 'pending') || approvals.some(a => a.status && a.status !== 'pending')) : false
+  const isDecided = entry ? (!['pending', 'submitted', 'in_process'].includes(entry.status || 'pending') || approvals.some(a => a.status && a.status !== 'pending')) : false
   const canEdit = (() => {
     if (!entry || isDecided || fromPending) return false
     if (isAdminOverride) return true
@@ -245,10 +261,41 @@ function FormDetail() {
   const canDelete = (() => {
     if (!entry) return false
     if (isAdminOverride) return true
-    if (entry.status !== 'pending') return false
+    if (!['pending', 'in_process'].includes(entry.status)) return false
     const me = myEmployeeId || localStorage.getItem('userEmail')
     return Boolean(me) && String(entry.created_by || '') === String(me)
   })()
+
+  // A form that needs no approval is saved In Process first. Its author (or an ISO Forms admin) sends it in.
+  const canSubmit = Boolean(entry) && entry.status === 'in_process' && !fromPending && (() => {
+    if (isAdminOverride) return true
+    const me = myEmployeeId || localStorage.getItem('userEmail')
+    return Boolean(me) && String(entry.created_by || '') === String(me)
+  })()
+  const pageTotal = pageCountOf(formValues)
+  const handleSubmitEntry = async () => {
+    if (!window.confirm('Submit this form now? Once submitted it is filed.')) return
+    setSubmittingEntry(true)
+    try {
+      const me = myEmployeeId || localStorage.getItem('userEmail')
+      const res = await fetch(`${API_ENDPOINTS.ISO_FORMS_ENTRIES}/${entry.id}/submit`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ editor: me, admin: isAdminOverride ? '1' : '0' }),
+      })
+      if (!res.ok) {
+        const failed = await res.json().catch(() => ({}))
+        showToast(failed.error || `Could not submit this form (HTTP ${res.status}).`, 'error')
+        return
+      }
+      const updated = await res.json()
+      setEntry(prev => ({ ...prev, ...updated }))
+      showToast('Form submitted.', 'success')
+    } catch {
+      showToast('Could not reach the server to submit this form.', 'error')
+    } finally {
+      setSubmittingEntry(false)
+    }
+  }
 
   const setApproverValue = (roleKey, fieldId, val) =>
     setApproverValuesByRole(prev => ({ ...prev, [roleKey]: { ...prev[roleKey], [fieldId]: val } }))
@@ -457,6 +504,16 @@ function FormDetail() {
               <button type="button" className="ghost-btn">✏ Edit Form</button>
             </Link>
           )}
+          {canEdit && singlePage && (
+            <Link to={`${base}/entries/${entry.id}/edit?addPage=1`} style={{ textDecoration: 'none' }}>
+              <button type="button" className="ghost-btn" title="Add another page of this form and carry on filling it in">+ Add Page</button>
+            </Link>
+          )}
+          {canSubmit && (
+            <button type="button" className="primary-btn" disabled={submittingEntry} onClick={handleSubmitEntry}>
+              {submittingEntry ? 'Submitting…' : 'Submit Form'}
+            </button>
+          )}
           {canDelete && (
             <button type="button" className="ghost-btn" onClick={handleDelete} style={{ color: '#b42318' }}>
               🗑 Delete Form
@@ -466,6 +523,17 @@ function FormDetail() {
         </div>
       </div>
 
+      {entry.status === 'in_process' && (
+        <div style={{ background: '#f3efff', border: '1px solid #d9cffa', color: '#4a2fb0', borderRadius: 12, padding: '12px 16px', marginBottom: 20, fontSize: 14 }}>
+          <strong>In Process</strong> — this form has not been submitted yet.
+          {canEdit ? ' You can still edit it or add pages. Press Submit Form when it is ready.' : ' Only the person who filled it can submit it.'}
+        </div>
+      )}
+      {pageTotal > 1 && (
+        <div style={{ marginBottom: 14, fontSize: 13, color: '#595966' }}>
+          This form has <strong>{pageTotal} pages</strong>. View PDF or Download PDF shows all of them; Edit Form lets you fill each page.
+        </div>
+      )}
       {offline && (
         <div style={{ background: '#fff7e6', border: '1px solid #ffe1a8', color: '#92660a', borderRadius: 12, padding: '12px 16px', marginBottom: 20, fontSize: 14 }}>
           Demo mode — this form is saved in this browser only since the backend isn't connected yet.

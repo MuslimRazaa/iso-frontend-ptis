@@ -864,6 +864,10 @@ function JobLogDescription() {
   const [showExport, setShowExport] = useState(false)
   const [exportFrom, setExportFrom] = useState('') // 'YYYY-MM-DD' (inclusive)
   const [exportTo, setExportTo] = useState('')     // 'YYYY-MM-DD' (inclusive)
+  const [exporting, setExporting] = useState(false) // true while the rows are being fetched and the file built
+  // Bulk delete (admin only): the rows ticked on the page on screen. Only ever the current page's rows.
+  const [selectedIds, setSelectedIds] = useState(() => new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
 
   /* ── Delete-All guarded flow ─────────────────────────────── */
   const [deleteStep, setDeleteStep] = useState(null) // null|'confirm1'|'password'|'confirm2'|'countdown'
@@ -899,7 +903,8 @@ function JobLogDescription() {
 
   // Date-range export (from the modal, used when no table filters are active).
   const handleExport = async () => {
-    if (!exportCount) return
+    if (!exportCount || exporting) return
+    setExporting(true)
     const label = (exportFrom || exportTo)
       ? `${exportFrom || 'start'}_to_${exportTo || 'end'}`
       : 'All'
@@ -911,6 +916,8 @@ function JobLogDescription() {
       showToast(msg, 'success')
     } catch (err) {
       showToast(`Export failed: ${err.message}`, 'error')
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -933,6 +940,8 @@ function JobLogDescription() {
     if (q.sort) params.sort = q.sort
     return params
   }
+  useEffect(() => { setSelectedIds(new Set()) },
+    [currentPage, debouncedSearch, statusFilter, sourceFilter, deptFilter, dateFrom, dateTo, sortBy])
   const fetchSeq = useRef(0)
   const loadedOnce = useRef(false)
   const fetchEntries = useCallback(async () => {
@@ -1056,9 +1065,15 @@ function JobLogDescription() {
   // Dedupe by name (not by the whole {name,label} object — two entries for
   // the same name would otherwise both survive) while keeping each name's
   // department label.
+  //
+  // The same person can be on the hard-coded / "+ Add" lists as "Nand Lal" while the employee record says
+  // "Mr Nand Lal". Two names are one person when they match once the title (Mr, Mrs, Dr…), dots, extra
+  // spaces and capitals are ignored; the lists are passed employees first, so the employee's spelling is
+  // the one that stays and the other is not shown beside it.
+  const nameKey = (name) => String(name || '').replace(/^\s*(mr|mrs|ms|miss|dr|engr|eng)\b\.?\s*/i, '').replace(/\./g, ' ').replace(/\s+/g, ' ').trim().toLowerCase()
   const dedupeByName = (list) => {
     const m = new Map()
-    list.forEach(o => m.set(o.name, o))
+    list.forEach(o => { const k = nameKey(o.name) || o.name; if (!m.has(k)) m.set(k, o) })
     return [...m.values()].sort((a, b) => a.name.localeCompare(b.name))
   }
 
@@ -1168,8 +1183,10 @@ function JobLogDescription() {
     dateFrom !== '' || dateTo !== ''
 
   const handleExportClick = async () => {
+    if (exporting) return
     if (hasActiveFilters) {
       if (serverTotal === 0) return
+      setExporting(true)
       try {
         // The search box is sent as typed, not as the debounced copy the table is showing.
         const rows = await fetchExportRows(filterParams({ ...queryRef.current, search: searchTerm.trim() }))
@@ -1179,6 +1196,8 @@ function JobLogDescription() {
         showToast(msg, 'success')
       } catch (err) {
         showToast(`Export failed: ${err.message}`, 'error')
+      } finally {
+        setExporting(false)
       }
     } else {
       // No filters → the from/to date-range modal (default behaviour).
@@ -1476,6 +1495,41 @@ function JobLogDescription() {
     }
   }
 
+  // ── Bulk delete (admin only, one page at a time) ─────────
+  const canBulkDelete = isAdminContext
+  const extraCols = canBulkDelete ? 1 : 0                       // the checkbox column
+  const selectedOnPage = entries.filter(e => selectedIds.has(e.id))
+  const allOnPageSelected = entries.length > 0 && selectedOnPage.length === entries.length
+  const toggleSelected = id => setSelectedIds(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
+  const toggleSelectAllOnPage = () => setSelectedIds(allOnPageSelected ? new Set() : new Set(entries.map(e => e.id)))
+  const handleBulkDelete = async () => {
+    const picked = selectedOnPage
+    if (!picked.length || bulkDeleting) return
+    const nos = picked.map(e => e.sNo).filter(n => n !== '' && n != null)
+    const which = nos.length ? ` (S.No ${nos.slice(0, 6).join(', ')}${nos.length > 6 ? ', …' : ''})` : ''
+    if (!window.confirm(`Delete ${picked.length} selected entr${picked.length === 1 ? 'y' : 'ies'}${which}?\n\nThis cannot be undone.`)) return
+    setBulkDeleting(true)
+    try {
+      const res = await fetch(`${API_ENDPOINTS.JOB_LOG}/bulk-delete?${actorQuery()}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: picked.map(e => e.id) }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || `Server error ${res.status}`)
+      setSelectedIds(new Set())
+      await fetchEntries()
+      showToast(`${json.deleted} entr${json.deleted === 1 ? 'y' : 'ies'} deleted.`, 'success')
+    } catch (err) {
+      showToast(`Bulk delete failed: ${err.message}`, 'error')
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
   const handleDelete = async id => {
     if (!window.confirm('Are you sure you want to delete this entry?')) return
     try {
@@ -1734,11 +1788,11 @@ function JobLogDescription() {
               type="button"
               className="ghost-btn"
               onClick={handleExportClick}
-              disabled={loading || serverMeta.count === 0}
+              disabled={loading || serverMeta.count === 0 || exporting}
               title={hasActiveFilters ? 'Export the currently filtered/searched rows' : 'Export by date range'}
               style={{ display: 'flex', alignItems: 'center', gap: 8 }}
             >
-              <Download size={16} /> {hasActiveFilters ? 'Export by Filter' : 'Export'}
+              {exporting ? <span className="jlr-export-spin" /> : <Download size={16} />} {exporting ? 'Exporting…' : hasActiveFilters ? 'Export by Filter' : 'Export'}
             </button>
           )}
           {serverMeta.count > 0 && (isAdminContext || jlrPerms?.full) && (
@@ -1887,6 +1941,25 @@ function JobLogDescription() {
         />
       </div>
 
+      {/* Bulk delete (admin only): acts on the entries ticked on THIS page */}
+      {canBulkDelete && selectedOnPage.length > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 12, margin: '0 0 12px',
+          padding: '10px 16px', borderRadius: 14, background: '#fff5f6', border: '1px solid #ffd1d8',
+        }}>
+          <span style={{ fontWeight: 700, color: '#14141c', fontSize: 14 }}>
+            {selectedOnPage.length} selected on this page
+          </span>
+          <span style={{ flex: 1 }} />
+          <button type="button" className="ghost-btn small" onClick={() => setSelectedIds(new Set())} disabled={bulkDeleting}>Clear</button>
+          <button type="button" className="primary-btn small" onClick={handleBulkDelete} disabled={bulkDeleting}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            {bulkDeleting ? <span className="jlr-export-spin" /> : <Trash2 size={15} />}
+            {bulkDeleting ? 'Deleting…' : `Delete selected (${selectedOnPage.length})`}
+          </button>
+        </div>
+      )}
+
       {/* ══ TABLE SHELL ════════════════════════════════════════ */}
       <div className="job-log-table-shell" ref={tableShellRef}>
         <div className="all-records-table-container">
@@ -1895,6 +1968,7 @@ function JobLogDescription() {
               <thead>
                 {/* Column group labels */}
                 <tr>
+                  {canBulkDelete && <th />}
                   {COL_GROUPS.map(g => (
                     <th key={g.label} colSpan={g.span} style={{
                       background: g.color, color: g.textColor,
@@ -1908,6 +1982,15 @@ function JobLogDescription() {
                 </tr>
                 {/* Column labels */}
                 <tr>
+                  {canBulkDelete && (
+                    <th style={{ minWidth: 38, textAlign: 'center' }}>
+                      <input type="checkbox" checked={allOnPageSelected} disabled={!entries.length || bulkDeleting}
+                        ref={el => { if (el) el.indeterminate = selectedOnPage.length > 0 && !allOnPageSelected }}
+                        onChange={toggleSelectAllOnPage}
+                        title="Select every entry on this page" aria-label="Select all entries on this page"
+                        style={{ accentColor: '#d7263d', cursor: 'pointer', width: 16, height: 16 }} />
+                    </th>
+                  )}
                   <th style={{ minWidth: 32 }}></th>
                   <th style={{ minWidth: 48 }}>S#</th>
                   <th>Entry Date</th><th>Client</th><th>Work Order</th>
@@ -1941,7 +2024,7 @@ function JobLogDescription() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={37} style={{ padding: '60px 32px', textAlign: 'center' }}>
+                    <td colSpan={37 + extraCols} style={{ padding: '60px 32px', textAlign: 'center' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
                         <span style={{ fontSize: 36 }}>⏳</span>
                         <span style={{ fontSize: 15, fontWeight: 600, color: '#7a7a8c' }}>Loading job log entries…</span>
@@ -1950,7 +2033,7 @@ function JobLogDescription() {
                   </tr>
                 ) : entries.length === 0 ? (
                   <tr>
-                    <td colSpan={37} style={{ padding: '60px 32px', textAlign: 'center' }}>
+                    <td colSpan={37 + extraCols} style={{ padding: '60px 32px', textAlign: 'center' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
                         <ClipboardList size={44} color="#b9c0cf" />
                         <span style={{ fontSize: 16, fontWeight: 700, color: '#1f1f27' }}>No job log entries found</span>
@@ -1989,7 +2072,20 @@ function JobLogDescription() {
                     // One full table row per work order: the entry's own row carries the first,
                     // and opening the dropdown shows the same row again for each of the others.
                     const renderRow = (rowKey, wo, main) => (
-                      <tr key={rowKey} style={rowTone ? { backgroundColor: rowTone.tint, boxShadow: `inset 4px 0 0 ${rowTone.edge}` } : (main ? undefined : { background: '#fafcff' })}>
+                      <tr key={rowKey} style={{
+                        ...(rowTone ? { backgroundColor: rowTone.tint, boxShadow: `inset 4px 0 0 ${rowTone.edge}` } : (main ? {} : { background: '#fafcff' })),
+                        ...(selectedIds.has(entry.id) ? { backgroundColor: '#fff1f3' } : {}),
+                      }}>
+                        {canBulkDelete && (
+                          <td style={{ textAlign: 'center' }}>
+                            {main && (
+                              <input type="checkbox" checked={selectedIds.has(entry.id)} disabled={bulkDeleting}
+                                onChange={() => toggleSelected(entry.id)}
+                                aria-label={`Select entry ${serial}`}
+                                style={{ accentColor: '#d7263d', cursor: 'pointer', width: 16, height: 16 }} />
+                            )}
+                          </td>
+                        )}
                         <td style={{ textAlign: 'center' }}>
                           {main && changes.length > 0 && (
                             <button type="button" onClick={() => toggleRowExpanded(entry.id)}
@@ -2109,6 +2205,7 @@ function JobLogDescription() {
                       {woOpen && woTags.slice(1).map(tag => renderRow(`${entry.id}-wo-${tag}`, tag, false))}
                       {isExpanded && changes.map(c => (
                         <tr key={`${entry.id}-change-${c.id}`} style={{ background: '#fafafd' }}>
+                          {canBulkDelete && <td></td>}
                           <td></td>
                           <td colSpan={36} style={{ padding: '8px 16px', fontSize: 12.5 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -2837,7 +2934,7 @@ function JobLogDescription() {
                 </label>
               </div>
               <p style={{ margin: '0 0 2px', fontSize: 12.5, color: '#9a9aaa' }}>
-                Dono khaali chhoro to poora data export hoga. {(exportFrom || exportTo) && (
+                Leave both dates empty to export all entries. {(exportFrom || exportTo) && (
                   <button type="button" onClick={() => { setExportFrom(''); setExportTo('') }}
                     style={{ background: 'none', border: 'none', color: '#d7263d', cursor: 'pointer', fontWeight: 600, padding: 0, fontSize: 12.5 }}>
                     Clear dates
@@ -2861,10 +2958,11 @@ function JobLogDescription() {
               </div>
 
               <div className="modal-actions">
-                <button type="button" className="ghost-btn" onClick={() => setShowExport(false)}>Cancel</button>
-                <button type="button" className="primary-btn" onClick={handleExport} disabled={!exportCount}
+                <button type="button" className="ghost-btn" onClick={() => setShowExport(false)} disabled={exporting}>Cancel</button>
+                <button type="button" className="primary-btn" onClick={handleExport} disabled={!exportCount || exporting}
                   style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                  <Download size={16} /> Export CSV
+                  {exporting ? <span className="jlr-export-spin" /> : <Download size={16} />}
+                  {exporting ? `Exporting ${exportCount ?? ''} entries…` : 'Export CSV'}
                 </button>
               </div>
             </div>
