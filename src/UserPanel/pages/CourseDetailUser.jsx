@@ -5,6 +5,26 @@ import PdfViewer from '../../components/PdfViewer';
 import { Icon } from '../../UserLMS/lmsUI';
 import { showToast } from '../../components/Toast';
 
+const TEST_CSS = `
+.ct-panel{width:100%;margin-top:1rem;text-align:left}
+.ct-head{margin-bottom:.75rem;padding:.9rem 1.1rem;border-radius:14px;background:#fff;border:1px solid #ececf0;}
+.ct-title{font-weight:800;font-size:.98rem;color:#14141c}
+.ct-sub{font-size:.82rem;color:#6b6b7a;margin-top:2px}
+.ct-list{display:flex;flex-direction:column;gap:.7rem}
+.ct-row{display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;padding:.85rem 1.1rem;border-radius:14px;background:#fff;border:1px solid #ececf0;transition:all .2s ease}
+.ct-row.done{background:#f3faf6;border-color:#cfe8da}
+.ct-name{font-weight:700;font-size:.92rem;color:#14141c}
+.ct-state{font-size:.78rem;color:#6b6b7a;margin-top:2px}
+.ct-btn{border:1px solid #d7263d;background:#d7263d;color:#fff;font-weight:700;font-size:.85rem;padding:9px 22px;min-width:150px;border-radius:999px;cursor:pointer;transition:all .2s ease;font-family:inherit}
+.ct-btn:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(215,38,61,.28);background:#c21f35;border-color:#c21f35}
+.ct-btn:active{transform:translateY(0)}
+.ct-btn:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(215,38,61,.25)}
+.ct-done{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:999px;background:#eaf6ef;color:#14633a;font-weight:700;font-size:.8rem}
+.ct-res{margin-top:1rem;padding-top:1rem;border-top:1px solid #ececf0}
+.ct-res-title{font-weight:800;color:#14141c;margin-bottom:.7rem}
+.ct-res .ct-row{background:#fafafc}
+`;
+
 const CourseDetailUser = () => {
   const { courseId } = useParams();
   const navigate = useNavigate();
@@ -25,6 +45,7 @@ const CourseDetailUser = () => {
   
   // Test unlock state
   const [testUnlocked, setTestUnlocked] = useState(false);
+  const [unlockTick, setUnlockTick] = useState(0);   // bumped after the 100% save, to ask the server again
   const [testUnlockInfo, setTestUnlockInfo] = useState(null);
   const [testCompleted, setTestCompleted] = useState(false);
   const [testResult, setTestResult] = useState(null);
@@ -420,11 +441,12 @@ const CourseDetailUser = () => {
 
         if (response.ok) {
           const data = await response.json();
+          const info = data.data || data;   // older servers send the status at the top level
           if (data.success) {
-            setTestUnlocked(data.data.unlocked);
-            setTestUnlockInfo(data.data);
-            
-            if (data.data.unlocked) {
+            setTestUnlocked(Boolean(info.unlocked));
+            setTestUnlockInfo(info);
+
+            if (info.unlocked) {
               console.log('✓ Test unlocked for this course!');
             }
           }
@@ -435,7 +457,7 @@ const CourseDetailUser = () => {
     };
 
     checkTestUnlock();
-  }, [courseId, isEnrolled, totalTimeSpent, videoWatchTime, pptViewTime, API_BASE_URL]);
+  }, [courseId, isEnrolled, totalTimeSpent, videoWatchTime, pptViewTime, unlockTick, API_BASE_URL]);
 
   // Save progress before page unload (refresh, close tab, logout)
   useEffect(() => {
@@ -759,7 +781,7 @@ const CourseDetailUser = () => {
     const payload = { courseId: Number(courseId), email: userEmail, pct, at: Date.now() };
     try { localStorage.setItem(`courseLive:${userEmail}:${courseId}`, JSON.stringify(payload)); } catch { /* storage unavailable */ }
     try { const ch = new BroadcastChannel('course-progress'); ch.postMessage(payload); ch.close(); } catch { /* not supported */ }
-    if (pct >= 100 && !hundredSavedRef.current) { hundredSavedRef.current = true; saveProgress(); }
+    if (pct >= 100 && !hundredSavedRef.current) { hundredSavedRef.current = true; saveProgress().then(() => setUnlockTick((t) => t + 1)); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totalTimeSpent, isEnrolled, course]);
 
@@ -1074,78 +1096,27 @@ const CourseDetailUser = () => {
               View All My Courses
             </button>
             
-            {/* Debug: Log test state */}
-            {console.log('🎯 Test Display State:', { 
-              testUnlocked, 
-              testCompleted, 
-              hasTestResult: !!testResult,
-              testResult,
-              requiredTests
-            })}
-            
+          </div>
+
             {/* Test Choice Buttons - Show when test is unlocked */}
             {testUnlocked && pendingTests.length > 0 && (
-              <div style={{ width: '100%', marginTop: '1rem' }}>
-                <div style={{
-                  marginBottom: '0.75rem',
-                  padding: '0.9rem 1rem',
-                  borderRadius: '10px',
-                  background: 'rgba(16, 185, 129, 0.12)',
-                  border: '1px solid rgba(16, 185, 129, 0.3)',
-                  color: '#d1fae5'
-                }}>
-                  <div style={{ fontWeight: '700', fontSize: '0.95rem', marginBottom: '0.25rem' }}>
-                    Select test to start first
-                  </div>
-                  <div style={{ fontSize: '0.8rem', opacity: 0.9 }}>
-                    The course is complete once all required tests are passed.
-                  </div>
+              <div className="ct-panel">
+                <style>{TEST_CSS}</style>
+                <div className="ct-head">
+                  <div className="ct-title">{pendingTests.length === 1 ? 'Your test is ready' : `Your ${pendingTests.length} tests are ready`}</div>
+                  <div className="ct-sub">The course is complete once all required tests are passed.</div>
                 </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <div className="ct-list">
                   {requiredTests.map((test) => (
-                    <div
-                      key={test.standardId}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '0.75rem',
-                        padding: '0.9rem 1rem',
-                        borderRadius: '12px',
-                        background: test.hasPassed ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
-                        border: `1px solid ${test.hasPassed ? 'rgba(16, 185, 129, 0.35)' : 'rgba(245, 158, 11, 0.35)'}`
-                      }}
-                    >
+                    <div key={test.standardId} className={`ct-row${test.hasPassed ? ' done' : ''}`}>
                       <div>
-                        <div style={{ fontWeight: '700', color: '#ffffff', fontSize: '0.92rem' }}>
-                          {test.label}
-                        </div>
-                        <div style={{ fontSize: '0.78rem', color: test.hasPassed ? '#a7f3d0' : '#fde68a' }}>
-                          {test.hasPassed ? 'Passed' : test.hasResult ? 'Attempted - pass required' : 'Not attempted yet'}
-                        </div>
+                        <div className="ct-name">{test.label}</div>
+                        <div className="ct-state">{test.hasPassed ? 'Passed' : test.hasResult ? 'Attempted - pass required' : 'Not attempted yet'}</div>
                       </div>
-
                       {test.hasPassed ? (
-                        <span style={{
-                          padding: '8px 12px',
-                          borderRadius: '999px',
-                          background: 'rgba(16, 185, 129, 0.2)',
-                          color: '#a7f3d0',
-                          fontWeight: '700',
-                          fontSize: '0.78rem'
-                        }}>
-                          Done
-                        </span>
+                        <span className="ct-done"><Icon name="check" size={13} /> Done</span>
                       ) : (
-                        <button
-                          className="primary-btn"
-                          onClick={() => navigate(getTestingUrlForTest(test))}
-                          style={{
-                            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                            minWidth: '170px'
-                          }}
-                        >
+                        <button className="ct-btn" onClick={() => navigate(getTestingUrlForTest(test))}>
                           {test.hasResult ? 'Retake' : 'Start'} {test.standardType === 'general' ? 'General' : test.standardType === 'specific' ? 'Specific' : ''} Test
                         </button>
                       )}
@@ -1206,7 +1177,6 @@ const CourseDetailUser = () => {
                 </div>
               </div>
             )}
-          </div>
 
           {/* Time Tracking Widget - Only show if enrolled */}
           {isEnrolled && (
@@ -1458,7 +1428,7 @@ const CourseDetailUser = () => {
               </>
             ) : (
               <div className="no-videos-placeholder">
-                {course.thumbnail && <img src={course.thumbnail} alt={course.title} />}
+                {course.thumbnail && <img src={course.thumbnail} alt={course.title} onError={(e) => { e.currentTarget.style.display = "none"; }} />}
                 <p>Video content will be available soon</p>
               </div>
             )}
@@ -1582,19 +1552,16 @@ const CourseDetailUser = () => {
                         {/* Once the course content is complete the next step sits right here, where the
                             employee is reading: the tests still to take, each with its own Start button. */}
                         {testUnlocked && pendingTests.length > 0 && (
-                          <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(148,163,184,0.25)' }}>
-                            <div style={{ fontWeight: 700, marginBottom: '0.6rem' }}>
+                          <div className="ct-res">
+                            <style>{TEST_CSS}</style>
+                            <div className="ct-res-title">
                               Course complete — {pendingTests.length === 1 ? 'take your test' : `take your ${pendingTests.length} tests`}
                             </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                            <div className="ct-list">
                               {pendingTests.map((test) => (
-                                <div key={test.standardId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
-                                  <span style={{ fontWeight: 600 }}>{test.label}</span>
-                                  <button
-                                    className="primary-btn"
-                                    onClick={() => navigate(getTestingUrlForTest(test))}
-                                    style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', minWidth: '150px' }}
-                                  >
+                                <div key={test.standardId} className="ct-row">
+                                  <span className="ct-name">{test.label}</span>
+                                  <button className="ct-btn" onClick={() => navigate(getTestingUrlForTest(test))}>
                                     {test.hasResult ? 'Retake' : 'Start'} Test
                                   </button>
                                 </div>
@@ -1614,7 +1581,7 @@ const CourseDetailUser = () => {
         <div className="course-sidebar">
           <div className="sidebar-card">
             {course.thumbnail ? (
-              <img src={course.thumbnail} alt={course.title} className="sidebar-thumbnail" loading="lazy" />
+              <img src={course.thumbnail} alt={course.title} className="sidebar-thumbnail" loading="lazy" onError={(e) => { e.currentTarget.style.display = "none"; }} />
             ) : (
               <div className="sidebar-thumbnail" style={{ background: 'linear-gradient(135deg, rgba(230, 57, 70, 0.2), rgba(230, 57, 70, 0.05))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255, 255, 255, 0.5)', height: '200px' }}>
                 No Image

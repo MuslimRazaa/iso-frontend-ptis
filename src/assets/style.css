@@ -3660,7 +3660,31 @@ body {
 
 .course-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
+}
+
+.course-actions .primary-btn,
+.course-actions .ghost-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.course-actions .primary-btn:disabled {
+  transform: none;
+  box-shadow: none;
+}
+
+/* A grid column may shrink below its content; without this a wide child (PDF reader, video) pushes the
+   sidebar out past the page edge, so "Course Includes" touched the right side. */
+.course-main-content,
+.course-sidebar {
+  min-width: 0;
+}
+
+.course-detail-page,
+.course-detail-body {
+  max-width: 100%;
 }
 
 .primary-btn.large,
@@ -3671,7 +3695,7 @@ body {
 
 .course-detail-body {
   display: grid;
-  grid-template-columns: 1fr 350px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 350px);
   gap: 32px;
 }
 
@@ -4117,10 +4141,22 @@ body {
   align-items: center;
   justify-content: center;
   min-width: 140px;
+  cursor: pointer;
 }
 
 .resource-open-btn:hover {
   background: #b81c2f;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(215, 38, 61, 0.28);
+}
+
+.resource-open-btn:active {
+  transform: translateY(0);
+}
+
+.resource-open-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(215, 38, 61, 0.25);
 }
 
 .resource-open-btn.disabled {
@@ -4191,7 +4227,7 @@ body {
 
 @media (max-width: 1024px) {
   .course-detail-body {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .course-sidebar {
