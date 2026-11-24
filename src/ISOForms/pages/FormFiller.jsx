@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
+import { PDFDocument } from 'pdf-lib'
 import FormLayoutView from '../components/FormLayoutView'
 import { Link, useNavigate, useParams, useLocation } from 'react-router-dom'
 import API_BASE_URL, { API_ENDPOINTS } from '../../config/api'
@@ -15,6 +16,8 @@ import { viewAttachment, downloadAttachment } from '../utils/attachments'
 import EmployeeMultiPicker from '../components/EmployeeMultiPicker'
 import { showToast } from '../../components/Toast'
 import { getActorId, getActorName } from '../../utils/actorIdentity'
+import { base64ToBytes } from '../utils/base64'
+import { PAGES_KEY, pageCountOf, pageKey, compactPages, valuesForPage } from '../utils/formPages'
 
 // One column per ~340px of available width, so the same markup is a single
 // column on a laptop-narrow pane and four across on a wide monitor.
@@ -78,6 +81,14 @@ function FormFiller() {
   const [labelDraft, setLabelDraft] = useState('')
   const [error, setError] = useState('')
   const [offline, setOffline] = useState(false)
+  // Pages: a form with one printed page can be given more ("Add page"), each a copy of the page filled in on its own.
+  const [activePage, setActivePage] = useState(1)
+  const [singlePage, setSinglePage] = useState(false)
+  const pageCount = pageCountOf(values)
+  const addPageOnLoad = useRef(new URLSearchParams(location.search).get('addPage') === '1')
+  // A template that needs no approval is not filed at once: it is saved as In Process, so it can still be
+  // changed or given more pages, and its author submits it from the form's own page.
+  const savesInProcess = !isEdit && template?.requiresApproval === false
 
   // Template picker (when no templateId is in the URL)
   useEffect(() => {
@@ -165,6 +176,16 @@ function FormFiller() {
     return () => { active = false }
   }, [schemaId, entryId])
 
+  // Only a form printed on one page can be given more pages.
+  useEffect(() => {
+    if (!template?.originalPdf) { setSinglePage(false); return undefined }
+    let active = true
+    PDFDocument.load(base64ToBytes(template.originalPdf), { ignoreEncryption: true })
+      .then(d => { if (active) setSinglePage(d.getPageCount() === 1) })
+      .catch(() => { if (active) setSinglePage(false) })
+    return () => { active = false }
+  }, [template?.originalPdf])
+
   // Pre-fill a role's picker from the template's saved default employee, once
   // the template is in. This is only a suggestion — never overwrites a value
   // already set, since editing an existing entry already prefilled
@@ -234,20 +255,51 @@ function FormFiller() {
   }, [template, myEmployeeId, designations, isEdit])
 
   const setFieldValue = (fieldId, val) => setValues(prev => {
-    const next = { ...prev, [fieldId]: val }
+    const k = (id) => pageKey(id, activePage)   // the key this page keeps the field's value under
+    const next = { ...prev, [k(fieldId)]: val }
     const changed = (template?.fields || []).find(f => f.id === fieldId)
     const own = (template?.fields || []).filter(f => (f.owner || 'requester') === 'requester')
     if (changed && changed.type === 'employee' && own.find(f => f.type === 'employee')?.id === fieldId) {
       const d = designations[val] || ''
-      for (const f of own) if (f.type === 'designation') next[f.id] = d
+      for (const f of own) if (f.type === 'designation') next[k(f.id)] = d
     }
     // The first thing entered in a register row dates the row; the person can still change it.
     if (changed && changed.type !== 'datetime' && hasContent(val)) {
       const mates = rowOfField(own, changed)
-      for (const f of mates || []) if (f.type === 'datetime' && !next[f.id]) next[f.id] = nowDateTimeValue()
+      for (const f of mates || []) if (f.type === 'datetime' && !next[k(f.id)]) next[k(f.id)] = nowDateTimeValue()
     }
     return next
   })
+
+  const addPage = () => {
+    if (pageCount >= 20) { showToast('A form can have at most 20 pages.', 'error'); return }
+    const n = pageCount + 1
+    setValues(prev => ({ ...prev, [PAGES_KEY]: String(n) }))
+    setActivePage(n)
+  }
+  const removePage = (page) => {
+    const ids = (template?.fields || []).map(f => f.id)
+    setValues(prev => {
+      const count = pageCountOf(prev)
+      const next = { ...prev }
+      for (let q = page; q < count; q++) {
+        for (const id of ids) {
+          const from = pageKey(id, q + 1), to = pageKey(id, q)
+          if (prev[from] !== undefined) next[to] = prev[from]; else delete next[to]
+        }
+      }
+      for (const id of ids) delete next[pageKey(id, count)]
+      if (count - 1 <= 1) delete next[PAGES_KEY]; else next[PAGES_KEY] = String(count - 1)
+      return next
+    })
+    setActivePage(a => Math.max(1, Math.min(a, pageCount - 1)))
+  }
+  // Opened from a form's page with "Add page": one more page is ready as soon as the form has loaded.
+  useEffect(() => {
+    if (!addPageOnLoad.current || !singlePage || loadingEntry || loadingTemplate || editLocked) return
+    addPageOnLoad.current = false
+    addPage()
+  })   // eslint-disable-line react-hooks/exhaustive-deps
 
   const addAttachment = () => setAttachments(prev => [...prev, null])
   const updateAttachment = (index, file) =>
@@ -298,12 +350,17 @@ function FormFiller() {
     // form corrects what it says, it does not re-sign it under a later date.
     const myName = resolveSignerName({ employees, employeeId: resolvedEmployeeId })
     const signedValues = { ...values }
-    // A row left completely empty is not signed.
-    const toStamp = signaturesToStamp(template.fields, values)
-    for (const field of template.fields) {
-      if (field.type !== 'signature' || !toStamp.has(field.id)) continue
-      signedValues[field.id] = stampSignature(signedValues[field.id], myName)
+    // A row left completely empty is not signed. Each page is signed on its own.
+    for (let page = 1; page <= pageCount; page++) {
+      const toStamp = signaturesToStamp(template.fields, valuesForPage(values, template.fields, page))
+      for (const field of template.fields) {
+        if (field.type !== 'signature' || !toStamp.has(field.id)) continue
+        const key = pageKey(field.id, page)
+        signedValues[key] = stampSignature(signedValues[key], myName)
+      }
     }
+    // Pages after the first with nothing written on them are left out (no blank pages in the PDF).
+    const finalValues = compactPages(signedValues, template.fields, (f, v) => !isFieldEmpty(f, v))
 
     // ── Revising an existing form ───────────────────────────────────────────
     // No offline fallback here: the form already exists on the server, so a
@@ -313,7 +370,7 @@ function FormFiller() {
       if (editLocked) { setError('This form has already been approved or rejected, so it can no longer be edited.'); return }
       try {
         const body = new FormData()
-        body.append('form_data', JSON.stringify(signedValues))
+        body.append('form_data', JSON.stringify(finalValues))
         body.append('approvals', JSON.stringify(approvals))
         const { base: baseName } = splitEntryName(entry?.template_name || template.name)
         const trimmedLabel = editLabel.trim()
@@ -349,11 +406,12 @@ function FormFiller() {
     const createdByName = getActorName()
     // "First Aid Box Checklist" + "First Floor" -> "First Aid Box Checklist (First Floor)"
     const entryName = label && label.trim() ? `${template.name || ''} (${label.trim()})` : (template.name || '')
+    let goTo = `${base}/entries`
     try {
       const formData = new FormData()
       formData.append('template_id', template.id)
       formData.append('template_name', entryName)
-      formData.append('form_data', JSON.stringify(signedValues))
+      formData.append('form_data', JSON.stringify(finalValues))
       formData.append('approvals', JSON.stringify(approvals))
       if (createdBy) formData.append('created_by', createdBy)
       if (createdByName) formData.append('created_by_name', createdByName)
@@ -361,7 +419,14 @@ function FormFiller() {
 
       const res = await fetch(API_ENDPOINTS.ISO_FORMS_ENTRIES, { method: 'POST', body: formData })
       if (!res.ok) throw new Error('submit failed')
-      showToast('Form submitted.', 'success')
+      const created = await res.json().catch(() => null)
+      if (created && created.status === 'in_process' && created.id != null) {
+        // Not filed yet: it opens on its own page, where it can be edited, given more pages, and submitted.
+        showToast('Saved as In Process. Edit it or add pages if you need to, then submit it.', 'success')
+        goTo = `${base}/entries/${created.id}`
+      } else {
+        showToast('Form submitted.', 'success')
+      }
     } catch {
       // No backend yet — record the submission in the local demo store instead.
       // Inline the actual file content as a data URL so "View" works without a backend.
@@ -377,13 +442,13 @@ function FormFiller() {
         id: `local-${Date.now()}`,
         template_id: template.id,
         template_name: entryName,
-        form_data: JSON.stringify(signedValues),
+        form_data: JSON.stringify(finalValues),
         related_employee_id: primary.approver_employee_id || '',
         related_employee_name: primary.approver_employee_name || '',
         approvals: approvals.map(a => ({ ...a, status: 'pending' })),
         created_by: resolvedEmployeeId || getActorId(),
         created_by_name: getActorName(),
-        status: approvals.length ? 'pending' : 'submitted',
+        status: approvals.length ? 'pending' : 'in_process',
         remarks: '',
         attachments: JSON.stringify(storedAttachments),
         created_at: new Date().toISOString(),
@@ -392,7 +457,7 @@ function FormFiller() {
     } finally {
       setSubmitting(false)
     }
-    navigate(`${base}/entries`)
+    navigate(goTo)
   }
 
   // ── Template picker screen ──────────────────────────────────────
@@ -486,7 +551,7 @@ function FormFiller() {
       </label>
       <DynamicField
         field={field}
-        value={values[field.id]}
+        value={values[pageKey(field.id, activePage)]}
         onChange={(val) => setFieldValue(field.id, val)}
         employees={employees}
         signerName={signerName}
@@ -551,13 +616,33 @@ function FormFiller() {
             </p>
           </article>
         )}
+        {singlePage && !editLocked && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, margin: '0 0 16px' }}>
+            {Array.from({ length: pageCount }, (_, i) => i + 1).map(p => (
+              <button key={p} type="button" className={p === activePage ? 'primary-btn small' : 'ghost-btn small'}
+                onClick={() => setActivePage(p)}>Page {p}</button>
+            ))}
+            <button type="button" className="ghost-btn small" onClick={addPage}
+              title="Add another page of this form, to carry on filling it in">+ Add page</button>
+            {activePage > 1 && (
+              <button type="button" className="ghost-btn small" onClick={() => removePage(activePage)}
+                style={{ color: '#b42318' }}>Remove this page</button>
+            )}
+            {pageCount > 1 && (
+              <span style={{ fontSize: 12.5, color: '#7a7a8c' }}>
+                Each page is its own copy of the form. A page with nothing written on it is left out when you save.
+              </span>
+            )}
+          </div>
+        )}
         <FormLayoutView
+          key={activePage}
           fields={template.fields}
           renderField={renderField}
           renderCell={(field) => (
             <DynamicField
               field={field}
-              value={values[field.id]}
+              value={values[pageKey(field.id, activePage)]}
               onChange={(val) => setFieldValue(field.id, val)}
               employees={employees}
               signerName={signerName}
@@ -642,14 +727,20 @@ function FormFiller() {
           </article>
         </div>
 
+        {savesInProcess && (
+          <p style={{ margin: '0 0 12px', fontSize: 13, color: '#595966', textAlign: 'right' }}>
+            This form needs no approval. It is saved as <strong>In Process</strong> first, so you can still change it or add pages,
+            and you submit it yourself from its page when it is ready.
+          </p>
+        )}
         <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
           <Link to={isEdit ? `${base}/entries/${entryId}` : `${base}/new`} style={{ textDecoration: 'none' }}>
             <button type="button" className="ghost-btn">Cancel</button>
           </Link>
           <button type="submit" className="primary-btn" disabled={submitting}>
             {submitting
-              ? (isEdit ? 'Saving…' : 'Submitting…')
-              : (isEdit ? 'Save Changes' : 'Submit Form')}
+              ? (isEdit || savesInProcess ? 'Saving…' : 'Submitting…')
+              : (isEdit ? 'Save Changes' : savesInProcess ? 'Save (In Process)' : 'Submit Form')}
           </button>
         </div>
       </form>
@@ -678,7 +769,7 @@ function FormFiller() {
               />
               <div className="modal-actions">
                 <button type="button" className="ghost-btn" onClick={() => handleSubmit(new Event('submit'), '')}>Skip</button>
-                <button type="submit" className="primary-btn" disabled={submitting}>Submit Form</button>
+                <button type="submit" className="primary-btn" disabled={submitting}>{savesInProcess ? 'Save (In Process)' : 'Submit Form'}</button>
               </div>
             </form>
           </div>

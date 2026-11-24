@@ -19,6 +19,7 @@ const STATUS_COLORS = {
   approved: { bg: '#e7f6ec', color: '#1a7f4e' },
   rejected: { bg: '#fdecea', color: '#b42318' },
   submitted: { bg: '#eef4ff', color: '#2c4f86' },
+  in_process: { bg: '#f3efff', color: '#5b3fc4' },
 }
 
 const StatusBadge = ({ status }) => {
@@ -28,7 +29,7 @@ const StatusBadge = ({ status }) => {
       display: 'inline-block', padding: '4px 12px', borderRadius: 999,
       fontSize: 12, fontWeight: 700, textTransform: 'capitalize',
       background: s.bg, color: s.color,
-    }}>{status || 'pending'}</span>
+    }}>{(status || 'pending').replace(/_/g, ' ')}</span>
   )
 }
 
@@ -67,7 +68,7 @@ function FormEntriesList() {
   const statusFromUrl = searchParams.get('status')
   const initialStatusFilter = pendingMine
     ? 'pending'
-    : (['pending', 'approved', 'rejected'].includes(statusFromUrl) ? statusFromUrl : '')
+    : (['pending', 'approved', 'rejected', 'in_process'].includes(statusFromUrl) ? statusFromUrl : '')
 
   const isAdmin = !isUserSide || (() => {
     try { return JSON.parse(localStorage.getItem('userPermissions') || '{}').iso_forms_admin === true } catch { return false }
@@ -171,7 +172,7 @@ function FormEntriesList() {
   // signed off, so changing it is deliberately an admin-only act.
   // Once any approver has approved or rejected, the form is locked for everyone
   // (admins included) — and the Pending Approvals queue is for deciding, not editing.
-  const isDecided = (entry) => !['pending', 'submitted'].includes(entry.status || 'pending')
+  const isDecided = (entry) => !['pending', 'submitted', 'in_process'].includes(entry.status || 'pending')
     || (Array.isArray(entry.approvals) && entry.approvals.some(a => a.status && a.status !== 'pending'))
   const canEdit = (entry) => {
     if (pendingMine || isDecided(entry)) return false
@@ -219,7 +220,7 @@ function FormEntriesList() {
     // Approvals); removing a form is done from the admin panel.
     if (isUserSide) return false
     if (isAdmin) return true
-    if (!['pending', 'submitted'].includes(entry.status)) return false
+    if (!['pending', 'submitted', 'in_process'].includes(entry.status)) return false
     const me = myEmployeeId || localStorage.getItem('userEmail')
     return Boolean(me) && String(entry.created_by || '') === String(me)
   }
@@ -323,6 +324,7 @@ function FormEntriesList() {
               { value: 'pending', label: 'Pending' },
               { value: 'approved', label: 'Approved' },
               { value: 'rejected', label: 'Rejected' },
+              { value: 'in_process', label: 'In Process (not submitted yet)' },
               { value: 'submitted', label: 'Submitted (no approval)' },
             ]}
             emptyOptionLabel="All Status"

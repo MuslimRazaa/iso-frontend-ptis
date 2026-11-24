@@ -757,6 +757,8 @@ export async function parsePdf(file) {
       },
     }))
   })
+  // Headings of a register's columns that are only a generic place word, repeated: see headingInputs below.
+  const GENERIC_HEADING = /^(location|area|site|room|zone|unit)$/i
   const registerFields = registerTables.flatMap((t, ti) => {
     const sample = pages[t.page]?.[0]
     // Neighbouring fillable columns under one heading, each with a short name of its
@@ -789,7 +791,36 @@ export async function parsePdf(file) {
     }
     const multi = new Set(tickGroups.flat())
     const inGroup = new Map([...choiceGroups, ...tickGroups].flatMap(span => span.map(k => [k, span])))
-    return t.rows.flatMap((row, ri) => t.columns.flatMap((col, ci) => {
+    // Column headings that are one generic word repeated over Yes | No pairs ("Location" nine times): the
+    // person filling the form decides what each column is, so each heading gets a box to write it in.
+    // (The printed word can be made invisible in the PDF, which leaves the heading cell empty to write in.)
+    const headingInputs = (() => {
+      const cols = t.columns.filter(c => c.caption && c.choices && c.choices.length >= 2)
+      const word = cols[0] && String(cols[0].own || '').trim()
+      if (cols.length < 3 || !GENERIC_HEADING.test(word) || !cols.every(c => String(c.own || '').trim() === word)) return []
+      // The printed heading words, in the band at the top of the table.
+      const heads = (pages[t.page] || []).filter(i => String(i.text).trim() === word && i.pdfY <= t.top + 2 && i.pdfY >= t.top - 40)
+      return cols.flatMap((c) => {
+        const h = heads.find(i => i.x + i.width / 2 >= c.x && i.x + i.width / 2 <= c.x + c.w)
+        if (!h) return []
+        // The heading cell is short, so its two entries sit one above the other in it.
+        const x = h.x - 3, width = h.width + 6
+        const bottom = h.pdfY - 2, top = h.pdfY + 11
+        const half = (top - bottom) / 2
+        return [0, 1].map(k => ({
+          id: `f_reg_head_${t.page}_${ti}_${c.index}_${k}_${Date.now().toString(36)}`,
+          label: k === 0 ? c.caption : `${c.caption} (line 2)`,
+          type: 'text',
+          required: false,
+          owner: 'requester',
+          options: '',
+          noDash: true,   // an empty heading stays empty in the finished PDF
+          // first entry on the upper half of the cell, second under it
+          pdfCoords: { page: t.page, x, y: k === 0 ? bottom + half : bottom, width, height: half - 0.5, pageWidth: sample?.pageWidth, pageHeight: sample?.pageHeight },
+        }))
+      })
+    })()
+    const rowFields = t.rows.flatMap((row, ri) => t.columns.flatMap((col, ci) => {
       const span = inGroup.get(ci)
       if (span) {
         if (span[0] !== ci) return []
@@ -821,7 +852,9 @@ export async function parsePdf(file) {
       if (!cell || !col.caption) return []
       // A column split into Yes | No (or similar) sub-headings is a choice, not
       // free text, and a tick goes under the heading that is picked.
-      const picks = col.choices && col.choices.length >= 2 ? col.choices : null
+      // (In a grid whose column headings are written in by the person filling the form — "Location" nine
+      // times — the cells are not Yes / No ticks but short entries, one per cell.)
+      const picks = col.choices && col.choices.length >= 2 && !headingInputs.length ? col.choices : null
       const tick = Math.max(6, Math.min(10, cell.h - 4))
       return [{
         id: `f_reg_${t.page}_${ti}_${ri}_${ci}_${Date.now().toString(36)}`,
@@ -856,6 +889,7 @@ export async function parsePdf(file) {
         },
       }]
     }))
+    return [...headingInputs, ...rowFields]
   })
   const ratingFields = ratingGrids.flatMap(g => {
     const sample = pages[g.page]?.[0]

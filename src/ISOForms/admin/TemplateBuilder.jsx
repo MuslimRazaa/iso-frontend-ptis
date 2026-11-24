@@ -348,8 +348,9 @@ function TemplateBuilder() {
         </label>
         {!requiresApproval && (
           <p style={{ margin: '0 0 6px', fontSize: 13, color: '#7a7a8c' }}>
-            No approver is asked for when this form is filled. It is filed as soon as it is submitted, does not
-            appear in Pending Approvals, and no approval e-mail is sent.
+            No approver is asked for when this form is filled. It is saved as In Process first, so whoever filled it can
+            still change it or add pages, and they submit it themselves when it is ready. It does not appear in Pending
+            Approvals, and no approval e-mail is sent.
           </p>
         )}
         <p style={{ margin: '0 0 14px', fontSize: 13, color: '#7a7a8c', display: requiresApproval ? 'block' : 'none' }}>

@@ -5848,3 +5848,14 @@ table thead th {
 .recent-entry-row { transition: background 0.18s ease, box-shadow 0.18s ease; }
 .recent-entry-row:hover { background: #fdf6f7; box-shadow: inset 3px 0 0 #d7263d; }
 .recent-entry-row:focus-visible { outline: 2px solid #d7263d; outline-offset: -2px; background: #fdf6f7; }
+
+/* Small spinner shown inside a button while an export is being prepared */
+.jlr-export-spin {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  display: inline-block;
+  animation: spin 0.7s linear infinite;
+}

@@ -48,7 +48,20 @@ function FormLayoutView({ fields, renderField, renderCell }) {
                       )}
                       <tr>
                         <th style={th}></th>
-                        {table.columns.map((c, ci) => <th key={ci} style={th}>{c}</th>)}
+                        {table.columns.map((c, ci) => {
+                          const entries = table.headings?.[ci] || []
+                          return (
+                            <th key={ci} style={th}>
+                              {c}
+                              {entries.length > 0 && (
+                                // The heading is written in by whoever fills the form: its entries sit in the heading cell.
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6, minWidth: 90, fontWeight: 400 }}>
+                                  {entries.map(f => <div key={f.id}>{renderCell(f)}</div>)}
+                                </div>
+                              )}
+                            </th>
+                          )
+                        })}
                       </tr>
                     </thead>
                     <tbody>
