@@ -1,10 +1,11 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import Login from './mainScreens/Login'
 import VideoLoader from './components/VideoLoader'
 import { ToastHost, showToast } from './components/Toast'
 import { initModalScrollLock } from './utils/modalScrollLock'
 import RequireAuth from './components/RequireAuth'
+import { fetchSsoSession, applySsoSession, clearAuthKeys } from './utils/sso'
 import './assets/style.css'
 
 // ============================================
@@ -78,6 +79,54 @@ function WelcomeToast() {
     try { message = sessionStorage.getItem('pendingWelcome'); sessionStorage.removeItem('pendingWelcome') } catch { /* no storage */ }
     if (message) showToast(message, 'success')
   }, [pathname])
+  return null
+}
+
+// Keeps an employee's tab in step with the shared Premier ERP / ISO sign-in
+// (utils/sso.js): signed out in the ERP (or another tab) -> signed out here;
+// somebody else signed in on this browser -> this tab follows them. Asks on
+// focus, when the tab comes back into view, and once a minute. An unknown
+// answer (offline, server error) changes nothing.
+function SsoWatcher() {
+  const navigate = useNavigate()
+  useEffect(() => {
+    let busy = false
+    const check = async () => {
+      if (busy || document.visibilityState === 'hidden') return
+      if (localStorage.getItem('userType') !== 'user') return
+      busy = true
+      try {
+        const s = await fetchSsoSession()
+        if (!s || !s.enabled || localStorage.getItem('userType') !== 'user') return
+        if (s.active && s.employee) {
+          if (s.employee.employee_id !== localStorage.getItem('userEmployeeId')) {
+            applySsoSession(s)
+            window.location.assign('/user/dashboard')
+          } else {
+            localStorage.setItem('ssoLinked', '1') // an older login joins the shared session
+          }
+          return
+        }
+        if (localStorage.getItem('ssoLinked') === '1') {
+          clearAuthKeys()
+          showToast('You were signed out — you signed out in Premier ERP or another tab.', 'info')
+          navigate('/', { replace: true })
+        }
+      } finally {
+        busy = false
+      }
+    }
+    check()
+    const timer = setInterval(check, 60000)
+    const onVisible = () => { if (document.visibilityState === 'visible') check() }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', check)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', check)
+    }
+  }, [navigate])
   return null
 }
 
@@ -169,6 +218,7 @@ function App() {
       {showLoader && !hasSeenLoader && <VideoLoader onLoadingComplete={handleLoadingComplete} />}
         <Router>
           <WelcomeToast />
+          <SsoWatcher />
           <Suspense fallback={<RouteFallback />}>
           <Routes>
             {/* ============================================ */}

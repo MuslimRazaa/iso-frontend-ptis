@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ptisLogo from '/ptisLogo.png';
 import { API_ENDPOINTS } from '../../config/api';
+import { ssoLogout } from '../../utils/sso';
 import { getCurrentEmployeeId } from '../../ISOForms/utils/currentEmployee';
 import NotificationBell from '../../components/NotificationBell';
 import HeaderSearchBar from '../../components/HeaderSearchBar';
@@ -19,6 +20,7 @@ const UserHeader = () => {
   ).join(' ');
 
   const handleLogout = () => {
+    ssoLogout(); // signs the ERP out too
     localStorage.clear();
     sessionStorage.clear();
     navigate('/');

@@ -1,10 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Eye, EyeOff, Phone, X, HelpCircle } from "lucide-react";
 import "../assets/style.css";
 import ptisLogo from "/ptisLogo.png";
 import { API_ENDPOINTS } from "../config/api";
 import { showToast } from "../components/Toast";
+import { fetchSsoSession, applySsoSession } from "../utils/sso";
 
 const SUPPORT_NUMBERS = ["+92 329 2201880", "+92 307 2912241"];
 
@@ -21,6 +22,9 @@ function Login() {
   });
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  // Asking the server whether this browser is already signed in (in the ERP,
+  // or another tab here) before showing the form as the way in.
+  const [ssoChecking, setSsoChecking] = useState(() => searchParams.get('fresh') !== '1');
 
   // Set by RequireAuth when a logged-out click on a deep link (an ISO Forms
   // approval email, a course-assignment email, …) bounced here — send them
@@ -45,6 +49,24 @@ function Login() {
     sessionStorage.setItem('pendingWelcome', message);
     navigate(target);
   };
+
+  // Signed in already on this browser — in Premier ERP or another ISO tab? Then
+  // straight in, no password. `fresh=1` (an e-mail link, see RequireAuth)
+  // asks for the form instead. An admin-password login is never involved.
+  useEffect(() => {
+    if (!ssoChecking) return undefined;
+    let cancelled = false;
+    fetchSsoSession().then((s) => {
+      if (cancelled) return;
+      if (s && s.active && s.employee) {
+        applySsoSession(s);
+        goTo(getRedirectTarget("/user/dashboard"), `Welcome back, ${s.employee.full_name}!`);
+        return;
+      }
+      setSsoChecking(false);
+    });
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const featureHighlights = [
     // { title: "Inspection Ops", detail: "07 live projects" },
@@ -78,6 +100,7 @@ function Login() {
         localStorage.removeItem('userEmployeeId');
         localStorage.removeItem('userFullName');
         localStorage.removeItem('userPermissions');
+        localStorage.removeItem('ssoLinked');
         localStorage.setItem('userType', 'admin');
         localStorage.setItem('adminPassword', formData.password);
         setIsLoading(false);
@@ -96,6 +119,8 @@ function Login() {
       // Try to login with employee_id (identifier could be email or employee_id)
       const response = await fetch(`${API_ENDPOINTS.EMPLOYEES}/login`, {
         method: 'POST',
+        // lets the server set the shared ERP/ISO sign-in cookie
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json'
         },
@@ -114,6 +139,17 @@ function Login() {
         localStorage.setItem('userEmail', employee.email);
         localStorage.setItem('userEmployeeId', employee.employee_id);
         localStorage.setItem('userFullName', employee.full_name);
+
+        // Tied to the shared ERP sign-in only once this browser has really
+        // kept the cookie — otherwise the session simply works as before
+        // (see utils/sso.js).
+        localStorage.removeItem('ssoLinked');
+        if (data.sso) {
+          const s = await fetchSsoSession();
+          if (s && s.active && s.employee && s.employee.employee_id === employee.employee_id) {
+            localStorage.setItem('ssoLinked', '1');
+          }
+        }
 
         // Fetch user permissions by employee_id -- NOT email, which isn't
         // guaranteed unique (two people sharing one inbox would otherwise
@@ -349,8 +385,8 @@ function Login() {
               </a>
             </div>
 
-            <button type="submit" className="login-btn" disabled={isLoading}>
-              {isLoading ? "Authenticating..." : `${loginType === "user" ? "User" : "Admin"} Login`}
+            <button type="submit" className="login-btn" disabled={isLoading || ssoChecking}>
+              {ssoChecking ? "Checking your session..." : isLoading ? "Authenticating..." : `${loginType === "user" ? "User" : "Admin"} Login`}
             </button>
 
             <div className="compliance-note">

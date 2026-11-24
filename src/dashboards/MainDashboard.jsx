@@ -6,6 +6,7 @@ import SystemMap from "../components/SystemMap";
 import NotificationBell from "../components/NotificationBell";
 import HeaderSearchBar from "../components/HeaderSearchBar";
 import { API_ENDPOINTS, API_BASE_URL } from "../config/api";
+import { ssoLogout } from "../utils/sso";
 import { summarise, averageCompletion } from "../LMS/utils/courseProgressState";
 import { findExpiringCertificates, certificateLink } from "../Testing/certificateExpiry";
 import ExpiringCertificatesBanner from "../components/ExpiringCertificatesBanner";
@@ -535,6 +536,8 @@ function MainDashboard() {
     localStorage.removeItem('userEmployeeId');
     localStorage.removeItem('userFullName');
     localStorage.removeItem('userPermissions');
+    localStorage.removeItem('ssoLinked');
+    ssoLogout(); // signing out here signs the ERP out on this browser too
     navigate("/");
   };
 

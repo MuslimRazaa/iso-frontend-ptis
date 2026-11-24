@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import SidebarBrand from '../../components/SidebarBrand'
+import { ssoLogout } from '../../utils/sso'
 
 const iconPaths = {
   dashboard: "M3 10h7V3H3zm11 0h7V3h-7zm0 11h7v-8h-7zm-11 0h7v-5H3z",
@@ -37,6 +38,7 @@ const UserSidebar = () => {
   }, []);
 
   const handleLogout = () => {
+    ssoLogout(); // signs the ERP out too
     localStorage.clear();
     sessionStorage.clear();
     navigate('/');

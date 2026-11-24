@@ -1,5 +1,6 @@
 import React from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
+import { AUTH_KEYS } from '../utils/sso'
 
 // Guards every /user/* route. Clicking a link from an email or a push
 // notification while logged out — or in a browser that's never logged in on
@@ -24,7 +25,11 @@ import { Navigate, useLocation } from 'react-router-dom'
 // (the PTIS Portal tile on an employee's dashboard opens the admin portal).
 // `user` is the other way round, for the employee pages: they need an employee
 // login, and an admin who opens one is sent to the admin dashboard.
-const AUTH_KEYS = ['userType', 'userEmail', 'userEmployeeId', 'userFullName', 'userPermissions', 'adminPassword']
+//
+// With the shared ERP sign-in, Login signs a returning person straight back in
+// from the shared session. An e-mail link's `login=1` is about NOT doing that
+// (somebody else may be signed in on this browser), so it sends `fresh=1`,
+// which makes Login show the form instead.
 
 const holds = (permission) => {
   try { return Boolean(permission && JSON.parse(localStorage.getItem('userPermissions') || '{}')[permission]) }
@@ -41,11 +46,12 @@ const RequireAuth = ({ children, admin = false, user = false, permission }) => {
     params.delete('login')
     const rest = params.toString()
     const intendedPath = location.pathname + (rest ? `?${rest}` : '')
-    return <Navigate to={`/?redirect=${encodeURIComponent(intendedPath)}`} replace />
+    return <Navigate to={`/?redirect=${encodeURIComponent(intendedPath)}&fresh=1`} replace />
   }
 
   const isAdmin = localStorage.getItem('userType') === 'admin'
-  const isLoggedIn = Boolean(localStorage.getItem('userEmail')) || isAdmin
+  // Employee ID as well as e-mail: an employee with no e-mail on file is still signed in.
+  const isLoggedIn = Boolean(localStorage.getItem('userEmail') || localStorage.getItem('userEmployeeId')) || isAdmin
 
   if (admin && !isAdmin && isLoggedIn && !holds(permission)) return <Navigate to="/user/dashboard" replace />
   if (user && isAdmin) return <Navigate to="/dashboard" replace />
