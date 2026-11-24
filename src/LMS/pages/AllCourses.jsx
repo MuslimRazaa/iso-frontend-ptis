@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import useLmsBase from '../useLmsBase'
@@ -65,6 +65,7 @@ function AllCourses() {
       .catch((err) => console.error('Error fetching categories:', err))
   }, [])
   const [saving, setSaving] = useState(false)
+  const pdfInputRef = useRef(null)
   const [showModal, setShowModal] = useState(false)
   const [query, setQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
@@ -773,7 +774,8 @@ function AllCourses() {
                 )}
               </div>
 
-              <label>
+              {/* A plain block, not a <label>: a label hands every click to its first button, which here is "Download". */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 14, color: '#32323c', fontWeight: 600 }}>
                 <span>Course Material (PDF)</span>
                 {editForm.pdfPath && !editForm.pdfFile && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
@@ -803,18 +805,24 @@ function AllCourses() {
                 {!editForm.pdfPath && !editForm.pdfFile && (
                   <p style={{ fontSize: 13, color: '#7a7a8c', margin: '0 0 10px' }}>No PDF uploaded yet.</p>
                 )}
-                <div className="upload-box">
+                <div
+                  className="upload-box"
+                  style={{ cursor: 'pointer' }}
+                  onClick={(e) => { if (e.target.tagName !== 'INPUT') pdfInputRef.current?.click() }}
+                >
                   <input
+                    ref={pdfInputRef}
                     type="file"
                     accept="application/pdf,.pdf"
                     onChange={(e) => {
                       const file = e.target.files[0]
                       if (file) setEditForm((prev) => ({ ...prev, pdfFile: file }))
+                      e.target.value = ''   // choosing the same file again must still register
                     }}
                   />
                   <p>{editForm.pdfPath ? 'Choose a file to replace the current PDF' : 'Upload the course material as a PDF file'}</p>
                 </div>
-              </label>
+              </div>
 
               <div className="modal-actions">
                 <button type="button" className="ghost-btn" onClick={cancelEdit}>

@@ -48,6 +48,8 @@ const EmployeesLayout = lazy(() => import('./Employees/EmployeesLayout'))
 const JLRLayout = lazy(() => import('./JLR/JLRLayout'))
 const JLRHome = lazy(() => import('./JLR/pages/JLRHome'))
 const JLRBackups = lazy(() => import('./JLR/pages/JLRBackups'))
+const SafetyDocumentation = lazy(() => import('./JLR/pages/SafetyDocumentation'))
+const SafetyReportViewer = lazy(() => import('./JLR/pages/SafetyReportViewer'))
 const JLRAuditLog = lazy(() => import('./JLR/pages/JLRAuditLog'))
 
 // Admin - ISO Forms (standalone module, dynamic form builder)
@@ -228,6 +230,8 @@ function App() {
             <Route path="/job-log/*" element={<RequireAuth admin><JLRLayout /></RequireAuth>}>
               <Route index element={<JLRHome />} />
               <Route path="entries" element={<JobLogDescription />} />
+              <Route path="safety-documentation" element={<SafetyDocumentation />} />
+              <Route path="safety-documentation/:reportKey" element={<SafetyReportViewer />} />
               <Route path="backups" element={<JLRBackups />} />
               <Route path="audit-log" element={<JLRAuditLog />} />
             </Route>
@@ -236,6 +240,8 @@ function App() {
             <Route path="/user/job-log/*" element={<RequireAuth user><JLRLayout /></RequireAuth>}>
               <Route index element={<JLRHome />} />
               <Route path="entries" element={<JobLogDescription />} />
+              <Route path="safety-documentation" element={<SafetyDocumentation />} />
+              <Route path="safety-documentation/:reportKey" element={<SafetyReportViewer />} />
             </Route>
 
             {/* Admin — ISO Forms (standalone module, dynamic form builder) */}

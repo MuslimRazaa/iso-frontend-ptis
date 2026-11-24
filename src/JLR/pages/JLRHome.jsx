@@ -30,7 +30,7 @@ const FEATURES = [
   { Icon: BsCalendar2Date,         title: 'Job Scheduling',      desc: 'Track start / end dates, entry dates, and submission timelines for every inspection job.' },
   { Icon: LuUserRoundCheck,        title: 'Inspector Management', desc: 'Record inspector names, team compositions, and vehicle assignments per deployment.' },
   { Icon: IoStatsChartSharp,       title: 'Operational Metrics',  desc: 'Monitor man-power, man-hours, driven KMs, and calculated days per engagement.' },
-  { Icon: MdOutlineHealthAndSafety,title: 'Safety Documentation', desc: 'Track JMPs, TRA, Equipment Checklists, Vehicle Logs, and TBT completion status.' },
+  { Icon: MdOutlineHealthAndSafety,title: 'Safety Documentation', desc: 'Track JMPs, TRA, Equipment Checklists, Vehicle Logs, and TBT completion status.', to: 'safety-documentation' },
   { Icon: TiPinOutline,            title: 'Multi-Dept Sign-off',  desc: 'Monitor REPT, EXP, ISO, Accounts, and I.T sign-off for end-to-end job closure.' },
 ]
 
@@ -216,15 +216,22 @@ function JLRHome() {
           gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))',
           gap: 16,
         }}>
-          {FEATURES.map(({ Icon, title, desc }) => (
-            <div key={title} style={{
+          {FEATURES.map(({ Icon, title, desc, to }) => {
+            // A card with `to` opens its page (Safety Documentation → the monthly reports).
+            const Wrap = to ? Link : 'div'
+            const wrapProps = to ? { to: `${base}/${to}`, title: `Open ${title}` } : {}
+            return (
+            <Wrap key={title} {...wrapProps} style={{
               background: '#ffffff',
               border: `1px solid ${BORDER}`,
               borderRadius: 18,
               padding: '24px 26px',
               transition: 'all 0.22s ease',
               boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-              cursor: 'default',
+              cursor: to ? 'pointer' : 'default',
+              display: 'block',
+              textDecoration: 'none',
+              color: 'inherit',
             }}
               onMouseEnter={e => {
                 e.currentTarget.style.borderColor = 'rgba(215,38,61,0.35)'
@@ -249,8 +256,14 @@ function JLRHome() {
               <p style={{ margin: 0, fontSize: 13, color: MUTED, lineHeight: 1.65 }}>
                 {desc}
               </p>
-            </div>
-          ))}
+              {to && (
+                <span style={{ display: 'inline-block', marginTop: 12, fontSize: 12.5, fontWeight: 700, color: BRAND }}>
+                  Open reports →
+                </span>
+              )}
+            </Wrap>
+            )
+          })}
         </div>
       </div>
 

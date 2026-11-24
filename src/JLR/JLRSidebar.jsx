@@ -8,6 +8,7 @@ const iconPaths = {
   backups: 'M12 3C7.58 3 4 4.34 4 6v12c0 1.66 3.58 3 8 3s8-1.34 8-3V6c0-1.66-3.58-3-8-3zm6 15c0 .35-2.13 1.5-6 1.5s-6-1.15-6-1.5v-2.23C7.61 15.55 9.66 16 12 16s4.39-.45 6-.77V18zm0-4.5c0 .35-2.13 1.5-6 1.5s-6-1.15-6-1.5v-2.23C7.61 11.05 9.66 11.5 12 11.5s4.39-.45 6-.77v2.77zM12 9C8.13 9 6 7.85 6 7.5S8.13 6 12 6s6 1.15 6 1.5S15.87 9 12 9z',
   audit:   'M9 12h6v2H9v-2zm0-4h6v2H9V8zm0 8h4v2H9v-2zM7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm0 2v16h10V4H7z',
   back:    'M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z',
+  safety:  'M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-1 15-4-4 1.41-1.41L11 13.17l5.59-5.59L18 9l-7 7z',
 }
 
 const SidebarIcon = ({ id }) => (
@@ -29,6 +30,7 @@ function JLRSidebar() {
   const isUserSide      = location.pathname.startsWith('/user')
   const homePath        = isUserSide ? '/user/job-log'         : '/job-log'
   const entriesPath     = isUserSide ? '/user/job-log/entries' : '/job-log/entries'
+  const safetyPath      = isUserSide ? '/user/job-log/safety-documentation' : '/job-log/safety-documentation'
   const dashboardPath   = isUserSide ? '/user/dashboard'       : '/dashboard'
   const backupsPath     = '/job-log/backups' // admin-only
   const auditLogPath    = '/job-log/audit-log' // admin-only
@@ -96,6 +98,18 @@ function JLRSidebar() {
               <NavLink to={entriesPath} end>View Entries</NavLink>
             </li>
           </ul>
+        </div>
+
+        {/* Safety Documentation — the monthly reports built from the Job Log */}
+        <div className="menu-group">
+          <NavLink
+            to={safetyPath}
+            className={({ isActive }) => `menu-trigger link${isActive ? ' active' : ''}`}
+          >
+            <SidebarIcon id="safety" />
+            <span className="menu-label">Safety Documentation</span>
+            <i aria-hidden="true" />
+          </NavLink>
         </div>
 
         {/* Backups — admin side only */}

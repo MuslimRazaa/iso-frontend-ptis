@@ -125,46 +125,63 @@ const drawCheckMark = (page, box) => {
   page.drawLine({ start: { x: cx - s * 0.25, y: cy - s * 0.75 }, end: { x: cx + s, y: cy + s * 0.8 }, ...opts })
 }
 
+// Text is never cut off: it keeps its normal size when it fits, and otherwise shrinks (never below
+// SMALLEST) until all of it fits its box, wrapping onto as many lines as the box is tall enough for.
+const SMALLEST_FONT_SIZE = 3.5
+const LINE = 1.15
+
+/**
+ * Chooses the size and the lines for `text` so that all of it fits a box of the given width and height:
+ * the largest size that holds it (not under COMFORT if a comfortable one does), wrapping onto more lines
+ * when the box is tall enough. `startSize` is the size the field would normally use (the admin's pinned
+ * size, or the default) and is never exceeded. A word is kept whole while a size exists that holds it.
+ * Only text far longer than any real value is cut off, at the smallest size, with the last line shortened.
+ */
+const layoutText = (text, font, startSize, maxWidth, boxHeight) => {
+  const wordFits = (s) => text.split(/\s+/).every(w => font.widthOfTextAtSize(w, s) <= maxWidth)
+  const sizes = []
+  for (let s = startSize; s >= SMALLEST_FONT_SIZE - 1e-9; s -= 0.5) sizes.push(s)
+  if (!sizes.length) sizes.push(startSize)
+
+  for (const s of sizes) {
+    if (!wordFits(s)) continue
+    const lines = wrapLines(text, font, s, maxWidth)
+    if (lines.length * s * LINE <= boxHeight + 0.01) return { size: s, lines }
+  }
+
+  // Last resort: the smallest size, as many lines as the box holds.
+  const size = sizes[sizes.length - 1]
+  let lines = wrapLines(text, font, size, maxWidth)
+  const maxLines = Math.max(1, Math.floor(boxHeight / (size * LINE)))
+  if (lines.length > maxLines) {
+    lines = lines.slice(0, maxLines)
+    // Said outright rather than dropped quietly: the last line ends in "...".
+    lines[maxLines - 1] = truncateToWidth(`${lines[maxLines - 1]} ...`, font, size, maxWidth)
+  }
+  return { size, lines }
+}
+
 /** Draws one field's value inside its box. */
 const drawFieldValue = (page, coords, text, font) => {
   const { x, y, width, height, align, legacyAnchor } = coords
   // A very narrow cell (one day of a monthly sheet) has no room for side padding.
   const maxWidth = Math.max(4, width - (width < 20 ? 1 : PAD_X * 2))
 
-  // Legacy anchor points carry no measured height, so they stay single-line
-  // and truncate exactly as they always did. Wrapping downward into space we
-  // never measured would print over the form's own artwork.
+  // Legacy anchor points carry no measured height, so they stay on one line: wrapping downward into
+  // space we never measured would print over the form's own artwork. The text shrinks to fit the
+  // width instead, and is only cut off when it is longer than even the smallest size can hold.
   if (legacyAnchor) {
-    const size = coords.fontSize || DEFAULT_FONT_SIZE
+    let size = coords.fontSize || DEFAULT_FONT_SIZE
+    while (size > SMALLEST_FONT_SIZE && font.widthOfTextAtSize(text, size) > maxWidth) size -= 0.5
     const display = truncateToWidth(text, font, size, maxWidth)
     page.drawText(display, { x: x + PAD_X, y: y + 2, size, font, color: TEXT_COLOR })
     return
   }
 
-  // Boxed field: shrink to fit, then wrap within the box.
-  let size = coords.fontSize || Math.min(DEFAULT_FONT_SIZE, Math.max(MIN_FONT_SIZE, height - 4))
-  let lines = wrapLines(text, font, size, maxWidth)
-  const fits = () => lines.length * (size * 1.15) <= height
-
-  // Only auto-shrink when the admin didn't pin a size explicitly.
-  if (!coords.fontSize) {
-    // A word wider than the box would be broken mid-word ("AJ" over two lines in
-    // a day cell); make it fit whole before anything is wrapped.
-    const longest = (t, sz) => Math.max(0, ...t.split(/\s+/).map(w => font.widthOfTextAtSize(w, sz)))
-    while (longest(text, size) > maxWidth && size > MIN_FONT_SIZE) size -= 0.5
-    lines = wrapLines(text, font, size, maxWidth)
-    while (!fits() && size > MIN_FONT_SIZE) {
-      size -= 0.5
-      lines = wrapLines(text, font, size, maxWidth)
-    }
-  }
-
-  const lineHeight = size * 1.15
-  const maxLines = Math.max(1, Math.floor(height / lineHeight))
-  if (lines.length > maxLines) {
-    lines = lines.slice(0, maxLines)
-    lines[maxLines - 1] = truncateToWidth(lines[maxLines - 1], font, size, maxWidth)
-  }
+  // Boxed field: the size and lines that show all of it.
+  const startSize = coords.fontSize || Math.min(DEFAULT_FONT_SIZE, Math.max(MIN_FONT_SIZE, height - 4))
+  const { size, lines } = layoutText(text, font, startSize, maxWidth, height)
+  const lineHeight = size * LINE
 
   // Lay out from the top of the box downward.
   let baseline = y + height - size
@@ -259,6 +276,7 @@ const markEmptyFields = (pages, fields, allValues, font) => {
 export async function fillOriginalPdf(base64, fields, formValues, approverValues, employees = []) {
   const doc = await PDFDocument.load(base64ToBytes(base64))
   const font = await doc.embedFont(StandardFonts.Helvetica)
+  const acroFont = font
   const italicFont = await doc.embedFont(StandardFonts.HelveticaOblique)
   const pages = doc.getPages()
 
@@ -314,7 +332,18 @@ export async function fillOriginalPdf(base64, fields, formValues, approverValues
       // Text fields default to auto-sizing, which on a multi-line box can pick
       // an enormous size and clip the value. Pin it to the same size the
       // overlay uses so filled forms read consistently either way.
-      try { tf.setFontSize(coordFontSize(field) || DEFAULT_FONT_SIZE) } catch { /* keep the PDF's own size */ }
+      // A long value shrinks, and goes on to more lines when the field is tall enough, so none of it is clipped.
+      try {
+        const rect = tf.acroField.getWidgets()[0]?.getRectangle()
+        const start = coordFontSize(field) || DEFAULT_FONT_SIZE
+        if (rect && text) {
+          const fit = layoutText(text, acroFont, start, Math.max(4, rect.width - 4), rect.height)
+          if (fit.lines.length > 1) tf.enableMultiline()
+          tf.setFontSize(fit.size)
+        } else {
+          tf.setFontSize(start)
+        }
+      } catch { try { tf.setFontSize(coordFontSize(field) || DEFAULT_FONT_SIZE) } catch { /* keep the PDF's own size */ } }
       tf.setText(text)
       return true
     } catch {
