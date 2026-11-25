@@ -348,7 +348,13 @@ const missingByDept = (e) => {
 // CSV HEADER_MAP (routes/jobLog.js) so an exported file re-imports cleanly.
 // Unmapped extras (per-department remarks) are included for completeness and
 // are simply ignored by the importer.
+// Every column of an entry goes out, so a file that is exported, corrected and
+// imported again carries everything back. `ID` is the entry's own id: it is
+// how an imported row is matched to the entry it came from — leave it as is.
+// The legacy safety-doc columns (Job TRA … FB Form, ISO) are not on screen
+// any more, but older entries still hold values in them.
 const EXPORT_COLUMNS = [
+  ['ID', 'id'],
   ['S#', 'sNo'],
   ['Entry Date', 'entryDate'],
   ['Client', 'client'],
@@ -371,10 +377,16 @@ const EXPORT_COLUMNS = [
   ['Equip C/L', 'equipCL'],
   ['V. Log', 'vLog'],
   ['TBT', 'tbt'],
+  ['Job TRA', 'jobTra'],
+  ['Env TRA', 'envTra'],
+  ['Trav TRA', 'travTra'],
+  ['FM Log', 'fmLog'],
+  ['FB Form', 'fbForm'],
   ['Status', 'status'],
   ['Completion Date', 'completionDate'],
   ['REPT', 'rept'],
   ['EXP', 'exp'],
+  ['ISO', 'iso'],
   ['Accounts', 'accounts'],
   ['IT', 'it'],
   ['Submission Date', 'submissionDate'],
@@ -898,7 +910,13 @@ function JobLogDescription() {
     const res = await fetch(`${API_ENDPOINTS.JOB_LOG}/export?${new URLSearchParams(params)}`)
     if (!res.ok) throw new Error(`Server error ${res.status}`)
     const json = await res.json()
-    return (json.data ?? []).map(fromDB)
+    // fromDB is the on-screen shape; the export also carries the columns the
+    // screen no longer shows, straight from the row.
+    return (json.data ?? []).map(r => ({
+      ...fromDB(r),
+      jobTra: r.job_tra || '', envTra: r.env_tra || '', travTra: r.trav_tra || '',
+      fmLog: r.fm_log || '', fbForm: r.fb_form || '', iso: r.iso || '',
+    }))
   }
 
   // Date-range export (from the modal, used when no table filters are active).
