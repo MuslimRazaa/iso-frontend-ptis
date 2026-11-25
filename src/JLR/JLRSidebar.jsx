@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import SidebarBrand from '../components/SidebarBrand'
 
@@ -24,6 +24,7 @@ function JLRSidebar() {
   const [entriesMenuOpen, setEntriesMenuOpen] = useState(false)
   const [auditMenuOpen, setAuditMenuOpen] = useState(false)
   const [backupsMenuOpen, setBackupsMenuOpen] = useState(false)
+  const [safetyMenuOpen, setSafetyMenuOpen] = useState(false)
   const location = useLocation()
 
   // Detect whether this layout is mounted under /user/* (user side) or /job-log/* (admin)
@@ -34,6 +35,10 @@ function JLRSidebar() {
   const dashboardPath   = isUserSide ? '/user/dashboard'       : '/dashboard'
   const backupsPath     = '/job-log/backups' // admin-only
   const auditLogPath    = '/job-log/audit-log' // admin-only
+
+  // Opened on a Safety Documentation page, its menu is open and the report being read is marked.
+  const onSafetyPage = location.pathname.startsWith(safetyPath)
+  useEffect(() => { if (onSafetyPage) setSafetyMenuOpen(true) }, [onSafetyPage])
 
   return (
     <aside
@@ -102,14 +107,20 @@ function JLRSidebar() {
 
         {/* Safety Documentation — the monthly reports built from the Job Log */}
         <div className="menu-group">
-          <NavLink
-            to={safetyPath}
-            className={({ isActive }) => `menu-trigger link${isActive ? ' active' : ''}`}
+          <button
+            type="button"
+            className={`menu-trigger ${safetyMenuOpen ? 'open' : ''}`}
+            onClick={() => setSafetyMenuOpen((prev) => !prev)}
           >
             <SidebarIcon id="safety" />
             <span className="menu-label">Safety Documentation</span>
-            <i aria-hidden="true" />
-          </NavLink>
+            <i />
+          </button>
+          <ul className={`submenu ${safetyMenuOpen ? 'visible' : ''}`}>
+            <li>
+              <NavLink to={safetyPath} end>All Reports</NavLink>
+            </li>
+          </ul>
         </div>
 
         {/* Backups — admin side only */}

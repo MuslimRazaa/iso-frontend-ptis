@@ -1322,9 +1322,12 @@ body {
   gap: 12px;
   color: inherit;
   cursor: pointer;
+  /* A button centres its text; a label long enough to wrap onto a second line must stay at the left. */
+  text-align: left;
 }
 
 .menu-label {
+  text-align: left;
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
