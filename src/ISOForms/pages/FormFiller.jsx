@@ -15,6 +15,7 @@ import { fileToDataUrl } from '../utils/fileToDataUrl'
 import { viewAttachment, downloadAttachment } from '../utils/attachments'
 import EmployeeMultiPicker from '../components/EmployeeMultiPicker'
 import { showToast } from '../../components/Toast'
+import StyledSelect from '../../components/StyledSelect'
 import { getActorId, getActorName } from '../../utils/actorIdentity'
 import { base64ToBytes } from '../utils/base64'
 import { PAGES_KEY, pageCountOf, pageKey, compactPages, valuesForPage } from '../utils/formPages'
@@ -271,10 +272,26 @@ function FormFiller() {
     return next
   })
 
+  // Location presets: a saved set of the form's location boxes (see the template builder). Each page remembers which
+  // one it was filled from, and a page added after it starts with the same one.
+  const presets = template?.locationPresets || []
+  const [pickedPreset, setPickedPreset] = useState({})   // { page: preset name }
+  const presetValues = (name, page) => {
+    const preset = presets.find(p => p.name === name)
+    if (!preset) return {}
+    return Object.fromEntries(Object.entries(preset.values || {}).map(([id, v]) => [pageKey(id, page), v]))
+  }
+  const applyPreset = (name) => {
+    setPickedPreset(prev => ({ ...prev, [activePage]: name }))
+    if (!name) return
+    setValues(prev => ({ ...prev, ...presetValues(name, activePage) }))
+  }
   const addPage = () => {
     if (pageCount >= 20) { showToast('A form can have at most 20 pages.', 'error'); return }
     const n = pageCount + 1
-    setValues(prev => ({ ...prev, [PAGES_KEY]: String(n) }))
+    const carry = pickedPreset[activePage]
+    setValues(prev => ({ ...prev, [PAGES_KEY]: String(n), ...(carry ? presetValues(carry, n) : {}) }))
+    if (carry) setPickedPreset(prev => ({ ...prev, [n]: carry }))
     setActivePage(n)
   }
   const removePage = (page) => {
@@ -633,6 +650,19 @@ function FormFiller() {
                 Each page is its own copy of the form. A page with nothing written on it is left out when you save.
               </span>
             )}
+          </div>
+        )}
+        {presets.length > 0 && !editLocked && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, margin: '0 0 16px' }}>
+            <span style={{ fontSize: 14, fontWeight: 600 }}>Location{pageCount > 1 ? ` (page ${activePage})` : ''}</span>
+            <StyledSelect
+              style={{ minWidth: 260, padding: '10px 14px', border: '2px solid #e0e0e6', borderRadius: 12, background: '#fff', fontSize: 14, cursor: 'pointer' }}
+              value={pickedPreset[activePage] || ''}
+              onChange={applyPreset}
+              options={[]}
+              extraOptions={[{ value: '', label: 'Select location' }, ...presets.map(p => ({ value: p.name, label: p.name }))]}
+            />
+            <span style={{ fontSize: 12.5, color: '#7a7a8c' }}>Fills in the location boxes below. You can still change any of them.</span>
           </div>
         )}
         <FormLayoutView
