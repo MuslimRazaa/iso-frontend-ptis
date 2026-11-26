@@ -168,7 +168,7 @@ export default function SafetyReportViewer() {
 
         <section className="lms-stat-grid" style={{ marginBottom: 24 }}>
           {(tiles.length ? tiles : [{ label: ' ', value: null, unit: '' }, { label: ' ', value: null, unit: '' }, { label: ' ', value: null, unit: '' }, { label: ' ', value: null, unit: '' }]).map((t, i) => (
-            <div key={`${t.label}-${i}`} className="stat-card">
+            <div key={`${t.label}-${i}`} className="stat-card" style={{ cursor: 'default' }}>
               <p>{t.label}</p>
               <h3>{loading || t.value == null ? '' : f(t.value)} <small style={{ fontSize: 13, color: SUBTLE, fontWeight: 500 }}>{t.unit}</small></h3>
               <span>{data ? `${data.meta?.monthLabel || ''} · ${data.meta?.regionLabel || ''}` : ' '}</span>

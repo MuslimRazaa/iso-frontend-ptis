@@ -175,14 +175,72 @@ function TemplateBuilder() {
 
   // The boxes a location preset fills: the form's heading boxes (the "Location" headings people write in).
   const locationFields = fields.filter(f => (f.noDash || /^f_reg_head_/.test(String(f.id))) && f.label.trim())
-  const addPreset = () => setLocationPresets(prev => [...prev, { id: `p_${Date.now().toString(36)}`, name: '', values: {} }])
+  // One preset is edited at a time; the others stay folded into a single line. Cancel puts it back as it was
+  // when it was opened (a preset that was never finished with Done is dropped).
+  const [openPreset, setOpenPreset] = useState(null)       // id of the preset being edited
+  const [presetBackup, setPresetBackup] = useState(null)   // how it was when opened; null = it is brand new
+  const [presetNote, setPresetNote] = useState('')
+  const dropUnfinished = (list) => (openPreset && presetBackup === null ? list.filter(p => p.id !== openPreset || p.name.trim()) : list)
+  const openEditor = (p, isNew = false) => {
+    setLocationPresets(prev => dropUnfinished(prev))
+    setPresetNote('')
+    setPresetBackup(isNew ? null : JSON.parse(JSON.stringify(p)))
+    setPresetPage(prev => ({ ...prev, [p.id]: 1 }))
+    setOpenPreset(p.id)
+  }
+  const cancelPreset = () => {
+    setLocationPresets(prev => (presetBackup === null ? prev.filter(p => p.id !== openPreset) : prev.map(p => (p.id === openPreset ? presetBackup : p))))
+    setOpenPreset(null); setPresetBackup(null); setPresetNote('')
+  }
+  const donePreset = () => {
+    const p = locationPresets.find(x => x.id === openPreset)
+    if (!p) { setOpenPreset(null); return }
+    if (!p.name.trim()) { setPresetNote('Give this preset a name first, so it can be picked from the list.'); return }
+    if (locationPresets.some(x => x.id !== p.id && x.name.trim().toLowerCase() === p.name.trim().toLowerCase())) { setPresetNote('Another preset already has this name.'); return }
+    setOpenPreset(null); setPresetBackup(null); setPresetNote('')
+  }
+  const presetStats = (p) => {
+    const sets = [p.values, ...(p.more || [])]
+    return { pages: sets.length, filled: sets.reduce((n, s) => n + Object.values(s || {}).filter(v => String(v).trim()).length, 0) }
+  }
+  const addPreset = () => {
+    const p = { id: `p_${Date.now().toString(36)}`, name: '', values: {}, more: [] }
+    setLocationPresets(prev => [...dropUnfinished(prev), p])
+    openEditor(p, true)
+  }
   const updatePreset = (presetId, patch) => setLocationPresets(prev => prev.map(p => (p.id === presetId ? { ...p, ...patch } : p)))
-  const setPresetValue = (presetId, fieldId, val) => setLocationPresets(prev => prev.map(p => (p.id === presetId ? { ...p, values: { ...p.values, [fieldId]: val } } : p)))
-  const removePreset = (presetId) => setLocationPresets(prev => prev.filter(p => p.id !== presetId))
-  const duplicatePreset = (presetId) => setLocationPresets(prev => {
-    const src = prev.find(p => p.id === presetId)
-    return src ? [...prev, { ...src, id: `p_${Date.now().toString(36)}`, name: '', values: { ...src.values } }] : prev
-  })
+  // Which page of each preset is being edited (1 = the first; a long preset carries on over more pages).
+  const [presetPage, setPresetPage] = useState({})
+  const pageOfPreset = (p) => Math.min(presetPage[p.id] || 1, 1 + (p.more || []).length)
+  const valuesOfPage = (p, page) => (page <= 1 ? p.values : (p.more || [])[page - 2]) || {}
+  const setPresetValue = (presetId, fieldId, val, page = 1) => setLocationPresets(prev => prev.map(p => {
+    if (p.id !== presetId) return p
+    if (page <= 1) return { ...p, values: { ...p.values, [fieldId]: val } }
+    const more = [...(p.more || [])]
+    more[page - 2] = { ...(more[page - 2] || {}), [fieldId]: val }
+    return { ...p, more }
+  }))
+  const addPresetPage = (presetId) => {
+    const p = locationPresets.find(x => x.id === presetId)
+    setLocationPresets(prev => prev.map(x => (x.id === presetId ? { ...x, more: [...(x.more || []), {}] } : x)))
+    setPresetPage(prev => ({ ...prev, [presetId]: 2 + ((p && p.more) || []).length }))
+  }
+  const removePresetPage = (presetId, page) => {
+    if (page <= 1) return
+    setLocationPresets(prev => prev.map(p => (p.id === presetId ? { ...p, more: (p.more || []).filter((_, i) => i !== page - 2) } : p)))
+    setPresetPage(prev => ({ ...prev, [presetId]: page - 1 }))
+  }
+  const removePreset = (presetId) => {
+    setLocationPresets(prev => prev.filter(p => p.id !== presetId))
+    if (openPreset === presetId) { setOpenPreset(null); setPresetBackup(null); setPresetNote('') }
+  }
+  const duplicatePreset = (presetId) => {
+    const src = locationPresets.find(p => p.id === presetId)
+    if (!src) return
+    const copy = { ...src, id: `p_${Date.now().toString(36)}`, name: '', values: { ...src.values }, more: (src.more || []).map(m => ({ ...m })) }
+    setLocationPresets(prev => [...prev, copy])
+    openEditor(copy, true)
+  }
 
   const addField = () => setFields(prev => [...prev, blankField()])
   const removeField = (fieldId) => setFields(prev => prev.filter(f => f.id !== fieldId))
@@ -443,18 +501,50 @@ function TemplateBuilder() {
               ? 'Whoever fills this form picks one of these from a "Select location" list and its location boxes are filled in for them.'
               : 'Add a preset for each place this form is used (for example "Karachi – Ground Floor") so people do not have to write the locations every time. A new office is just one more preset.'}
           </p>
-          {locationPresets.map((preset) => (
-            <div key={preset.id} style={{ border: '1px solid #ececf0', borderRadius: 14, padding: 16, marginBottom: 14, display: 'grid', gap: 12 }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <input
-                  type="text"
-                  value={preset.name}
-                  onChange={e => updatePreset(preset.id, { name: e.target.value })}
-                  placeholder="Preset name, e.g. Karachi – Ground Floor"
-                  style={{ flex: 1, minWidth: 220, padding: '10px 14px', border: '2px solid #e0e0e6', borderRadius: 10, fontSize: 14 }}
-                />
+          {locationPresets.map((preset) => (preset.id !== openPreset ? (
+            <div
+              key={preset.id}
+              className="preset-row"
+              role="button"
+              tabIndex={0}
+              onClick={() => openEditor(preset)}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEditor(preset) } }}
+              title="Click to edit this preset"
+            >
+              <span className="preset-row-chevron" aria-hidden="true">›</span>
+              <span className="preset-row-name">{preset.name.trim() || 'Untitled preset'}</span>
+              <span className="preset-row-meta">
+                {presetStats(preset).pages} page{presetStats(preset).pages === 1 ? '' : 's'} · {presetStats(preset).filled} location{presetStats(preset).filled === 1 ? '' : 's'} filled
+              </span>
+              <span className="preset-row-actions" onClick={e => e.stopPropagation()}>
+                <button type="button" onClick={() => openEditor(preset)} className="ghost-btn small">Edit</button>
                 <button type="button" onClick={() => duplicatePreset(preset.id)} className="ghost-btn small" title="A new preset that starts with the same locations">Duplicate</button>
-                <button type="button" onClick={() => removePreset(preset.id)} className="ghost-btn small" style={{ color: '#b42318' }}>Remove</button>
+                <button type="button" onClick={() => removePreset(preset.id)} className="ghost-btn small preset-remove">Remove</button>
+              </span>
+            </div>
+          ) : (
+            <div key={preset.id} className="preset-editor">
+              <input
+                type="text"
+                autoFocus={!preset.name}
+                value={preset.name}
+                onChange={e => { updatePreset(preset.id, { name: e.target.value }); setPresetNote('') }}
+                placeholder="Preset name, e.g. Karachi – Ground Floor"
+                style={{ padding: '10px 14px', border: '2px solid #e0e0e6', borderRadius: 10, fontSize: 14 }}
+              />
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+                {Array.from({ length: 1 + (preset.more || []).length }, (_, i) => i + 1).map(n => (
+                  <button key={n} type="button" className={n === pageOfPreset(preset) ? 'primary-btn small' : 'ghost-btn small'}
+                    onClick={() => setPresetPage(prev => ({ ...prev, [preset.id]: n }))}>Page {n}</button>
+                ))}
+                <button type="button" className="ghost-btn small" onClick={() => addPresetPage(preset.id)}
+                  title="This place has more locations than fit on one page: carry on over another page">+ Add page</button>
+                {pageOfPreset(preset) > 1 && (
+                  <button type="button" className="ghost-btn small preset-remove" onClick={() => removePresetPage(preset.id, pageOfPreset(preset))}>Remove this page</button>
+                )}
+                {(preset.more || []).length > 0 && (
+                  <span style={{ fontSize: 12.5, color: '#7a7a8c' }}>Choosing this preset in the form adds these {1 + preset.more.length} pages by itself.</span>
+                )}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 10 }}>
                 {locationFields.map(f => (
@@ -462,15 +552,20 @@ function TemplateBuilder() {
                     {f.label}
                     <input
                       type="text"
-                      value={preset.values[f.id] || ''}
-                      onChange={e => setPresetValue(preset.id, f.id, e.target.value)}
+                      value={valuesOfPage(preset, pageOfPreset(preset))[f.id] || ''}
+                      onChange={e => setPresetValue(preset.id, f.id, e.target.value, pageOfPreset(preset))}
                       style={{ padding: '8px 12px', border: '2px solid #e0e0e6', borderRadius: 10, fontSize: 13, fontWeight: 400 }}
                     />
                   </label>
                 ))}
               </div>
+              {presetNote && <div style={{ fontSize: 13, color: '#b42318' }}>{presetNote}</div>}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                <button type="button" className="ghost-btn small" onClick={cancelPreset}>Cancel</button>
+                <button type="button" className="primary-btn small" onClick={donePreset}>Done</button>
+              </div>
             </div>
-          ))}
+          )))}
         </article>
       )}
 
