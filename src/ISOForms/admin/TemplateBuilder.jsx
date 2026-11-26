@@ -74,6 +74,8 @@ function TemplateBuilder() {
   const [approvalRoles, setApprovalRoles] = useState([])
   // Some forms need no sign-off: they are filed on submit, with no approver and no e-mail.
   const [requiresApproval, setRequiresApproval] = useState(true)
+  // Saved location sets the form filler can pick from: [{ id, name, values: { fieldId: text } }]
+  const [locationPresets, setLocationPresets] = useState([])
   const [departments, setDepartments] = useState([])
   const [employees, setEmployees] = useState([])
 
@@ -111,6 +113,7 @@ function TemplateBuilder() {
       setFormCode(json.formCode || '')
       setApprovalRoles(Array.isArray(json.approvalRoles) ? json.approvalRoles : [])
       setRequiresApproval(json.requiresApproval !== false)
+      setLocationPresets(Array.isArray(json.locationPresets) ? json.locationPresets : [])
       const parsedFields = typeof json.fields === 'string' ? JSON.parse(json.fields) : json.fields
       const normalized = Array.isArray(parsedFields)
         ? parsedFields.map(f => ({ owner: 'requester', ...f }))
@@ -170,6 +173,17 @@ function TemplateBuilder() {
     setFields(prev => prev.map(f => (f.owner === key ? { ...f, owner: 'requester' } : f)))
   }
 
+  // The boxes a location preset fills: the form's heading boxes (the "Location" headings people write in).
+  const locationFields = fields.filter(f => (f.noDash || /^f_reg_head_/.test(String(f.id))) && f.label.trim())
+  const addPreset = () => setLocationPresets(prev => [...prev, { id: `p_${Date.now().toString(36)}`, name: '', values: {} }])
+  const updatePreset = (presetId, patch) => setLocationPresets(prev => prev.map(p => (p.id === presetId ? { ...p, ...patch } : p)))
+  const setPresetValue = (presetId, fieldId, val) => setLocationPresets(prev => prev.map(p => (p.id === presetId ? { ...p, values: { ...p.values, [fieldId]: val } } : p)))
+  const removePreset = (presetId) => setLocationPresets(prev => prev.filter(p => p.id !== presetId))
+  const duplicatePreset = (presetId) => setLocationPresets(prev => {
+    const src = prev.find(p => p.id === presetId)
+    return src ? [...prev, { ...src, id: `p_${Date.now().toString(36)}`, name: '', values: { ...src.values } }] : prev
+  })
+
   const addField = () => setFields(prev => [...prev, blankField()])
   const removeField = (fieldId) => setFields(prev => prev.filter(f => f.id !== fieldId))
   const updateField = (fieldId, patch) =>
@@ -195,6 +209,8 @@ function TemplateBuilder() {
       return
     }
 
+    // A preset with no name cannot be picked from the list, so it is not saved.
+    const namedPresets = locationPresets.filter(p => p.name.trim()).map(p => ({ ...p, name: p.name.trim() }))
     setSaving(true)
     // Kept for the offline demo store, which holds the PDF inline.
     const payload = {
@@ -203,6 +219,7 @@ function TemplateBuilder() {
       fields,
       approvalRoles,
       requiresApproval,
+      locationPresets: namedPresets,
       originalPdf: originalPdfBase64 || undefined,
       originalPdfName: originalPdfName || undefined,
       formCode: formCode || undefined,
@@ -219,6 +236,7 @@ function TemplateBuilder() {
         fields,
         approvalRoles,
         requiresApproval,
+        locationPresets: namedPresets,
         originalPdfName: originalPdfName || 'template.pdf',
         formCode: formCode || undefined,
       })
@@ -413,6 +431,48 @@ function TemplateBuilder() {
           </div>
         ))}
       </article>
+
+      {locationFields.length > 0 && (
+        <article className="panel" style={{ padding: 24, marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Location Presets</h3>
+            <button type="button" onClick={addPreset} className="ghost-btn small">+ Add Preset</button>
+          </div>
+          <p style={{ margin: '0 0 14px', fontSize: 13, color: '#7a7a8c' }}>
+            {locationPresets.length
+              ? 'Whoever fills this form picks one of these from a "Select location" list and its location boxes are filled in for them.'
+              : 'Add a preset for each place this form is used (for example "Karachi – Ground Floor") so people do not have to write the locations every time. A new office is just one more preset.'}
+          </p>
+          {locationPresets.map((preset) => (
+            <div key={preset.id} style={{ border: '1px solid #ececf0', borderRadius: 14, padding: 16, marginBottom: 14, display: 'grid', gap: 12 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <input
+                  type="text"
+                  value={preset.name}
+                  onChange={e => updatePreset(preset.id, { name: e.target.value })}
+                  placeholder="Preset name, e.g. Karachi – Ground Floor"
+                  style={{ flex: 1, minWidth: 220, padding: '10px 14px', border: '2px solid #e0e0e6', borderRadius: 10, fontSize: 14 }}
+                />
+                <button type="button" onClick={() => duplicatePreset(preset.id)} className="ghost-btn small" title="A new preset that starts with the same locations">Duplicate</button>
+                <button type="button" onClick={() => removePreset(preset.id)} className="ghost-btn small" style={{ color: '#b42318' }}>Remove</button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 10 }}>
+                {locationFields.map(f => (
+                  <label key={f.id} style={{ display: 'grid', gap: 4, fontSize: 12, fontWeight: 600, color: '#595966' }}>
+                    {f.label}
+                    <input
+                      type="text"
+                      value={preset.values[f.id] || ''}
+                      onChange={e => setPresetValue(preset.id, f.id, e.target.value)}
+                      style={{ padding: '8px 12px', border: '2px solid #e0e0e6', borderRadius: 10, fontSize: 13, fontWeight: 400 }}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </article>
+      )}
 
       <article className="panel" style={{ padding: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
