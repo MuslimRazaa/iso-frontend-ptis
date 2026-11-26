@@ -109,6 +109,11 @@ function FieldPositionEditor({ pdfBase64, fields, approvalRoles, onSave, onClose
   const [bulkFind, setBulkFind] = useState('')
   const [bulkReplace, setBulkReplace] = useState('')
   const [bulkNote, setBulkNote] = useState('')
+  // Type / Filled by / Options to give every selected box at once ('' = leave that one as it is).
+  const [bulkType, setBulkType] = useState('')
+  const [bulkOwner, setBulkOwner] = useState('')
+  const [bulkOptions, setBulkOptions] = useState('')
+  const [typeNote, setTypeNote] = useState('')
   const [placingId, setPlacingId] = useState(null)
   const [loadError, setLoadError] = useState('')
   const [draft, setDraft] = useState(null)          // new-field form, null = closed
@@ -552,6 +557,23 @@ function FieldPositionEditor({ pdfBase64, fields, approvalRoles, onSave, onClose
   const sharedStart = commonWords(selectedLabels.map(bodyOf), false)
   const sharedEnd = commonWords(selectedLabels.map(bodyOf), true)
 
+  const applyTypeToSelected = () => {
+    if (!bulkType && !bulkOwner) return
+    const ids = new Set(selectedIds)
+    setLocalFields(prev => prev.map(f => {
+      if (!ids.has(f.id)) return f
+      const next = { ...f }
+      if (bulkType) {
+        next.type = bulkType
+        // Choosing Signature centres it, unless an alignment was already set.
+        if (bulkType === 'signature' && f.pdfCoords && !f.pdfCoords.align) next.pdfCoords = { ...f.pdfCoords, align: 'center' }
+        if (hasOptions(bulkType) && bulkOptions.trim()) next.options = bulkOptions.trim()
+      }
+      if (bulkOwner) next.owner = bulkOwner
+      return next
+    }))
+    setTypeNote(`Changed ${ids.size} field(s).`)
+  }
   const renameSelected = (transform, doneNote) => {
     let changed = 0, skipped = 0
     setLocalFields(prev => prev.map(f => {
@@ -1265,6 +1287,38 @@ function FieldPositionEditor({ pdfBase64, fields, approvalRoles, onSave, onClose
                     <Trash2 size={13} /> Delete {selectedIds.length} fields
                   </button>
                 </div>
+              </div>
+            )}
+
+            {selectedIds.length > 1 && (
+              <div style={S.panel}>
+                <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Change the type of the selected {selectedIds.length}</div>
+                <label style={S.label}>Type</label>
+                <StyledSelect
+                  value={bulkType}
+                  onChange={(v) => { setBulkType(v); setTypeNote('') }}
+                  options={[]}
+                  extraOptions={[{ value: '', label: 'Keep their own types' }, ...FIELD_TYPES]}
+                  style={{ ...S.input, maxWidth: '100%', boxSizing: 'border-box' }}
+                />
+                {hasOptions(bulkType) && (
+                  <>
+                    <label style={S.label}>Options (the same for all)</label>
+                    <input type="text" value={bulkOptions} placeholder="Yes, No, N/A" onChange={(e) => setBulkOptions(e.target.value)} style={S.input} />
+                  </>
+                )}
+                <label style={S.label}>Filled by</label>
+                <StyledSelect
+                  value={bulkOwner}
+                  onChange={(v) => { setBulkOwner(v); setTypeNote('') }}
+                  options={[]}
+                  extraOptions={[{ value: '', label: 'Keep their own' }, ...ownerOptionsFor(approvalRoles)]}
+                  style={{ ...S.input, maxWidth: '100%', boxSizing: 'border-box' }}
+                />
+                <button type="button" style={{ ...S.smallGhostBtn, marginTop: 8, width: '100%' }} onClick={applyTypeToSelected} disabled={!bulkType && !bulkOwner}>
+                  Apply to all {selectedIds.length}
+                </button>
+                {typeNote && <div style={{ fontSize: 12, color: '#1a7f37', marginTop: 8 }}>{typeNote}</div>}
               </div>
             )}
 

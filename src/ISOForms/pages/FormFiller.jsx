@@ -272,43 +272,71 @@ function FormFiller() {
     return next
   })
 
-  // Location presets: a saved set of the form's location boxes (see the template builder). Each page remembers which
-  // one it was filled from, and a page added after it starts with the same one.
+  // Location presets: a saved set of the form's location boxes (see the template builder). Each page picks its own.
+  // A long preset carries on over more pages: picking it adds them; "Add page" by hand gives an empty page.
   const presets = template?.locationPresets || []
   const [pickedPreset, setPickedPreset] = useState({})   // { page: preset name }
-  const presetValues = (name, page) => {
+  // The preset's values for the page it starts on and, when it is a long one, for the pages after it.
+  const presetValues = (name, startPage) => {
     const preset = presets.find(p => p.name === name)
-    if (!preset) return {}
-    return Object.fromEntries(Object.entries(preset.values || {}).map(([id, v]) => [pageKey(id, page), v]))
+    if (!preset) return { values: {}, pages: 0 }
+    const sets = [preset.values || {}, ...((singlePage ? preset.more : []) || [])]
+    const out = {}
+    sets.forEach((set, i) => { for (const [id, v] of Object.entries(set)) out[pageKey(id, startPage + i)] = v })
+    return { values: out, pages: sets.length }
   }
+  // What each page was last filled from: { startPage: { name, pages } }, so that choosing a shorter preset instead
+  // takes back the pages the longer one had brought in.
+  const [appliedPreset, setAppliedPreset] = useState({})
+  // A page is "untouched" while it still holds exactly what that preset put there and nothing else.
+  const pageHoldsOnly = (vals, page, set) => (template?.fields || []).every(f => {
+    const v = vals[pageKey(f.id, page)]
+    return set[f.id] !== undefined ? String(v ?? '') === String(set[f.id]) : !hasContent(v)
+  })
   const applyPreset = (name) => {
     setPickedPreset(prev => ({ ...prev, [activePage]: name }))
     if (!name) return
-    setValues(prev => ({ ...prev, ...presetValues(name, activePage) }))
+    const { values: filled, pages } = presetValues(name, activePage)
+    const last = Math.min(20, activePage + pages - 1)
+    if (activePage + pages - 1 > 20) showToast('A form can have at most 20 pages, so the rest of this location list was left out.', 'error')
+    const before = appliedPreset[activePage]
+    const oldPreset = before ? presets.find(p => p.name === before.name) : null
+    const oldSets = oldPreset ? [oldPreset.values || {}, ...((singlePage ? oldPreset.more : []) || [])] : []
+    // Worked out from the values on screen now (not inside an updater, which React may run twice).
+    let next = values
+    let removed = 0
+    // Pages the earlier preset added that this one does not need — only while nobody has written on them.
+    for (let q = activePage + oldSets.length - 1; q >= activePage + pages; q--) {
+      if (q <= pageCountOf(next) && pageHoldsOnly(next, q, oldSets[q - activePage] || {})) { next = withoutPage(next, q); removed += 1 }
+    }
+    // A preset that carries on over more pages brings those pages in by itself.
+    setValues({ ...next, ...filled, ...(last > pageCountOf(next) ? { [PAGES_KEY]: String(last) } : null) })
+    setAppliedPreset(prev => ({ ...prev, [activePage]: { name, pages } }))
+    if (removed) showToast(removed + ' extra page' + (removed === 1 ? '' : 's') + ' from the earlier location list removed.', 'success')
   }
   const addPage = () => {
     if (pageCount >= 20) { showToast('A form can have at most 20 pages.', 'error'); return }
     const n = pageCount + 1
-    const carry = pickedPreset[activePage]
-    setValues(prev => ({ ...prev, [PAGES_KEY]: String(n), ...(carry ? presetValues(carry, n) : {}) }))
-    if (carry) setPickedPreset(prev => ({ ...prev, [n]: carry }))
+    setValues(prev => ({ ...prev, [PAGES_KEY]: String(n) }))
     setActivePage(n)
   }
-  const removePage = (page) => {
+  // The values with one page taken out: the pages after it move up one.
+  const withoutPage = (prev, page) => {
     const ids = (template?.fields || []).map(f => f.id)
-    setValues(prev => {
-      const count = pageCountOf(prev)
-      const next = { ...prev }
-      for (let q = page; q < count; q++) {
-        for (const id of ids) {
-          const from = pageKey(id, q + 1), to = pageKey(id, q)
-          if (prev[from] !== undefined) next[to] = prev[from]; else delete next[to]
-        }
+    const count = pageCountOf(prev)
+    const next = { ...prev }
+    for (let q = page; q < count; q++) {
+      for (const id of ids) {
+        const from = pageKey(id, q + 1), to = pageKey(id, q)
+        if (prev[from] !== undefined) next[to] = prev[from]; else delete next[to]
       }
-      for (const id of ids) delete next[pageKey(id, count)]
-      if (count - 1 <= 1) delete next[PAGES_KEY]; else next[PAGES_KEY] = String(count - 1)
-      return next
-    })
+    }
+    for (const id of ids) delete next[pageKey(id, count)]
+    if (count - 1 <= 1) delete next[PAGES_KEY]; else next[PAGES_KEY] = String(count - 1)
+    return next
+  }
+  const removePage = (page) => {
+    setValues(prev => withoutPage(prev, page))
     setActivePage(a => Math.max(1, Math.min(a, pageCount - 1)))
   }
   // Opened from a form's page with "Add page": one more page is ready as soon as the form has loaded.
