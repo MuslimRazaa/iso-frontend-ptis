@@ -1232,7 +1232,7 @@ function JobLogDescription() {
   const openAddModal = () => {
     setModalMode('add'); setEditingId(null)
     // The entry date is the day the entry is made.
-    setModalState({ ...emptyEntry, sNo: nextSerial, entryDate: todayYmd() }); setIsModalOpen(true)
+    setModalState({ ...emptyEntry, sNo: nextSerial, entryDate: '' }); setIsModalOpen(true)
     setActiveTab('details'); setInspectorChangesList([]); resetInspectorChangeForm()
   }
   const openEditModal = entry => {
@@ -1321,8 +1321,7 @@ function JobLogDescription() {
         res = await fetch(`${API_ENDPOINTS.JOB_LOG}/${editingId}?${actorQuery()}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          // Only an administrator can correct the Entry Date of an existing entry.
-          body: JSON.stringify(isAdminContext ? { ...payload, edit_entry_date: true } : payload),
+          body: JSON.stringify({ ...payload, edit_entry_date: true }),
         })
       }
       if (!res.ok) {
@@ -2371,17 +2370,14 @@ function JobLogDescription() {
                 <label><span>S#</span>
                   <input type="text" value={modalState.sNo} readOnly
                     style={{ background: '#f4f4f7', color: '#aaa', cursor: 'not-allowed' }} /></label>
-                {isAdminContext && modalMode !== 'add' ? (
-                  <label><span>Entry Date (admin)</span>
-                    <StyledDatePicker value={modalState.entryDate}
-                      style={modalSelectStyle}
-                      onChange={v => handleModalChange('entryDate', v)} /></label>
-                ) : (
-                  <label><span>Entry Date (auto)</span>
-                    <input type="text" readOnly value={formatDate(modalState.entryDate)}
-                      title="Set automatically to the day the entry was made"
-                      style={{ background: '#f4f4f7', color: '#aaa', cursor: 'not-allowed' }} /></label>
-                )}
+                {/* The Entry Date is typed in (picked) by whoever fills the entry, new or edited, and cannot be left empty. */}
+                <label><span>Entry Date *</span>
+                  <StyledDatePicker value={modalState.entryDate}
+                    max={todayYmd()}
+                    placeholder="Select entry date"
+                    disabled={!canEdit('operations')}
+                    style={modalSelectStyle}
+                    onChange={v => handleModalChange('entryDate', v)} /></label>
                 <div className="field-col"><span>Client *</span>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
