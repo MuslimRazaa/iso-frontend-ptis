@@ -3,6 +3,8 @@ import { Link, useLocation, useParams } from 'react-router-dom'
 import { BsFileEarmarkPdf, BsDownload } from 'react-icons/bs'
 import { API_ENDPOINTS } from '../../config/api'
 import StyledSelect from '../../components/StyledSelect'
+import StyledDatePicker from '../../components/StyledDatePicker'
+import ClearFilterButton from '../../components/ClearFilterButton'
 import { formatDate } from '../../utils/dateFormat'
 
 // One screen for every Safety Documentation report: the report itself says what its boxes, columns and rows
@@ -17,7 +19,7 @@ const BORDER = '#ececf0'
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const nowMonth = () => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() + 1 } }
 const f = (n) => Number(n || 0).toLocaleString('en-US')
-const dash = (n) => (n == null || !Number.isFinite(Number(n)) ? '—' : f(n))
+const dash = (n) => (n == null || !Number.isFinite(Number(n)) ? '' : f(n))
 
 
 export default function SafetyReportViewer() {
@@ -33,13 +35,22 @@ export default function SafetyReportViewer() {
   const [region, setRegion] = useState('ALL')
   // The month is the current one on its own; it only moves if someone picks another.
   const [{ y, m }, setYm] = useState(nowMonth)
+  // By month (the default) or between two dates. The report stays on the month until both dates are picked.
+  const [byDates, setByDates] = useState(false)
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   const month = `${y}-${String(m).padStart(2, '0')}`
   const filters = def?.filters || []
-  const qs = `month=${month}&region=${region}`
+  const thisMonth = nowMonth()
+  // Anything but the starting view (this month, every region) can be cleared back to it.
+  const hasFilters = region !== 'ALL' || !!from || !!to || y !== thisMonth.y || m !== thisMonth.m
+  const clearFilters = () => { setRegion('ALL'); setYm(nowMonth()); setFrom(''); setTo('') }
+  const rangeOk = byDates && !!from && !!to
+  const qs = rangeOk ? `from=${from}&to=${to}&region=${region}` : `month=${month}&region=${region}`
 
   useEffect(() => {
     fetch(`${API_ENDPOINTS.JOB_LOG}/reports`)
@@ -69,13 +80,13 @@ export default function SafetyReportViewer() {
 
   const years = useMemo(() => { const c = nowMonth().y; return [c - 3, c - 2, c - 1, c, c + 1].map(String) }, [])
   const pdfUrl = `${API_ENDPOINTS.JOB_LOG}/reports/${reportKey}/pdf?${qs}`
-  const field = { minWidth: 170, padding: '10px 14px', border: `1px solid ${BORDER}`, borderRadius: 12, background: '#fff', fontSize: 14, cursor: 'pointer' }
+  const field = { minWidth: 140, padding: '9px 12px', border: `1px solid ${BORDER}`, borderRadius: 12, background: '#fff', fontSize: 13.5, cursor: 'pointer' }
 
   const cell = (col, row) => {
     const v = row[col.key]
-    if (col.type === 'date') return v ? formatDate(v) : '—'
+    if (col.type === 'date') return v ? formatDate(v) : ''
     if (col.type === 'number') return dash(v)
-    return v == null || v === '' ? '—' : String(v)
+    return v == null || v === '' ? '' : String(v)
   }
 
   if (notFound) {
@@ -103,7 +114,7 @@ export default function SafetyReportViewer() {
       </div>
 
       <div style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 20, padding: 'clamp(18px, 2.4vw, 28px)', boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', marginBottom: 22 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 22 }}>
           {filters.includes('region') && (
             <StyledSelect
               style={field}
@@ -113,20 +124,40 @@ export default function SafetyReportViewer() {
               extraOptions={regions.map(r => ({ value: r.code, label: r.label }))}
             />
           )}
-          {filters.includes('month') && (
+          {filters.includes('range') && (
+            <div role="group" aria-label="Report period" style={{ display: 'inline-flex', padding: 3, border: `1px solid ${BORDER}`, borderRadius: 12, background: '#faf9fb' }}>
+              {[['Month', false], ['Dates', true]].map(([label, on]) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => setByDates(on)}
+                  aria-pressed={byDates === on}
+                  style={{ border: 'none', borderRadius: 9, padding: '7px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', background: byDates === on ? BRAND : 'transparent', color: byDates === on ? '#fff' : MUTED, transition: 'background .15s, color .15s' }}
+                >{label}</button>
+              ))}
+            </div>
+          )}
+          {filters.includes('month') && !byDates && (
             <>
               <StyledSelect style={field} value={MONTHS[m - 1]} onChange={(v) => setYm(p => ({ ...p, m: MONTHS.indexOf(v) + 1 }))} options={MONTHS} />
-              <StyledSelect style={{ ...field, minWidth: 110 }} value={String(y)} onChange={(v) => setYm(p => ({ ...p, y: Number(v) }))} options={years} />
+              <StyledSelect style={{ ...field, minWidth: 96 }} value={String(y)} onChange={(v) => setYm(p => ({ ...p, y: Number(v) }))} options={years} />
             </>
           )}
+          {filters.includes('range') && byDates && (
+            <>
+              <StyledDatePicker value={from} max={to || undefined} onChange={setFrom} placeholder="From date" style={{ ...field, minWidth: 138 }} />
+              <StyledDatePicker value={to} min={from || undefined} onChange={setTo} placeholder="To date" style={{ ...field, minWidth: 138 }} />
+            </>
+          )}
+          <ClearFilterButton visible={hasFilters} onClick={clearFilters} />
           <div style={{ flex: 1 }} />
           <a href={pdfUrl} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
-            <button type="button" className="primary-btn" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
+            <button type="button" className="primary-btn" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, padding: '9px 14px', whiteSpace: 'nowrap' }}>
               <BsFileEarmarkPdf /> Open PDF
             </button>
           </a>
           <a href={`${pdfUrl}&download=1`} style={{ textDecoration: 'none' }}>
-            <button type="button" className="ghost-btn" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
+            <button type="button" className="ghost-btn" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, padding: '9px 14px', whiteSpace: 'nowrap' }}>
               <BsDownload /> Download
             </button>
           </a>
@@ -139,7 +170,7 @@ export default function SafetyReportViewer() {
           {(tiles.length ? tiles : [{ label: ' ', value: null, unit: '' }, { label: ' ', value: null, unit: '' }, { label: ' ', value: null, unit: '' }, { label: ' ', value: null, unit: '' }]).map((t, i) => (
             <div key={`${t.label}-${i}`} className="stat-card">
               <p>{t.label}</p>
-              <h3>{loading || t.value == null ? '—' : f(t.value)} <small style={{ fontSize: 13, color: SUBTLE, fontWeight: 500 }}>{t.unit}</small></h3>
+              <h3>{loading || t.value == null ? '' : f(t.value)} <small style={{ fontSize: 13, color: SUBTLE, fontWeight: 500 }}>{t.unit}</small></h3>
               <span>{data ? `${data.meta?.monthLabel || ''} · ${data.meta?.regionLabel || ''}` : ' '}</span>
             </div>
           ))}
@@ -173,7 +204,7 @@ export default function SafetyReportViewer() {
             </tbody>
           </table>
         </div>
-        <p style={{ margin: '12px 2px 0', fontSize: 12, color: SUBTLE }}>A dash means no entry was recorded.</p>
+        <p style={{ margin: '12px 2px 0', fontSize: 12, color: SUBTLE }}>A blank cell means no entry was recorded.</p>
       </div>
     </div>
   )
